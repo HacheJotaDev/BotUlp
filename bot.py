@@ -73,8 +73,9 @@ class Config:
     MAX_DOWNLOAD_SIZE_MB: int = 4096  # 4GB máximo
     DOWNLOAD_CHUNK_SIZE: int = 1024 * 1024  # 1MB chunks
     DOWNLOAD_TIMEOUT: int = 3600  # 1 hora timeout para descargas grandes
-    MAX_CONCURRENT_DOWNLOADS: int = 5
+    MAX_CONCURRENT_DOWNLOADS: int = 1  # 1 a la vez para evitar FloodWait
     DOWNLOAD_PROGRESS_INTERVAL: int = 5  # Actualizar progreso cada 5 segundos
+    DOWNLOAD_DELAY_BETWEEN: int = 10  # Segundos entre descargas para evitar flood
 
     # Búsqueda
     SEARCH_CACHE_SIZE: int = 200
@@ -459,6 +460,8 @@ auto_download_enabled: bool = False
 pending_downloads: List[Dict[str, Any]] = []
 active_downloads: Dict[str, Dict[str, Any]] = {}  # filename -> {task, start_time, size}
 download_semaphore: Optional[asyncio.Semaphore] = None
+auto_dl_queue: asyncio.Queue = None  # Cola secuencial para auto-descarga
+auto_dl_worker_running: bool = False
 temp_state: Dict[int, dict] = {}
 cleanup_task: Optional[asyncio.Task] = None
 
@@ -853,6 +856,60 @@ async def _download_large_file_task(event, filename: str, dest_path: Path):
         success = await _download_with_progress(event, filename, dest_path)
         if not success and filename in active_downloads:
             active_downloads[filename]['status'] = 'failed'
+        # Delay entre descargas para evitar FloodWait
+        if success:
+            logger.info(f"Esperando {config.DOWNLOAD_DELAY_BETWEEN}s antes de siguiente descarga...")
+            await asyncio.sleep(config.DOWNLOAD_DELAY_BETWEEN)
+
+async def _auto_dl_worker():
+    """Worker que procesa la cola de auto-descarga SECUENCIALMENTE (1 a la vez)."""
+    global auto_dl_queue, auto_dl_worker_running
+    auto_dl_worker_running = True
+    logger.info("Auto-DL Worker iniciado (modo secuencial)")
+    
+    while True:
+        try:
+            # Esperar siguiente item de la cola
+            item = await auto_dl_queue.get()
+            if item is None:  # Señal de parada
+                break
+            
+            event = item['event']
+            filename = item['filename']
+            dest_path = item['dest_path']
+            file_size = item['size']
+            
+            # Verificar si ya existe
+            if dest_path.exists() and dest_path.stat().st_size > 0:
+                auto_dl_queue.task_done()
+                continue
+            
+            logger.info(f"Auto-DL: Descargando {filename} ({_format_size(file_size)})")
+            active_downloads[filename] = {
+                'start_time': time.time(),
+                'size': file_size,
+                'status': 'downloading'
+            }
+            
+            success = await _download_with_progress(event, filename, dest_path)
+            
+            if not success and filename in active_downloads:
+                active_downloads[filename]['status'] = 'failed'
+            
+            # Delay entre descargas para EVITAR FloodWait
+            logger.info(f"Auto-DL: Esperando {config.DOWNLOAD_DELAY_BETWEEN}s...")
+            await asyncio.sleep(config.DOWNLOAD_DELAY_BETWEEN)
+            
+            auto_dl_queue.task_done()
+            
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Error en auto-dl worker: {e}")
+            await asyncio.sleep(5)
+    
+    auto_dl_worker_running = False
+    logger.info("Auto-DL Worker detenido")
 
 async def realtime_listener(event):
     """Escucha automática de archivos en canales/grupos."""
@@ -894,12 +951,24 @@ async def realtime_listener(event):
             return
 
         if auto_download_enabled:
-            active_downloads[filename] = {
-                'start_time': time.time(),
-                'size': file_size,
-                'status': 'starting'
-            }
-            asyncio.create_task(_download_large_file_task(event, filename, dest_path))
+            # Encolar en vez de lanzar directamente (evita FloodWait)
+            if auto_dl_queue is not None:
+                await auto_dl_queue.put({
+                    'event': event,
+                    'filename': filename,
+                    'dest_path': dest_path,
+                    'size': file_size
+                })
+                queue_size = auto_dl_queue.qsize()
+                logger.info(f"Auto-DL: Encolado {filename} (cola: {queue_size})")
+            else:
+                # Fallback si no hay cola
+                active_downloads[filename] = {
+                    'start_time': time.time(),
+                    'size': file_size,
+                    'status': 'starting'
+                }
+                asyncio.create_task(_download_large_file_task(event, filename, dest_path))
         else:
             if not any(p['msg_id'] == event.id for p in pending_downloads):
                 try:
@@ -1427,12 +1496,14 @@ async def callbacks(e):
                 return await e.answer("Acceso denegado.", alert=True)
             counts = get_file_counts()
             auto_status = "ON" if auto_download_enabled else "OFF"
+            queue_count = auto_dl_queue.qsize() if auto_dl_queue else 0
+            total_pending = len(pending_downloads) + queue_count
             await e.edit(
                 UI.text("file_management", lang,
                         counts['total'], counts['24h'], counts['old'],
-                        auto_status, len(pending_downloads), len(active_downloads)),
+                        auto_status, total_pending, len(active_downloads)),
                 buttons=Keyboards.files_control(
-                    auto_download_enabled, len(pending_downloads), len(active_downloads)
+                    auto_download_enabled, total_pending, len(active_downloads)
                 ),
                 parse_mode='md'
             )
@@ -1441,14 +1512,16 @@ async def callbacks(e):
             if role != UserRole.ADMIN:
                 return await e.answer("Acceso denegado.", alert=True)
             auto_download_enabled = True
-            await e.answer("Auto-Descarga ACTIVADA", alert=True)
+            await e.answer("Auto-Descarga ACTIVADA (secuencial)", alert=True)
             counts = get_file_counts()
+            queue_count = auto_dl_queue.qsize() if auto_dl_queue else 0
+            total_pending = len(pending_downloads) + queue_count
             await e.edit(
                 UI.text("file_management", lang,
                         counts['total'], counts['24h'], counts['old'],
-                        "ON", len(pending_downloads), len(active_downloads)),
+                        "ON", total_pending, len(active_downloads)),
                 buttons=Keyboards.files_control(
-                    True, len(pending_downloads), len(active_downloads)
+                    True, total_pending, len(active_downloads)
                 ),
                 parse_mode='md'
             )
@@ -1459,12 +1532,14 @@ async def callbacks(e):
             auto_download_enabled = False
             await e.answer("Auto-Descarga DESACTIVADA", alert=True)
             counts = get_file_counts()
+            queue_count = auto_dl_queue.qsize() if auto_dl_queue else 0
+            total_pending = len(pending_downloads) + queue_count
             await e.edit(
                 UI.text("file_management", lang,
                         counts['total'], counts['24h'], counts['old'],
-                        "OFF", len(pending_downloads), len(active_downloads)),
+                        "OFF", total_pending, len(active_downloads)),
                 buttons=Keyboards.files_control(
-                    False, len(pending_downloads), len(active_downloads)
+                    False, total_pending, len(active_downloads)
                 ),
                 parse_mode='md'
             )
@@ -1717,13 +1792,18 @@ async def periodic_cleanup():
 # ═════════════════════════════════════════════════════════════
 
 async def main():
-    global cleanup_task
+    global cleanup_task, auto_dl_queue
 
     logger.info("Iniciando HJ & GHOST ULP PRO v2.0...")
 
     # Iniciar clientes
     await bot.start(bot_token=config.BOT_TOKEN)
     await userbot.start()
+
+    # Inicializar cola de auto-descarga secuencial
+    auto_dl_queue = asyncio.Queue()
+    asyncio.create_task(_auto_dl_worker())
+    logger.info("Auto-DL Worker (cola secuencial) iniciado")
 
     # Registrar listener de archivos
     userbot.add_event_handler(realtime_listener, events.NewMessage)
@@ -1747,9 +1827,13 @@ async def main():
 
 async def shutdown():
     """Apagado limpio."""
+    global auto_dl_queue
     logger.info("Apagando sistema...")
     if cleanup_task:
         cleanup_task.cancel()
+    # Detener auto-dl worker
+    if auto_dl_queue is not None:
+        await auto_dl_queue.put(None)  # Señal de parada
     # Cancelar descargas activas
     for filename, info in list(active_downloads.items()):
         logger.info(f"Cancelando descarga: {filename}")
