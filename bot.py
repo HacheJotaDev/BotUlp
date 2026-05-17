@@ -1,11 +1,11 @@
 """
 ═══════════════════════════════════════════════════════════════
-  HJ & GHOST ULP EXTRACTOR BOT — PRO EDITION v2.0
+  HJ ULP EXTRACTOR BOT — PRO EDITION v3.0
 ═══════════════════════════════════════════════════════════════
   • Motor de búsqueda paralelo con mmap ultra-rápido
   • Descarga de archivos hasta 4GB con streaming + progreso
   • Sistema de roles: FREE / VIP / SELLER / ADMIN
-  • Interfaz elegante con animaciones fluidas
+  • Interfaz elegante con diseño 彡 Style
   • Sistema multi-idioma (ES / EN / PT)
   • Base de datos SQLite thread-safe con WAL mode
   • Auto-limpieza de archivos expirados
@@ -55,10 +55,10 @@ class Config:
     USER_SESSION: str = "user_session"
     BOT_SESSION: str = "bot_session"
 
-    ADMIN_IDS: List[int] = field(default_factory=lambda: [5947916142, 6142451295])
+    ADMIN_IDS: List[int] = field(default_factory=lambda: [7656500542])
 
     BOT_USERNAME: str = "UlpHJBot"
-    SELLER_USERNAMES: List[str] = field(default_factory=lambda: ["@hjofc20", "@Ghosthat_Real1"])
+    SELLER_USERNAMES: List[str] = field(default_factory=lambda: ["@hjofc20"])
 
     DB_FILE: Path = Path("SystemData/hj_bot.db")
     DIR_DOWNLOADS: Path = Path("HJDescargas")
@@ -71,11 +71,13 @@ class Config:
 
     # Límites de descarga
     MAX_DOWNLOAD_SIZE_MB: int = 4096  # 4GB máximo
-    DOWNLOAD_CHUNK_SIZE: int = 1024 * 1024  # 1MB chunks
+    DOWNLOAD_CHUNK_SIZE: int = 1024 * 1024  # 1MB chunks para descarga manual
     DOWNLOAD_TIMEOUT: int = 3600  # 1 hora timeout para descargas grandes
     MAX_CONCURRENT_DOWNLOADS: int = 1  # 1 a la vez para evitar FloodWait
     DOWNLOAD_PROGRESS_INTERVAL: int = 5  # Actualizar progreso cada 5 segundos
     DOWNLOAD_DELAY_BETWEEN: int = 10  # Segundos entre descargas para evitar flood
+    DOWNLOAD_THROTTLE: float = 0.15  # Segundos entre chunks para anti-flood
+    DOWNLOAD_PART_SIZE_KB: int = 1024  # 1MB por request GetFile (reduce llamadas API)
 
     # Búsqueda
     SEARCH_CACHE_SIZE: int = 200
@@ -151,97 +153,113 @@ class LocaleManager:
         # Español base integrado
         self.translations['es'] = {
             "welcome": (
-                "╔══════════════════════════════════╗\n"
-                "║     ☾  HJ & GHOST ULP PRO  ☽    ║\n"
-                "╚══════════════════════════════════╝\n\n"
-                "▸ Búsqueda ultra-rápida (paralela)\n"
-                "▸ Bases actualizadas 24/7\n"
-                "▸ Privacidad & anonimato total\n"
-                "▸ Descargas hasta 4GB sin límites\n\n"
-                "┌──────────────────────────────────┐\n"
-                "│  Comandos: /start │ /url          │\n"
-                "└──────────────────────────────────┘\n\n"
+                "╭───✦ ☾ HJ ULP PRO ☽ 彡\n"
+                "├● ▸ Búsqueda ultra-rápida (paralela)\n"
+                "├● ▸ Bases actualizadas 24/7\n"
+                "├● ▸ Privacidad & anonimato total\n"
+                "├● ▸ Descargas hasta 4GB sin límites\n"
+                "╰───✦ 🚀 by @hjofc20\n"
+                "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n"
+                "╭───✦ COMANDOS\n"
+                "├● │ /start │ /url\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
                 "🌟 Soporte:\n"
-                "  ✦ @hjofc20\n"
-                "  ✦ @Ghosthat_Real1\n\n"
+                "  ✦ @hjofc20\n\n"
                 "👤 **Rol:** `{}` │ 📊 **Búsquedas:** `{}`"
             ),
             "buy_vip_info": (
-                "╔══════════════════════════════════╗\n"
-                "║      💰 COMPRAR VIP ACCESS 💰     ║\n"
-                "╚══════════════════════════════════╝\n\n"
-                "💲 **PRECIOS:**\n"
-                "  ⟡ 1 día  »  6$\n"
-                "  ⟡ 3 días »  10$\n"
-                "  ⟡ 7 días »  25$\n"
-                "  ⟡ 30 días » 100$\n\n"
+                "╭───✦ 💰 COMPRAR VIP ACCESS 💰\n"
+                "├● ⟡ 1 día  »  6$\n"
+                "├● ⟡ 3 días »  10$\n"
+                "├● ⟡ 7 días »  25$\n"
+                "├● ⟡ 30 días » 100$\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
                 "📬 **CONTACTO:**\n{}"
             ),
             "file_management": (
-                "╔══════════════════════════════════╗\n"
-                "║    📂 GESTIÓN DE ARCHIVOS        ║\n"
-                "╚══════════════════════════════════╝\n\n"
-                "📊 **Base de Datos:**\n"
-                "  📁 Total: `{}` archivos\n"
-                "  ⚡ Últimas 24h: `{}`\n"
-                "  🗄️ Histórico: `{}`\n\n"
-                "🔄 **Descargas:**\n"
-                "  ♻️ Auto-Download: `{}`\n"
-                "  📝 En cola: `{}` archivos\n"
-                "  ⬇️ Activos: `{}` descargas"
+                "╭───✦ 📂 GESTIÓN DE ARCHIVOS\n"
+                "├● 📊 **Base de Datos:**\n"
+                "├● 📁 Total: `{}` archivos\n"
+                "├● ⚡ Últimas 24h: `{}`\n"
+                "├● 🗄️ Histórico: `{}`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n"
+                "╭───✦ 🔄 DESCARGAS\n"
+                "├● ♻️ Auto-Download: `{}`\n"
+                "├● 📝 En cola: `{}` archivos\n"
+                "├● ⬇️ Activos: `{}` descargas\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
-            "no_results": "❌ **SIN RESULTADOS**\n\nNo se encontraron datos para `{}`.",
-            "search_step_time": "🔍 **Dominio:** `{}`\n\n⏳ Selecciona el rango de tiempo:",
+            "no_results": (
+                "╭───✦ ❌ SIN RESULTADOS\n"
+                "├● No se encontraron datos para `{}`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
+            "search_step_time": (
+                "╭───✦ 🔍 BÚSQUEDA\n"
+                "├● 🔍 **Dominio:** `{}`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
+                "⏳ Selecciona el rango de tiempo:"
+            ),
             "loading": "⚙️ **Procesando...**",
-            "access_denied": "🚫 **ACCESO DENEGADO**\n\nSolo usuarios VIP pueden realizar búsquedas.",
-            "ask_domain": "🔍 **NUEVA BÚSQUEDA**\n\nEscribe el dominio a buscar:",
+            "access_denied": (
+                "╭───✦ 🚫 ACCESO DENEGADO\n"
+                "├● Solo usuarios VIP pueden realizar búsquedas\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
+            "ask_domain": (
+                "╭───✦ 🔍 NUEVA BÚSQUEDA\n"
+                "├● Escribe el dominio a buscar\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
             "language_selected": "🌐 Idioma actualizado correctamente.",
             "select_language": "🌐 **SELECT LANGUAGE / IDIOMA / IDIOMA**\n\nChoose your preferred language:",
             "my_account": (
-                "╔══════════════════════════════════╗\n"
-                "║       👤 MI CUENTA               ║\n"
-                "╚══════════════════════════════════╝\n\n"
-                "🆔 ID: `{}`\n"
-                "🎖 Rango: `{}`\n"
-                "📅 Expira: `{}`\n"
-                "📊 Búsquedas: `{}`"
+                "╭───✦ 👤 MI CUENTA\n"
+                "├● 🆔 ID: `{}`\n"
+                "├● 🎖 Rango: `{}`\n"
+                "├● 📅 Expira: `{}`\n"
+                "├● 📊 Búsquedas: `{}`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
             "search_completed": (
-                "╔══════════════════════════════════╗\n"
-                "║     ✅ BÚSQUEDA COMPLETADA       ║\n"
-                "╚══════════════════════════════════╝\n\n"
-                "🔍 Dominio: `{}`\n"
-                "📑 Tipo: `{}`\n"
-                "📊 Resultados: `{}`\n"
-                "⏱️ Tiempo: `{:.1f}s`"
+                "╭───✦ ✅ BÚSQUEDA COMPLETADA\n"
+                "├● 🔍 Dominio: `{}`\n"
+                "├● 📑 Tipo: `{}`\n"
+                "├● 📊 Resultados: `{}`\n"
+                "├● ⏱️ Tiempo: `{:.1f}s`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
             "download_progress": "📥 Descargando: `{}`\n\n📊 Progreso: `{}`\n⚡ Velocidad: `{}`\n⏱️ ETA: `{}`",
             "redeem_success": "🎉 **¡Felicidades!**\n\nTu cuenta VIP ha sido activada exitosamente.",
             "key_generated": (
-                "✅ **KEY GENERADA EXITOSAMENTE**\n\n"
-                "🔑 Código:\n`{}`\n\n"
-                "🔗 Link de canje:\n{}\n\n"
-                "📅 Días: {}"
+                "╭───✦ ✅ KEY GENERADA EXITOSAMENTE\n"
+                "├● 🔑 Código:\n`{}`\n"
+                "├● 🔗 Link de canje:\n{}\n"
+                "├● 📅 Días: {}\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
             "admin_panel": (
-                "╔══════════════════════════════════╗\n"
-                "║       🔐 PANEL ADMIN             ║\n"
-                "╚══════════════════════════════════╝\n\n"
-                "👑 VIPs: `{}`\n"
-                "💼 Sellers: `{}`\n"
-                "🔍 Búsquedas: `{}`\n"
-                "👥 Total usuarios: `{}`"
+                "╭───✦ 🔐 PANEL ADMIN\n"
+                "├● 👑 VIPs: `{}`\n"
+                "├● 💼 Sellers: `{}`\n"
+                "├● 🔍 Búsquedas: `{}`\n"
+                "├● 👥 Total usuarios: `{}`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
             "stats_global": (
-                "╔══════════════════════════════════╗\n"
-                "║      📊 ESTADÍSTICAS GLOBALES    ║\n"
-                "╚══════════════════════════════════╝\n\n"
-                "👑 Usuarios VIP: `{}`\n"
-                "💼 Sellers: `{}`\n"
-                "🔍 Búsquedas Totales: `{}`\n"
-                "👥 Total Usuarios: `{}`"
+                "╭───✦ 📊 ESTADÍSTICAS GLOBALES\n"
+                "├● 👑 Usuarios VIP: `{}`\n"
+                "├● 💼 Sellers: `{}`\n"
+                "├● 🔍 Búsquedas Totales: `{}`\n"
+                "├● 👥 Total Usuarios: `{}`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
-            "broadcast_done": "✅ **Broadcast Finalizado**\n\n📬 Enviados: `{}`\n🚫 Fallidos: `{}`",
+            "broadcast_done": (
+                "╭───✦ ✅ BROADCAST FINALIZADO\n"
+                "├● 📬 Enviados: `{}`\n"
+                "├● 🚫 Fallidos: `{}`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
         }
 
         # Cargar archivos de locale externos
@@ -808,11 +826,55 @@ async def _download_with_progress(
 
         downloaded = [0]
 
-        # Descargar con Telethon (flood_sleep_threshold maneja FloodWait internamente)
-        await event_or_msg.download_media(
-            file=str(temp_path),
-            progress_callback=progress if file_size > 10 * 1024 * 1024 else None
-        )
+        # Descargar usando iter_download con chunks grandes para reducir llamadas API
+        # Esto evita FloodWait en archivos de varios GB
+        try:
+            doc = event_or_msg.document or event_or_msg.media.document
+            part_size = config.DOWNLOAD_PART_SIZE_KB * 1024  # Convertir KB a bytes
+
+            with open(temp_path, 'wb') as f:
+                async for chunk in userbot.iter_download(
+                    doc,
+                    request_size=part_size,
+                    file_size=file_size if file_size > 0 else None
+                ):
+                    f.write(chunk)
+                    downloaded[0] += len(chunk)
+                    now = time.time()
+                    # Log de progreso en consola cada 30 segundos
+                    if (now - last_progress_log[0]) >= 30:
+                        last_progress_log[0] = now
+                        pct = (downloaded[0] / file_size * 100) if file_size > 0 else 0
+                        elapsed = now - start_time
+                        speed = downloaded[0] / elapsed if elapsed > 0 else 0
+                        logger.info(
+                            f"DL {filename[:30]}: {pct:.0f}% ({_format_size(downloaded[0])}/{_format_size(file_size)}) "
+                            f"@ {_format_size(speed)}/s"
+                        )
+                    if progress_callback and (now - last_update[0]) >= config.DOWNLOAD_PROGRESS_INTERVAL:
+                        last_update[0] = now
+                        elapsed = now - start_time
+                        if elapsed > 0 and downloaded[0] > 0:
+                            speed = downloaded[0] / elapsed
+                            eta = (file_size - downloaded[0]) / speed if speed > 0 and file_size > 0 else 0
+                            pct = (downloaded[0] / file_size * 100) if file_size > 0 else 0
+                            try:
+                                asyncio.get_event_loop().call_soon_threadsafe(
+                                    lambda: asyncio.create_task(
+                                        progress_callback(downloaded[0], file_size, speed, eta, pct)
+                                    )
+                                )
+                            except Exception:
+                                pass
+                    # Throttle entre chunks para evitar FloodWait
+                    await asyncio.sleep(config.DOWNLOAD_THROTTLE)
+        except AttributeError:
+            # Fallback: si no se puede obtener document directamente, usar download_media
+            logger.info(f"Fallback a download_media para: {filename}")
+            await event_or_msg.download_media(
+                file=str(temp_path),
+                progress_callback=progress if file_size > 10 * 1024 * 1024 else None
+            )
 
         # Verificar descarga
         if temp_path.exists() and temp_path.stat().st_size > 0:
@@ -1086,10 +1148,15 @@ async def process_pending_downloads(status_msg=None):
                 try:
                     fname_short = item['filename'][:35]
                     await status_msg.edit(
-                        f"📥 **Descargando ({idx}/{total})**\n\n"
-                        f"📄 `{fname_short}`\n"
-                        f"📊 Tamaño: `{_format_size(item.get('size', 0))}`\n\n"
-                        f"✅ Nuevos: `{stats['new']}` │ 💾 Existentes: `{stats['existing']}` │ ❌ Errores: `{stats['errors']}`"
+                        "╭───✦ 📥 DESCARGANDO ({}/{})\n"
+                        "├● 📄 `{}`\n"
+                        "├● 📊 Tamaño: `{}`\n\n"
+                        "├● ✅ Nuevos: `{}` │ 💾 Existentes: `{}` │ ❌ Errores: `{}`\n"
+                        "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈".format(
+                            idx, total, fname_short,
+                            _format_size(item.get('size', 0)),
+                            stats['new'], stats['existing'], stats['errors']
+                        )
                     )
                 except MessageNotModifiedError:
                     pass
@@ -1113,11 +1180,12 @@ async def process_pending_downloads(status_msg=None):
 
     if status_msg:
         report = (
-            "✅ **DESCARGA COMPLETADA**\n\n"
-            f"📥 Nuevos: `{stats['new']}`\n"
-            f"💾 Existentes: `{stats['existing']}`\n"
-            f"❌ Errores: `{stats['errors']}`\n"
-            f"⏱️ Tiempo: `{_format_time(elapsed)}`"
+            "╭───✦ ✅ DESCARGA COMPLETADA\n"
+            f"├● 📥 Nuevos: `{stats['new']}`\n"
+            f"├● 💾 Existentes: `{stats['existing']}`\n"
+            f"├● ❌ Errores: `{stats['errors']}`\n"
+            f"├● ⏱️ Tiempo: `{_format_time(elapsed)}`\n"
+            "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
         )
         try:
             await status_msg.edit(report, buttons=Keyboards.back("adm_files"), parse_mode='md')
@@ -1255,13 +1323,13 @@ bot = TelegramClient(
     config.BOT_SESSION, config.API_ID, config.API_HASH,
     connection_retries=15, retry_delay=3,
     auto_reconnect=True, timeout=60,
-    flood_sleep_threshold=300  # Auto-manejar flood waits hasta 5min sin loguear
+    flood_sleep_threshold=600  # Auto-manejar flood waits hasta 10min
 )
 userbot = TelegramClient(
     config.USER_SESSION, config.API_ID, config.API_HASH,
     connection_retries=15, retry_delay=3,
     auto_reconnect=True, timeout=120,
-    flood_sleep_threshold=300,  # Auto-manejar flood waits hasta 5min sin loguear
+    flood_sleep_threshold=600,  # Auto-manejar flood waits hasta 10min
     request_retries=5  # Reintentar peticiones automaticamente
 )
 
@@ -1709,11 +1777,12 @@ async def callbacks(e):
                     preview_text = preview_text[:3000] + "..."
 
                 caption = (
-                    f"✅ **BÚSQUEDA COMPLETADA**\n\n"
-                    f"🔍 Dominio: `{kw}`\n"
-                    f"📑 Tipo: `{tipo_texto}`\n"
-                    f"📊 Resultados: `{count}`\n"
-                    f"⏱️ Tiempo: `{elapsed:.1f}s`"
+                    "╭───✦ ✅ BÚSQUEDA COMPLETADA\n"
+                    f"├● 🔍 Dominio: `{kw}`\n"
+                    f"├● 📑 Tipo: `{tipo_texto}`\n"
+                    f"├● 📊 Resultados: `{count}`\n"
+                    f"├● ⏱️ Tiempo: `{elapsed:.1f}s`\n"
+                    "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
                 )
 
                 await bot.send_file(
@@ -1859,7 +1928,7 @@ async def periodic_cleanup():
 async def main():
     global cleanup_task, auto_dl_queue
 
-    logger.info("Iniciando HJ & GHOST ULP PRO v2.0...")
+    logger.info("Iniciando HJ ULP PRO v3.0...")
 
     # Iniciar clientes
     await bot.start(bot_token=config.BOT_TOKEN)
