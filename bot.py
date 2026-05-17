@@ -157,7 +157,7 @@ class LocaleManager:
                 "├● ▸ Búsqueda ultra-rápida (paralela)\n"
                 "├● ▸ Bases actualizadas 24/7\n"
                 "├● ▸ Privacidad & anonimato total\n"
-                "├● ▸ Descargas hasta 4GB sin límites\n"
+                "├● ▸ Data lista para usar\n"
                 "╰───✦ 🚀 by @hjofc20\n"
                 "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n"
                 "╭───✦ COMANDOS\n"
