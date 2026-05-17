@@ -51,13 +51,13 @@ from telethon.errors import (
 class Config:
     API_ID: int = 33426502
     API_HASH: str = "54a521a10855ddd24314433372190f97"
-    BOT_TOKEN: str = "8162894918:AAFURqtx8xAUWm-dw8fhJkiO82M2G46bMyY"
+    BOT_TOKEN: str = "8994978352:AAFZG5qY47aprhtSdZjugnkX7TKnzZAhj8w"
     USER_SESSION: str = "user_session"
     BOT_SESSION: str = "bot_session"
 
     ADMIN_IDS: List[int] = field(default_factory=lambda: [5947916142, 6142451295])
 
-    BOT_USERNAME: str = "UlpExtractorBot"
+    BOT_USERNAME: str = "UlpHJBot"
     SELLER_USERNAMES: List[str] = field(default_factory=lambda: ["@hjofc20", "@Ghosthat_Real1"])
 
     DB_FILE: Path = Path("SystemData/hj_bot.db")
