@@ -127,6 +127,10 @@ for handler in logging.getLogger().handlers:
         ))
 
 logger = logging.getLogger("HJ_PRO")
+
+# Silenciar logs ruidosos de Telethon (FloodWait, Sleep, etc.)
+logging.getLogger('telethon').setLevel(logging.ERROR)
+
 if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8')
 
@@ -739,39 +743,59 @@ async def _download_with_progress(
     event_or_msg,
     filename: str,
     dest_path: Path,
-    progress_callback: Optional[Callable] = None
+    progress_callback: Optional[Callable] = None,
+    _retry_count: int = 0
 ) -> bool:
     """
     Descarga archivos de Telegram con soporte para archivos grandes (hasta 4GB).
-    Usa descarga en streaming con callback de progreso.
+    Usa descarga en streaming con reintentos automáticos en caso de FloodWait.
     """
+    MAX_RETRIES = 5
+    temp_path = dest_path.with_suffix('.tmp')
+
     try:
         file_size = 0
         if hasattr(event_or_msg, 'document') and event_or_msg.document:
             file_size = event_or_msg.document.size or 0
 
-        logger.info(f"Descarga iniciada: {filename} ({_format_size(file_size)})")
+        if _retry_count == 0:
+            logger.info(f"Descarga iniciada: {filename} ({_format_size(file_size)})")
 
-        # Crear archivo temporal primero
-        temp_path = dest_path.with_suffix('.tmp')
+        # Si hay un archivo temporal previo (reintento), verificar progreso
+        existing_size = 0
+        if temp_path.exists():
+            existing_size = temp_path.stat().st_size
+            if existing_size >= file_size and file_size > 0:
+                # Ya se descargó completo en un intento anterior
+                if dest_path.exists():
+                    dest_path.unlink()
+                temp_path.rename(dest_path)
+                logger.info(f"Descarga completada (resume): {filename}")
+                return True
 
         start_time = time.time()
         last_update = [start_time]
-        downloaded = [0]
+        last_progress_log = [0]
 
         def progress(current, total):
             downloaded[0] = current
             now = time.time()
-            # Actualizar progreso cada N segundos
+            # Log de progreso en consola cada 30 segundos
+            if (now - last_progress_log[0]) >= 30:
+                last_progress_log[0] = now
+                pct = (current / total * 100) if total > 0 else 0
+                elapsed = now - start_time
+                speed = current / elapsed if elapsed > 0 else 0
+                logger.info(
+                    f"DL {filename[:30]}: {pct:.0f}% ({_format_size(current)}/{_format_size(total)}) "
+                    f"@ {_format_size(speed)}/s"
+                )
             if progress_callback and (now - last_update[0]) >= config.DOWNLOAD_PROGRESS_INTERVAL:
                 last_update[0] = now
                 elapsed = now - start_time
                 if elapsed > 0 and current > 0:
                     speed = current / elapsed
-                    if speed > 0:
-                        eta = (total - current) / speed
-                    else:
-                        eta = 0
+                    eta = (total - current) / speed if speed > 0 else 0
                     pct = (current / total * 100) if total > 0 else 0
                     try:
                         asyncio.get_event_loop().call_soon_threadsafe(
@@ -782,10 +806,12 @@ async def _download_with_progress(
                     except Exception:
                         pass
 
-        # Descargar con Telethon (soporta streaming nativo)
+        downloaded = [0]
+
+        # Descargar con Telethon (flood_sleep_threshold maneja FloodWait internamente)
         await event_or_msg.download_media(
             file=str(temp_path),
-            progress_callback=progress if file_size > 10 * 1024 * 1024 else None  # Solo progreso si > 10MB
+            progress_callback=progress if file_size > 10 * 1024 * 1024 else None
         )
 
         # Verificar descarga
@@ -800,7 +826,7 @@ async def _download_with_progress(
             speed = final_size / elapsed if elapsed > 0 else 0
 
             logger.info(
-                f"Descarga completada: {filename} "
+                f"Descarga OK: {filename} "
                 f"({_format_size(final_size)}) en {_format_time(elapsed)} "
                 f"({_format_size(speed)}/s)"
             )
@@ -817,27 +843,63 @@ async def _download_with_progress(
             return False
 
     except FloodWaitError as e:
-        logger.warning(f"FloodWait en descarga {filename}: {e.seconds}s")
-        await asyncio.sleep(e.seconds + 1)
+        # FloodWait es normal en archivos grandes - Telethon lo maneja con flood_sleep_threshold
+        # Pero si llega aquí, es porque excedió el threshold
+        logger.warning(f"FloodWait {e.seconds}s en {filename} (intento {_retry_count+1}/{MAX_RETRIES})")
+        await asyncio.sleep(e.seconds + 2)
+        if _retry_count < MAX_RETRIES:
+            return await _download_with_progress(
+                event_or_msg, filename, dest_path,
+                progress_callback, _retry_count + 1
+            )
         return False
+
     except TimedOutError:
-        logger.error(f"Timeout en descarga: {filename}")
+        logger.warning(f"Timeout en {filename} (intento {_retry_count+1}/{MAX_RETRIES})")
+        # No borrar el temporal para poder resumir
+        if _retry_count < MAX_RETRIES:
+            await asyncio.sleep(10)
+            return await _download_with_progress(
+                event_or_msg, filename, dest_path,
+                progress_callback, _retry_count + 1
+            )
         if temp_path.exists():
             try:
                 temp_path.unlink()
             except Exception:
                 pass
         return False
+
+    except FileReferenceExpiredError:
+        logger.warning(f"FileReference expirada en {filename} - reintentando...")
+        if _retry_count < MAX_RETRIES:
+            await asyncio.sleep(5)
+            return await _download_with_progress(
+                event_or_msg, filename, dest_path,
+                progress_callback, _retry_count + 1
+            )
+        return False
+
+    except ConnectionError:
+        logger.warning(f"Conexión perdida en {filename} - reintentando en 30s...")
+        await asyncio.sleep(30)
+        if _retry_count < MAX_RETRIES:
+            return await _download_with_progress(
+                event_or_msg, filename, dest_path,
+                progress_callback, _retry_count + 1
+            )
+        return False
+
     except Exception as e:
         logger.error(f"Error en descarga {filename}: {e}")
-        if dest_path.with_suffix('.tmp').exists():
+        if temp_path.exists():
             try:
-                dest_path.with_suffix('.tmp').unlink()
+                temp_path.unlink()
             except Exception:
                 pass
         return False
+
     finally:
-        # Limpiar estado de descarga
         if filename in active_downloads:
             active_downloads.pop(filename, None)
 
@@ -1192,12 +1254,15 @@ class Keyboards:
 bot = TelegramClient(
     config.BOT_SESSION, config.API_ID, config.API_HASH,
     connection_retries=15, retry_delay=3,
-    auto_reconnect=True, timeout=60
+    auto_reconnect=True, timeout=60,
+    flood_sleep_threshold=300  # Auto-manejar flood waits hasta 5min sin loguear
 )
 userbot = TelegramClient(
     config.USER_SESSION, config.API_ID, config.API_HASH,
     connection_retries=15, retry_delay=3,
-    auto_reconnect=True, timeout=120
+    auto_reconnect=True, timeout=120,
+    flood_sleep_threshold=300,  # Auto-manejar flood waits hasta 5min sin loguear
+    request_retries=5  # Reintentar peticiones automaticamente
 )
 
 # ═════════════════════════════════════════════════════════════
