@@ -1,0 +1,20 @@
+{
+    "welcome": "╔══════════════════════════════════╗\n║     ☾  HJ & GHOST ULP PRO  ☽    ║\n╚══════════════════════════════════╝\n\n▸ Ultra-fast parallel search\n▸ Databases updated 24/7\n▸ Privacy & full anonymity\n▸ Downloads up to 4GB no limits\n\n┌──────────────────────────────────┐\n│  Commands: /start │ /url          │\n└──────────────────────────────────┘\n\n🌟 Support:\n  ✦ @hjofc20\n  ✦ @Ghosthat_Real1\n\n👤 **Role:** `{}` │ 📊 **Searches:** `{}`",
+    "buy_vip_info": "╔══════════════════════════════════╗\n║      💰 BUY VIP ACCESS 💰         ║\n╚══════════════════════════════════╝\n\n💲 **PRICES:**\n  ⟡ 1 day  »  6$\n  ⟡ 3 days »  10$\n  ⟡ 7 days »  25$\n  ⟡ 30 days » 100$\n\n📬 **CONTACT:**\n{}",
+    "file_management": "╔══════════════════════════════════╗\n║    📂 FILE MANAGEMENT            ║\n╚══════════════════════════════════╝\n\n📊 **Database:**\n  📁 Total: `{}` files\n  ⚡ Last 24h: `{}`\n  🗄️ Archive: `{}`\n\n🔄 **Downloads:**\n  ♻️ Auto-Download: `{}`\n  📝 Queued: `{}` files\n  ⬇️ Active: `{}` downloads",
+    "no_results": "❌ **NO RESULTS**\n\nNo data found for `{}`.",
+    "search_step_time": "🔍 **Domain:** `{}`\n\n⏳ Select the time range:",
+    "loading": "⚙️ **Processing...**",
+    "access_denied": "🚫 **ACCESS DENIED**\n\nOnly VIP users can search.",
+    "ask_domain": "🔍 **NEW SEARCH**\n\nType the domain to search:",
+    "language_selected": "🌐 Language updated successfully.",
+    "select_language": "🌐 **SELECT LANGUAGE / IDIOMA / IDIOMA**\n\nChoose your preferred language:",
+    "my_account": "╔══════════════════════════════════╗\n║       👤 MY ACCOUNT              ║\n╚══════════════════════════════════╝\n\n🆔 ID: `{}`\n🎖 Role: `{}`\n📅 Expires: `{}`\n📊 Searches: `{}`",
+    "search_completed": "╔══════════════════════════════════╗\n║     ✅ SEARCH COMPLETED          ║\n╚══════════════════════════════════╝\n\n🔍 Domain: `{}`\n📑 Type: `{}`\n📊 Results: `{}`\n⏱️ Time: `{:.1f}s`",
+    "download_progress": "📥 Downloading: `{}`\n\n📊 Progress: `{}`\n⚡ Speed: `{}`\n⏱️ ETA: `{}`",
+    "redeem_success": "🎉 **Congratulations!**\n\nYour VIP account has been activated successfully.",
+    "key_generated": "✅ **KEY GENERATED SUCCESSFULLY**\n\n🔑 Code:\n`{}`\n\n🔗 Redeem link:\n{}\n\n📅 Days: {}",
+    "admin_panel": "╔══════════════════════════════════╗\n║       🔐 ADMIN PANEL             ║\n╚══════════════════════════════════╝\n\n👑 VIPs: `{}`\n💼 Sellers: `{}`\n🔍 Searches: `{}`\n👥 Total users: `{}`",
+    "stats_global": "╔══════════════════════════════════╗\n║      📊 GLOBAL STATISTICS        ║\n╚══════════════════════════════════╝\n\n👑 VIP Users: `{}`\n💼 Sellers: `{}`\n🔍 Total Searches: `{}`\n👥 Total Users: `{}`",
+    "broadcast_done": "✅ **Broadcast Finished**\n\n📬 Sent: `{}`\n🚫 Failed: `{}`"
+}

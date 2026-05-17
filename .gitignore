@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+SystemData/
+*.session
+*.session-journal
+bot_activity.log
+HJDescargas/
+Archivo_Historico/
+Cache_Resultados/
+Temp_Parts/
