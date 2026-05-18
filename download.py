@@ -1,6 +1,6 @@
 """
 ═══════════════════════════════════════════════════════════════
-  HJ ULP EXTRACTOR BOT — Download System Module v3.2
+  HJ ULP EXTRACTOR BOT — Download System Module v3.4
 ═══════════════════════════════════════════════════════════════
   • Download de archivos hasta 4GB con streaming + progreso
   • Progress updates con task cancellation (sin pileup)
@@ -27,17 +27,15 @@ from logger_setup import logger
 from utils import format_size, format_time, progress_bar
 from database import db
 
-# FIX #1,#2,#3: Usar `import state` en vez de `from state import X`
-# Los imports estáticos capturan None/False/[] en import time y NUNCA se actualizan
-# cuando bot.py asigna los valores reales (state.bot = bot_client, etc.)
+# FIX: Usar `import state` en vez de `from state import X`
 import state
 
 
 class DownloadProgressTracker:
     """Gestor de progreso de descarga con actualizaciones en Telegram en tiempo real.
     
-    FIX v3.2: 
-    - Usa asyncio.get_running_loop() en vez de get_event_loop()
+    FIX v3.4: 
+    - Usa asyncio.get_running_loop() (no deprecated)
     - Cancela task anterior antes de crear nuevo (evita pileup)
     - Backoff adaptativo cuando FloodWait detectado
     - _do_update con manejo robusto de errores
@@ -62,7 +60,7 @@ class DownloadProgressTracker:
     async def create_message(self, client):
         """Crear el mensaje inicial de progreso."""
         try:
-            fname_short = self.filename[:30]
+            fname_display = self.filename[:40]
             size_str = format_size(self.file_size) if self.file_size > 0 else "Desconocido"
             text = (
                 "╭───✦ 📥 DESCARGANDO ({}/{})\n"
@@ -76,7 +74,7 @@ class DownloadProgressTracker:
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ).format(
                 self.file_index, self.total_files,
-                fname_short, size_str,
+                fname_display, size_str,
                 self.stats['new'], self.stats['existing'], self.stats['errors']
             )
             self.message = await client.send_message(
@@ -88,14 +86,14 @@ class DownloadProgressTracker:
     def notify_progress(self, current: int, total: int, speed: float, eta: float, pct: float):
         """Notificar progreso de forma NO-BLOQUEANTE (fire-and-forget).
         
-        FIX v3.2: 
+        FIX v3.4: 
         - Usa get_running_loop() (no deprecated)
         - Cancela task anterior para evitar pileup
         - Respeta FloodWait backoff (no intenta editar si está en cooldown)
         """
         now = time.time()
         
-        # Respetar FloodWait backoff - no intentar editar si estamos en cooldown
+        # Respetar FloodWait backoff
         if now < self._floodwait_until:
             return
         
@@ -106,7 +104,7 @@ class DownloadProgressTracker:
         if not self.message:
             return
 
-        # Cancelar task anterior si aún no terminó (evita pileup)
+        # Cancelar task anterior si aún no terminó
         if self._pending_task is not None and not self._pending_task.done():
             self._pending_task.cancel()
 
@@ -117,20 +115,14 @@ class DownloadProgressTracker:
                 self._do_update(current, total, speed, eta, pct)
             )
         except RuntimeError:
-            pass  # Event loop no disponible
+            pass
 
     async def _do_update(self, current: int, total: int, speed: float, eta: float, pct: float):
-        """Actualizar mensaje de Telegram (ejecutado como background task).
-        
-        FIX v3.2:
-        - FloodWait aplica backoff adaptativo
-        - Errores consecutivos aumentan el intervalo
-        - Cancelación segura via try/except CancelledError
-        """
+        """Actualizar mensaje de Telegram (ejecutado como background task)."""
         if not self.message:
             return
         try:
-            fname_short = self.filename[:30]
+            fname_display = self.filename[:40]
             size_str = format_size(self.file_size) if self.file_size > 0 else "Desconocido"
             bar = progress_bar(pct)
             speed_str = format_size(speed) + "/s" if speed > 0 else "Calculando..."
@@ -151,7 +143,7 @@ class DownloadProgressTracker:
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ).format(
                 self.file_index, self.total_files,
-                fname_short,
+                fname_display,
                 downloaded_str, total_str,
                 speed_str,
                 bar,
@@ -159,34 +151,28 @@ class DownloadProgressTracker:
                 self.stats['new'], self.stats['existing'], self.stats['errors']
             )
             await self.message.edit(text, parse_mode='md')
-            # Éxito - resetear errores consecutivos
             self._consecutive_errors = 0
             
         except asyncio.CancelledError:
-            # Task cancelado por nuevo update - normal, no es error
             return
             
         except MessageNotModifiedError:
             pass
             
         except FloodWaitError as e:
-            # FIX: Backoff adaptativo - respetar FloodWait de Telegram
             wait_seconds = e.seconds
             logger.warning(f"FloodWait al editar progreso: {wait_seconds}s - aplicando backoff")
             self._floodwait_until = time.time() + wait_seconds + 1
-            # Aumentar intervalo temporalmente
             self._edit_interval = min(self._edit_interval + 2, 10)
             self._consecutive_errors += 1
             
         except ConnectionError:
-            # Conexión perdida temporalmente - aumentar intervalo
             logger.debug("Conexión perdida al editar progreso")
             self._consecutive_errors += 1
             self._edit_interval = min(self._edit_interval + 1, 8)
             
         except Exception as e:
             self._consecutive_errors += 1
-            # Si hay muchos errores consecutivos, aumentar intervalo significativamente
             if self._consecutive_errors > 3:
                 self._edit_interval = min(self._edit_interval + 2, 15)
                 logger.warning(f"Errores consecutivos en progreso ({self._consecutive_errors}): {e}")
@@ -206,15 +192,15 @@ class DownloadProgressTracker:
             except (asyncio.CancelledError, Exception):
                 pass
         
-        # Esperar un poco si estamos en FloodWait para que el mensaje final llegue
+        # Esperar un poco si estamos en FloodWait
         now = time.time()
         if now < self._floodwait_until:
             wait = self._floodwait_until - now + 1
-            if wait < 15:  # Solo esperar si es poco tiempo
+            if wait < 15:
                 await asyncio.sleep(wait)
         
         try:
-            fname_short = self.filename[:30]
+            fname_display = self.filename[:40]
             size_str = format_size(self.file_size) if self.file_size > 0 else "Desconocido"
             status = "✅ COMPLETADO" if success else "❌ FALLIDO"
             icon = "✅" if success else "❌"
@@ -234,7 +220,7 @@ class DownloadProgressTracker:
                     "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
                 ).format(
                     icon, status,
-                    fname_short, size_str,
+                    fname_display, size_str,
                     time_str, speed_str,
                     self.stats['new'], self.stats['existing'], self.stats['errors']
                 )
@@ -247,7 +233,7 @@ class DownloadProgressTracker:
                     "├● ✅ Nuevos: `{}` │ 💾 Existentes: `{}` │ ❌ Errores: `{}`\n"
                     "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
                 ).format(
-                    fname_short, size_str,
+                    fname_display, size_str,
                     self.stats['new'], self.stats['existing'], self.stats['errors']
                 )
 
@@ -313,10 +299,10 @@ async def _download_with_progress(
     """
     Descarga archivos de Telegram con soporte para archivos grandes (hasta 4GB).
     
-    FIX v3.2: 
+    FIX v3.4: 
     - notify_progress usa get_running_loop() + task cancellation
     - Backoff adaptativo en FloodWait para ediciones
-    - Throttle reducido a 0.03s para mejor velocidad
+    - Throttle optimizado para máxima velocidad
     - Logging mejorado para diagnóstico
     """
     MAX_RETRIES = 5
@@ -367,8 +353,8 @@ async def _download_with_progress(
                     downloaded[0] += len(chunk)
                     now = time.time()
 
-                    # Log en consola cada 15 segundos (más frecuente para diagnóstico)
-                    if (now - last_progress_log[0]) >= 15:
+                    # Log en consola cada 10 segundos
+                    if (now - last_progress_log[0]) >= 10:
                         last_progress_log[0] = now
                         pct = (downloaded[0] / file_size * 100) if file_size > 0 else 0
                         elapsed = now - start_time
@@ -386,11 +372,10 @@ async def _download_with_progress(
                             speed = downloaded[0] / elapsed
                             eta = (file_size - downloaded[0]) / speed if speed > 0 and file_size > 0 else 0
                             pct = (downloaded[0] / file_size * 100) if file_size > 0 else 0
-                            # FIRE-AND-FORGET con task cancellation: notify_progress NO hace await
                             if hasattr(progress_callback, 'notify_progress'):
                                 progress_callback.notify_progress(downloaded[0], file_size, speed, eta, pct)
 
-                    # Throttle mínimo entre chunks
+                    # Throttle mínimo entre chunks - más bajo = más velocidad
                     if config.DOWNLOAD_THROTTLE > 0:
                         await asyncio.sleep(config.DOWNLOAD_THROTTLE)
 
@@ -499,14 +484,15 @@ async def _download_large_file_task(event, filename: str, dest_path: Path):
         state.download_semaphore = asyncio.Semaphore(config.MAX_CONCURRENT_DOWNLOADS)
 
     async with state.download_semaphore:
-        state.state.active_downloads[filename] = {
+        # FIX v3.4: state.active_downloads (NO state.state.active_downloads)
+        state.active_downloads[filename] = {
             'start_time': time.time(),
             'size': 0,
             'status': 'downloading'
         }
         success = await _download_with_progress(event, filename, dest_path)
         if not success and filename in state.active_downloads:
-            state.state.active_downloads[filename]['status'] = 'failed'
+            state.active_downloads[filename]['status'] = 'failed'
         if success:
             logger.info(f"Esperando {config.DOWNLOAD_DELAY_BETWEEN}s antes de siguiente descarga...")
             await asyncio.sleep(config.DOWNLOAD_DELAY_BETWEEN)
@@ -529,17 +515,21 @@ async def _auto_dl_worker():
             file_size = item['size']
 
             if dest_path.exists() and dest_path.stat().st_size > 0:
-                state.state.auto_dl_queue.task_done()
+                # FIX v3.4: state.auto_dl_queue (NO state.state.auto_dl_queue)
+                state.auto_dl_queue.task_done()
                 continue
 
             logger.info(f"Auto-DL: Descargando {filename} ({format_size(file_size)})")
-            state.state.active_downloads[filename] = {
+
+            # FIX v3.4: state.active_downloads (NO state.state.active_downloads)
+            state.active_downloads[filename] = {
                 'start_time': time.time(),
                 'size': file_size,
                 'status': 'downloading'
             }
 
-            queue_remaining = state.state.auto_dl_queue.qsize()
+            # FIX v3.4: state.auto_dl_queue (NO state.state.auto_dl_queue)
+            queue_remaining = state.auto_dl_queue.qsize()
             tracker = DownloadProgressTracker(
                 chat_id=config.ADMIN_IDS[0],
                 filename=filename,
@@ -560,11 +550,18 @@ async def _auto_dl_worker():
             if not success and filename in state.active_downloads:
                 state.active_downloads[filename]['status'] = 'failed'
 
+            # ACTUALIZAR STATS del tracker según resultado
+            if success:
+                tracker.stats['new'] += 1
+            else:
+                tracker.stats['errors'] += 1
+
             await tracker.finish(success, dl_elapsed)
 
             logger.info(f"Auto-DL: Esperando {config.DOWNLOAD_DELAY_BETWEEN}s...")
             await asyncio.sleep(config.DOWNLOAD_DELAY_BETWEEN)
 
+            # FIX v3.4: state.auto_dl_queue (NO state.state.auto_dl_queue)
             state.auto_dl_queue.task_done()
 
         except asyncio.CancelledError:
@@ -573,7 +570,8 @@ async def _auto_dl_worker():
             logger.error(f"Error en auto-dl worker: {e}", exc_info=True)
             await asyncio.sleep(5)
 
-    auto_dl_worker_running = False
+    # FIX v3.4: state.auto_dl_worker_running (NO variable local)
+    state.auto_dl_worker_running = False
     logger.info("Auto-DL Worker detenido")
 
 

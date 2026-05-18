@@ -435,7 +435,12 @@ def register_handlers(bot_client):
                 counts = get_file_counts()
                 # FIX #3: usar state.auto_download_enabled (no stale import)
                 auto_status = "ON" if state.auto_download_enabled else "OFF"
-                queue_count = state.auto_dl_queue.qsize() if state.auto_dl_queue else 0
+                queue_count = 0
+                try:
+                    if state.auto_dl_queue is not None:
+                        queue_count = state.auto_dl_queue.qsize()
+                except Exception:
+                    pass
                 total_pending = len(state.pending_downloads) + queue_count
                 await e.edit(
                     UI.text("file_management", lang,
@@ -453,7 +458,12 @@ def register_handlers(bot_client):
                 state.auto_download_enabled = True
                 await e.answer("Auto-Descarga ACTIVADA (secuencial)", alert=True)
                 counts = get_file_counts()
-                queue_count = state.auto_dl_queue.qsize() if state.auto_dl_queue else 0
+                queue_count = 0
+                try:
+                    if state.auto_dl_queue is not None:
+                        queue_count = state.auto_dl_queue.qsize()
+                except Exception:
+                    pass
                 total_pending = len(state.pending_downloads) + queue_count
                 await e.edit(
                     UI.text("file_management", lang,
@@ -469,7 +479,12 @@ def register_handlers(bot_client):
                 state.auto_download_enabled = False
                 await e.answer("Auto-Descarga DESACTIVADA", alert=True)
                 counts = get_file_counts()
-                queue_count = state.auto_dl_queue.qsize() if state.auto_dl_queue else 0
+                queue_count = 0
+                try:
+                    if state.auto_dl_queue is not None:
+                        queue_count = state.auto_dl_queue.qsize()
+                except Exception:
+                    pass
                 total_pending = len(state.pending_downloads) + queue_count
                 await e.edit(
                     UI.text("file_management", lang,
