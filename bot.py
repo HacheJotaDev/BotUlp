@@ -74,7 +74,7 @@ class Config:
     DOWNLOAD_CHUNK_SIZE: int = 1024 * 1024  # 1MB chunks para descarga manual
     DOWNLOAD_TIMEOUT: int = 3600  # 1 hora timeout para descargas grandes
     MAX_CONCURRENT_DOWNLOADS: int = 1  # 1 a la vez para evitar FloodWait
-    DOWNLOAD_PROGRESS_INTERVAL: int = 5  # Actualizar progreso cada 5 segundos
+    DOWNLOAD_PROGRESS_INTERVAL: int = 3  # Actualizar progreso cada 3 segundos
     DOWNLOAD_DELAY_BETWEEN: int = 10  # Segundos entre descargas para evitar flood
     DOWNLOAD_THROTTLE: float = 0.15  # Segundos entre chunks para anti-flood
     DOWNLOAD_PART_SIZE_KB: int = 1024  # 1MB por request GetFile (reduce llamadas API)
@@ -725,7 +725,7 @@ class DownloadProgressTracker:
         self.stats = stats or {'new': 0, 'existing': 0, 'errors': 0}
         self.message = None
         self._last_edit_time = 0
-        self._edit_interval = 3  # Editar mensaje cada 3 segundos mínimo (evitar FloodWait)
+        self._edit_interval = 2  # Editar mensaje cada 2 segundos mínimo (evitar FloodWait)
 
     async def create_message(self, client):
         """Crear el mensaje inicial de progreso."""
@@ -795,9 +795,11 @@ class DownloadProgressTracker:
             await self.message.edit(text, parse_mode='md')
         except MessageNotModifiedError:
             pass
+        except FloodWaitError as e:
+            logger.warning(f"FloodWait al editar progreso: {e.seconds}s - pausando")
+            await asyncio.sleep(min(e.seconds, 10))
         except Exception as e:
-            if "FloodWait" not in str(type(e).__name__):
-                logger.debug(f"Error actualizando progreso: {e}")
+            logger.debug(f"Error actualizando progreso: {e}")
 
     async def finish(self, success: bool, elapsed: float = 0):
         """Actualizar mensaje al finalizar la descarga."""
@@ -935,7 +937,6 @@ async def _download_with_progress(
         start_time = time.time()
         last_update = [start_time]
         last_progress_log = [0]
-        _pending_cb = [None]  # Para evitar garbage collection de callbacks pendientes
 
         def progress(current, total):
             downloaded[0] = current
@@ -950,20 +951,6 @@ async def _download_with_progress(
                     f"DL {filename[:30]}: {pct:.0f}% ({_format_size(current)}/{_format_size(total)}) "
                     f"@ {_format_size(speed)}/s"
                 )
-            if progress_callback and (now - last_update[0]) >= config.DOWNLOAD_PROGRESS_INTERVAL:
-                last_update[0] = now
-                elapsed = now - start_time
-                if elapsed > 0 and current > 0:
-                    speed = current / elapsed
-                    eta = (total - current) / speed if speed > 0 else 0
-                    pct = (current / total * 100) if total > 0 else 0
-                    try:
-                        loop = asyncio.get_event_loop()
-                        _pending_cb[0] = loop.create_task(
-                            progress_callback(current, total, speed, eta, pct)
-                        )
-                    except Exception:
-                        pass
 
         downloaded = [0]
 
@@ -1000,11 +987,11 @@ async def _download_with_progress(
                             eta = (file_size - downloaded[0]) / speed if speed > 0 and file_size > 0 else 0
                             pct = (downloaded[0] / file_size * 100) if file_size > 0 else 0
                             try:
-                                _pending_cb[0] = asyncio.create_task(
-                                    progress_callback(downloaded[0], file_size, speed, eta, pct)
-                                )
-                            except Exception:
+                                await progress_callback(downloaded[0], file_size, speed, eta, pct)
+                            except MessageNotModifiedError:
                                 pass
+                            except Exception as e:
+                                logger.debug(f"Error actualizando progreso: {e}")
                     # Throttle entre chunks para evitar FloodWait
                     await asyncio.sleep(config.DOWNLOAD_THROTTLE)
         except AttributeError:
