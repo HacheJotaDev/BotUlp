@@ -39,7 +39,7 @@ class Config:
     MAX_CONCURRENT_DOWNLOADS: int = 1  # 1 a la vez para evitar FloodWait
     DOWNLOAD_PROGRESS_INTERVAL: int = 3  # Actualizar progreso cada 3 segundos
     DOWNLOAD_DELAY_BETWEEN: int = 10  # Segundos entre descargas
-    DOWNLOAD_THROTTLE: float = 0.05  # Throttle reducido (0.05s entre chunks)
+    DOWNLOAD_THROTTLE: float = 0.03  # Throttle mínimo (0.03s entre chunks = ~33MB/s max)
     DOWNLOAD_PART_SIZE_KB: int = 1024  # 1MB por request GetFile
 
     # Búsqueda

@@ -70,7 +70,11 @@ async def animate_loading(msg, search_task: asyncio.Task, kw: str):
 # ═════════════════════════════════════════════════════════════
 
 async def cmd_update_bot(event):
-    """Actualizar el bot desde GitHub sin entrar al VPS."""
+    """Actualizar el bot desde GitHub sin entrar al VPS.
+    
+    FIX v3.2: Usa pm2 restart cuando está disponible (mejor que os.execv).
+    Si pm2 no está, hace fallback a os.execv.
+    """
     uid = event.sender_id
     if uid not in config.ADMIN_IDS:
         return
@@ -122,7 +126,25 @@ async def cmd_update_bot(event):
         # Esperar 3 segundos para que el mensaje llegue
         await asyncio.sleep(3)
 
-        # Reiniciar usando os.execv (reemplaza el proceso actual)
+        # Intentar reiniciar con pm2 (mejor para VPS)
+        try:
+            pm2_check = subprocess.run(
+                ['pm2', 'list'], capture_output=True, timeout=5
+            )
+            if pm2_check.returncode == 0:
+                # pm2 está disponible - usar pm2 restart
+                logger.info("Reiniciando via pm2...")
+                subprocess.Popen(
+                    ['pm2', 'restart', 'ulp-bot'],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+                # Salir del proceso actual (pm2 lo reiniciará)
+                import sys
+                sys.exit(0)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # Fallback: reiniciar usando os.execv (si no hay pm2)
         import sys
         os.execv(sys.executable, [sys.executable] + sys.argv)
 
@@ -133,6 +155,8 @@ async def cmd_update_bot(event):
             "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
             parse_mode='md'
         )
+    except SystemExit:
+        raise  # Permitir que sys.exit() funcione
     except Exception as e:
         logger.error(f"Error en /updateBot: {e}")
         await status_msg.edit(

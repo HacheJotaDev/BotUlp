@@ -1,6 +1,6 @@
 """
 ═══════════════════════════════════════════════════════════════
-  HJ ULP EXTRACTOR BOT — PRO EDITION v3.1
+  HJ ULP EXTRACTOR BOT — PRO EDITION v3.2
 ═══════════════════════════════════════════════════════════════
   • Motor de búsqueda paralelo con mmap ultra-rápido
   • Descarga de archivos hasta 4GB con streaming + progreso
@@ -50,7 +50,7 @@ userbot_client = TelegramClient(
 
 async def main():
     """Punto de entrada principal del bot."""
-    logger.info(f"Iniciando HJ ULP PRO v3.1...")
+    logger.info("Iniciando HJ ULP PRO v3.2...")
 
     # Iniciar clientes
     await bot_client.start(bot_token=config.BOT_TOKEN)
@@ -92,7 +92,7 @@ async def main():
     user_me = await userbot_client.get_me()
     logger.info(f"Bot: @{me.username} (ID: {me.id})")
     logger.info(f"Userbot: {user_me.first_name} (ID: {user_me.id})")
-    logger.info(f"HJ ULP PRO v3.1 — ACTIVO")
+    logger.info("HJ ULP PRO v3.2 — ACTIVO")
 
     # Mantener corriendo
     await bot_client.run_until_disconnected()
