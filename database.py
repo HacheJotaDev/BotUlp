@@ -1,0 +1,198 @@
+"""
+═══════════════════════════════════════════════════════════════
+  HJ ULP EXTRACTOR BOT — Database Module
+═══════════════════════════════════════════════════════════════
+"""
+
+import sqlite3
+import random
+import string
+import asyncio
+from pathlib import Path
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List
+
+from config import config
+from logger_setup import logger
+
+
+class Database:
+    """Base de datos SQLite con WAL mode para máximo rendimiento concurrente."""
+
+    def __init__(self, db_path: Path):
+        self.db_path = db_path
+        self._lock = asyncio.Lock()
+        self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=NORMAL")
+        self.conn.execute("PRAGMA cache_size=-64000")
+        self.conn.execute("PRAGMA temp_store=MEMORY")
+        self._init_schema()
+
+    def _init_schema(self):
+        c = self.conn.cursor()
+        c.execute("""CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            role TEXT DEFAULT 'FREE',
+            vip_expiry TEXT,
+            search_count INTEGER DEFAULT 0,
+            language TEXT DEFAULT 'es',
+            first_seen TEXT DEFAULT CURRENT_TIMESTAMP,
+            last_active TEXT DEFAULT CURRENT_TIMESTAMP
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS keys (
+            key_code TEXT PRIMARY KEY,
+            days INTEGER,
+            created_by INTEGER,
+            used_by INTEGER,
+            is_used INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS download_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT,
+            file_size INTEGER DEFAULT 0,
+            chat_id INTEGER,
+            downloaded_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )""")
+
+        # Migraciones
+        c.execute("PRAGMA table_info(users)")
+        columns = [info[1] for info in c.fetchall()]
+
+        migrations = [
+            ('language', "ALTER TABLE users ADD COLUMN language TEXT DEFAULT 'es'"),
+            ('first_seen', "ALTER TABLE users ADD COLUMN first_seen TEXT DEFAULT CURRENT_TIMESTAMP"),
+            ('last_active', "ALTER TABLE users ADD COLUMN last_active TEXT DEFAULT CURRENT_TIMESTAMP"),
+        ]
+        for col_name, alter_sql in migrations:
+            if col_name not in columns:
+                logger.info(f"Migrando DB: añadiendo columna '{col_name}'...")
+                try:
+                    c.execute(alter_sql)
+                    self.conn.commit()
+                    logger.info(f"Columna '{col_name}' añadida correctamente.")
+                except Exception as e:
+                    logger.error(f"Error migrando DB: {e}")
+
+        self.conn.commit()
+
+    def get_user(self, uid: int) -> dict:
+        c = self.conn.cursor()
+        c.execute("SELECT * FROM users WHERE user_id = ?", (uid,))
+        row = c.fetchone()
+        if not row:
+            now = datetime.now(timezone.utc).isoformat()
+            c.execute(
+                "INSERT INTO users (user_id, first_seen, last_active) VALUES (?, ?, ?)",
+                (uid, now, now)
+            )
+            self.conn.commit()
+            return {
+                'user_id': uid, 'role': 'FREE', 'vip_expiry': None,
+                'search_count': 0, 'language': 'es',
+                'first_seen': now, 'last_active': now
+            }
+        try:
+            c.execute(
+                "UPDATE users SET last_active = ? WHERE user_id = ?",
+                (datetime.now(timezone.utc).isoformat(), uid)
+            )
+            self.conn.commit()
+        except Exception:
+            pass
+        return dict(row)
+
+    def set_language(self, uid: int, lang: str):
+        c = self.conn.cursor()
+        c.execute("UPDATE users SET language = ? WHERE user_id = ?", (lang, uid))
+        self.conn.commit()
+
+    def set_role(self, uid: int, role: str, days: int = 0):
+        expiry = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat() if role == 'VIP' else None
+        c = self.conn.cursor()
+        c.execute(
+            "INSERT INTO users (user_id, role, vip_expiry) VALUES (?, ?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET role=excluded.role, vip_expiry=excluded.vip_expiry",
+            (uid, role, expiry)
+        )
+        self.conn.commit()
+
+    def remove_vip(self, uid: int):
+        c = self.conn.cursor()
+        c.execute("UPDATE users SET role='FREE', vip_expiry=NULL WHERE user_id=?", (uid,))
+        self.conn.commit()
+
+    def gen_key(self, creator: int, days: int) -> str:
+        code = f"HJ-{''.join(random.choices(string.ascii_uppercase + string.digits, k=12))}"
+        c = self.conn.cursor()
+        c.execute(
+            "INSERT INTO keys (key_code, days, created_by) VALUES (?, ?, ?)",
+            (code, days, creator)
+        )
+        self.conn.commit()
+        return code
+
+    def redeem(self, uid: int, code: str) -> bool:
+        c = self.conn.cursor()
+        c.execute("SELECT days FROM keys WHERE key_code = ? AND is_used = 0", (code,))
+        row = c.fetchone()
+        if not row:
+            return False
+        days = row['days']
+        expiry = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+        c.execute("UPDATE keys SET is_used = 1, used_by = ? WHERE key_code = ?", (uid, code))
+        c.execute(
+            "INSERT INTO users (user_id, role, vip_expiry) VALUES (?, 'VIP', ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET role='VIP', vip_expiry=excluded.vip_expiry",
+            (uid, expiry)
+        )
+        self.conn.commit()
+        return True
+
+    def add_search(self, uid: int):
+        c = self.conn.cursor()
+        c.execute("UPDATE users SET search_count = search_count + 1 WHERE user_id = ?", (uid,))
+        self.conn.commit()
+
+    def get_stats(self) -> dict:
+        c = self.conn.cursor()
+        c.execute("SELECT COUNT(*) FROM users WHERE role='VIP'")
+        vips = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM users WHERE role='SELLER'")
+        sellers = c.fetchone()[0]
+        c.execute("SELECT SUM(search_count) FROM users")
+        total_searches = c.fetchone()[0] or 0
+        c.execute("SELECT COUNT(*) FROM users")
+        total_users = c.fetchone()[0]
+        return {
+            'vips': vips, 'sellers': sellers,
+            'searches': total_searches, 'total_users': total_users
+        }
+
+    def list_vips(self) -> List[dict]:
+        c = self.conn.cursor()
+        c.execute("SELECT user_id, vip_expiry, search_count FROM users WHERE role='VIP' OR role='SELLER'")
+        return [dict(r) for r in c.fetchall()]
+
+    def list_sellers(self) -> List[int]:
+        c = self.conn.cursor()
+        c.execute("SELECT user_id FROM users WHERE role='SELLER'")
+        return [r['user_id'] for r in c.fetchall()]
+
+    def get_all_users(self) -> List[int]:
+        c = self.conn.cursor()
+        c.execute("SELECT user_id FROM users")
+        return [row[0] for row in c.fetchall()]
+
+    def log_download(self, filename: str, file_size: int, chat_id: int):
+        c = self.conn.cursor()
+        c.execute(
+            "INSERT INTO download_log (filename, file_size, chat_id) VALUES (?, ?, ?)",
+            (filename, file_size, chat_id)
+        )
+        self.conn.commit()
+
+
+db = Database(config.DB_FILE)
