@@ -1,9 +1,10 @@
 """
 ═══════════════════════════════════════════════════════════════
-  HJ ULP EXTRACTOR BOT — Search Engine Module v3.4.2
+  HJ ULP EXTRACTOR BOT — Search Engine Module v3.4.3
 ═══════════════════════════════════════════════════════════════
-  • Búsqueda PARALELA con mmap ultra-rápido (todos los archivos a la vez)
-  • Límite por archivo + timeout global + early termination
+  • Búsqueda PARALELA con mmap ultra-rápido
+  • FIX: Límite de MATCHES procesados (no solo resultados)
+  • FIX: Timer interno por archivo (threads no se pueden cancelar)
   • Domains populares (spotify, netflix) ya no se cuelgan
 ═══════════════════════════════════════════════════════════════
 """
@@ -31,15 +32,18 @@ executor = ThreadPoolExecutor(
 _EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
 
 # Límites para evitar que dominios populares cuelguen el bot
-MAX_RESULTS_PER_FILE = 50000    # Máximo de resultados por archivo (suficiente por archivo)
-SEARCH_GLOBAL_TIMEOUT = 300     # 5 minutos máximo para toda la búsqueda
+MAX_RESULTS_PER_FILE = 10000    # Máximo de resultados únicos por archivo
+MAX_MATCHES_PER_FILE = 100000   # Máximo de MATCHES procesados por archivo (hard stop)
+FILE_TIME_LIMIT = 60            # 60 segundos máximo por archivo dentro del thread
 
 
 def _search_file(path: Path, kw: str, modo: SearchMode, cancel_event: threading.Event = None) -> List[str]:
-    """Búsqueda en archivo con mmap - máxima velocidad con límites.
+    """Búsqueda en archivo con mmap - con límites duros de matches y tiempo.
     
-    Procesa archivos de cualquier tamaño, pero frena cuando tiene
-    suficientes resultados o si se cancela desde fuera.
+    FIX v3.4.3:
+    - Límite de MATCHES procesados (no solo resultados únicos)
+    - Timer interno que frena el thread automáticamente
+    - Esto funciona porque asyncio NO puede cancelar threads
     """
     if cancel_event and cancel_event.is_set():
         return []
@@ -47,6 +51,8 @@ def _search_file(path: Path, kw: str, modo: SearchMode, cancel_event: threading.
     res_set = set()
     enc_kw = kw.lower().encode()
     kw_lower = kw.lower()
+    start_time = time.time()
+    matches_processed = 0
 
     try:
         file_size = path.stat().st_size
@@ -57,18 +63,28 @@ def _search_file(path: Path, kw: str, modo: SearchMode, cancel_event: threading.
             with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
                 pos = 0
                 mm_size = mm.size()
-                iterations = 0
 
                 while pos < mm_size:
-                    # Early termination: límite de resultados por archivo
+                    # === LÍMITES DUROS ===
+                    
+                    # 1. Resultados únicos suficientes
                     if len(res_set) >= MAX_RESULTS_PER_FILE:
                         break
 
-                    # Verificar cancelación cada 200 matches
-                    iterations += 1
-                    if iterations % 200 == 0:
-                        if cancel_event and cancel_event.is_set():
-                            break
+                    # 2. Matches procesados (hard stop - evita millones de iteraciones)
+                    if matches_processed >= MAX_MATCHES_PER_FILE:
+                        logger.info(f"Archivo {path.name}: hard stop {MAX_MATCHES_PER_FILE} matches procesados")
+                        break
+
+                    # 3. Tiempo límite por archivo
+                    if time.time() - start_time > FILE_TIME_LIMIT:
+                        logger.info(f"Archivo {path.name}: time limit {FILE_TIME_LIMIT}s alcanzado")
+                        break
+
+                    # 4. Cancelación externa
+                    matches_processed += 1
+                    if matches_processed % 500 == 0 and cancel_event and cancel_event.is_set():
+                        break
 
                     found = mm.find(enc_kw, pos)
                     if found == -1:
@@ -136,17 +152,18 @@ def _search_file(path: Path, kw: str, modo: SearchMode, cancel_event: threading.
     except Exception:
         pass
 
+    elapsed = time.time() - start_time
+    if elapsed > 5 or len(res_set) > 0:
+        logger.info(f"Archivo {path.name}: {len(res_set)} resultados en {elapsed:.1f}s ({matches_processed} matches procesados)")
+
     return list(res_set)
 
 
 async def search_engine(kw: str, time_opt: str, modo: SearchMode) -> Optional[Path]:
     """Motor de búsqueda PARALELO con caché + límites de seguridad.
     
-    FIX v3.4.2:
-    - TODOS los archivos se procesan EN PARALELO (no secuencial)
-    - Timeout global: si se pasa de 5 min, devuelve lo que tenga
-    - Cancel event: cuando hay suficientes resultados, para los demás
-    - Límite por archivo: 50000 resultados máximo por archivo
+    Todos los archivos se procesan EN PARALELO.
+    Límites dentro de cada thread (no dependen de asyncio.cancel).
     """
     cache_key = f"{kw}:{time_opt}:{modo.value}"
     if cache_key in state.search_memory_cache:
@@ -172,7 +189,6 @@ async def search_engine(kw: str, time_opt: str, modo: SearchMode) -> Optional[Pa
     if not files:
         return None
 
-    # Evento de cancelación compartido para early termination
     cancel_event = threading.Event()
 
     logger.info(f"Búsqueda '{kw}': {len(files)} archivos, modo {modo.value}")
@@ -183,29 +199,26 @@ async def search_engine(kw: str, time_opt: str, modo: SearchMode) -> Optional[Pa
         for f in files
     ]
 
-    # Ejecutar con timeout global
+    # Timeout global amplio (los threads se frenan solos con FILE_TIME_LIMIT)
     search_start = time.time()
     try:
         results = await asyncio.wait_for(
             asyncio.gather(*tasks, return_exceptions=True),
-            timeout=SEARCH_GLOBAL_TIMEOUT
+            timeout=600  # 10 min máximo absoluto
         )
     except asyncio.TimeoutError:
-        # Timeout global alcanzado - cancelar todo y usar lo que tengamos
         cancel_event.set()
-        logger.warning(f"Búsqueda '{kw}': timeout global ({SEARCH_GLOBAL_TIMEOUT}s)")
-        # Esperar un poco a que los threads terminen
-        await asyncio.sleep(1)
-        # Recoger resultados parciales de las tareas que ya terminaron
+        logger.warning(f"Búsqueda '{kw}': timeout global, usando resultados parciales")
+        await asyncio.sleep(2)
         results = []
         for t in tasks:
-            if t.done() and not t.cancelled():
-                try:
+            try:
+                if t.done() and not t.cancelled():
                     r = t.result()
                     if isinstance(r, list):
                         results.append(r)
-                except Exception:
-                    pass
+            except Exception:
+                pass
 
     # Combinar resultados
     final = set()
