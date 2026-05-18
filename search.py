@@ -31,10 +31,9 @@ executor = ThreadPoolExecutor(
 _EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
 
 # Límites para evitar que dominios populares cuelguen el bot
-MAX_RESULTS_PER_FILE = 100000   # Máximo de resultados por archivo individual
-MAX_FILE_SIZE_TO_SCAN = 2 * 1024 * 1024 * 1024  # 2GB máximo por archivo
-SEARCH_TIMEOUT_PER_FILE = 120   # 2 minutos máximo por archivo
-SEARCH_TOTAL_TIMEOUT = 300      # 5 minutos máximo para toda la búsqueda
+MAX_RESULTS_PER_FILE = 500000   # Máximo de resultados por archivo individual (mismo que SEARCH_MAX_RESULTS)
+SEARCH_TIMEOUT_PER_FILE = 180   # 3 minutos máximo por archivo (archivos de 4GB necesitan más tiempo)
+SEARCH_TOTAL_TIMEOUT = 600      # 10 minutos máximo para toda la búsqueda
 
 
 def _search_file(path: Path, kw: str, modo: SearchMode, cancel_event: threading.Event = None) -> List[str]:
@@ -43,8 +42,7 @@ def _search_file(path: Path, kw: str, modo: SearchMode, cancel_event: threading.
     FIX v3.4:
     - Límite de resultados por archivo (MAX_RESULTS_PER_FILE)
     - Verificación de cancelación para early termination
-    - Límite de tamaño de archivo (MAX_FILE_SIZE_TO_SCAN)
-    - Skip de archivos demasiado grandes
+    - Timeout por archivo como protección (no límite de tamaño)
     """
     if cancel_event and cancel_event.is_set():
         return []
@@ -58,24 +56,21 @@ def _search_file(path: Path, kw: str, modo: SearchMode, cancel_event: threading.
         if file_size == 0:
             return []
 
-        # Skip archivos demasiado grandes que colgarían el bot
-        if file_size > MAX_FILE_SIZE_TO_SCAN:
-            logger.info(f"Skip archivo muy grande: {path.name} ({file_size / 1024 / 1024:.0f}MB)")
-            return []
-
         with open(path, 'rb') as f:
             with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
                 pos = 0
                 mm_size = mm.size()
 
+                check_counter = 0
                 while pos < mm_size:
                     # Early termination: si ya tenemos suficientes resultados
                     if len(res_set) >= MAX_RESULTS_PER_FILE:
                         logger.info(f"Archivo {path.name}: límite por archivo alcanzado ({MAX_RESULTS_PER_FILE})")
                         break
 
-                    # Verificar cancelación cada 1000 iteraciones
-                    if cancel_event and cancel_event.is_set():
+                    # Verificar cancelación cada 500 matches
+                    check_counter += 1
+                    if check_counter % 500 == 0 and cancel_event and cancel_event.is_set():
                         break
 
                     found = mm.find(enc_kw, pos)
