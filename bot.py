@@ -704,6 +704,147 @@ def _format_time(seconds: float) -> str:
         m = (seconds % 3600) // 60
         return f"{h:.0f}h {m:.0f}m"
 
+def _progress_bar(pct: float, width: int = 12) -> str:
+    """Barra de progreso visual [████████░░░░] 53%"""
+    filled = int(width * pct / 100)
+    empty = width - filled
+    bar = '█' * filled + '░' * empty
+    return f"[{bar}] {pct:.1f}%"
+
+class DownloadProgressTracker:
+    """Gestor de progreso de descarga con actualizaciones en Telegram en tiempo real."""
+
+    def __init__(self, chat_id: int, filename: str, file_size: int,
+                 file_index: int = 1, total_files: int = 1,
+                 stats: Optional[Dict] = None):
+        self.chat_id = chat_id
+        self.filename = filename
+        self.file_size = file_size
+        self.file_index = file_index
+        self.total_files = total_files
+        self.stats = stats or {'new': 0, 'existing': 0, 'errors': 0}
+        self.message = None
+        self._last_edit_time = 0
+        self._edit_interval = 3  # Editar mensaje cada 3 segundos mínimo (evitar FloodWait)
+
+    async def create_message(self, client):
+        """Crear el mensaje inicial de progreso."""
+        try:
+            fname_short = self.filename[:30]
+            size_str = _format_size(self.file_size) if self.file_size > 0 else "Desconocido"
+            text = (
+                "╭───✦ 📥 DESCARGANDO ({}/{})\n"
+                "├● 📄 `{}`\n"
+                "├● 📊 Tamaño: `{}`\n"
+                "├● ⏳ Preparando descarga...\n"
+                "│\n"
+                "├● [░░░░░░░░░░░░] 0.0%\n"
+                "│\n"
+                "├● ✅ Nuevos: `{}` │ 💾 Existentes: `{}` │ ❌ Errores: `{}`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ).format(
+                self.file_index, self.total_files,
+                fname_short, size_str,
+                self.stats['new'], self.stats['existing'], self.stats['errors']
+            )
+            self.message = await client.send_message(
+                self.chat_id, text, parse_mode='md'
+            )
+        except Exception as e:
+            logger.error(f"Error creando mensaje de progreso: {e}")
+
+    async def update(self, current: int, total: int, speed: float, eta: float, pct: float):
+        """Callback de progreso — actualiza el mensaje de Telegram."""
+        now = time.time()
+        if now - self._last_edit_time < self._edit_interval:
+            return
+        self._last_edit_time = now
+
+        if not self.message:
+            return
+
+        try:
+            fname_short = self.filename[:30]
+            size_str = _format_size(self.file_size) if self.file_size > 0 else "Desconocido"
+            bar = _progress_bar(pct)
+            speed_str = _format_size(speed) + "/s" if speed > 0 else "Calculando..."
+            eta_str = _format_time(eta) if eta > 0 else "Calculando..."
+            downloaded_str = _format_size(current)
+            total_str = _format_size(total) if total > 0 else size_str
+
+            text = (
+                "╭───✦ 📥 DESCARGANDO ({}/{})\n"
+                "├● 📄 `{}`\n"
+                "├● 📊 Tamaño: `{}` / `{}`\n"
+                "├● ⚡ Velocidad: `{}`\n"
+                "│\n"
+                "├● {}\n"
+                "├● ⏱️ ETA: `{}`\n"
+                "│\n"
+                "├● ✅ Nuevos: `{}` │ 💾 Existentes: `{}` │ ❌ Errores: `{}`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ).format(
+                self.file_index, self.total_files,
+                fname_short,
+                downloaded_str, total_str,
+                speed_str,
+                bar,
+                eta_str,
+                self.stats['new'], self.stats['existing'], self.stats['errors']
+            )
+            await self.message.edit(text, parse_mode='md')
+        except MessageNotModifiedError:
+            pass
+        except Exception as e:
+            if "FloodWait" not in str(type(e).__name__):
+                logger.debug(f"Error actualizando progreso: {e}")
+
+    async def finish(self, success: bool, elapsed: float = 0):
+        """Actualizar mensaje al finalizar la descarga."""
+        if not self.message:
+            return
+        try:
+            fname_short = self.filename[:30]
+            size_str = _format_size(self.file_size) if self.file_size > 0 else "Desconocido"
+            status = "✅ COMPLETADO" if success else "❌ FALLIDO"
+            icon = "✅" if success else "❌"
+
+            if success:
+                speed = self.file_size / elapsed if elapsed > 0 and self.file_size > 0 else 0
+                speed_str = _format_size(speed) + "/s" if speed > 0 else "-"
+                time_str = _format_time(elapsed)
+                text = (
+                    "╭───✦ {} DESCARGA {}\n"
+                    "├● 📄 `{}`\n"
+                    "├● 📊 Tamaño: `{}`\n"
+                    "├● ⏱️ Tiempo: `{}`\n"
+                    "├● ⚡ Velocidad: `{}`\n"
+                    "│\n"
+                    "├● ✅ Nuevos: `{}` │ 💾 Existentes: `{}` │ ❌ Errores: `{}`\n"
+                    "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                ).format(
+                    icon, status,
+                    fname_short, size_str,
+                    time_str, speed_str,
+                    self.stats['new'], self.stats['existing'], self.stats['errors']
+                )
+            else:
+                text = (
+                    "╭───✦ ❌ DESCARGA FALLIDA\n"
+                    "├● 📄 `{}`\n"
+                    "├● 📊 Tamaño: `{}`\n"
+                    "│\n"
+                    "├● ✅ Nuevos: `{}` │ 💾 Existentes: `{}` │ ❌ Errores: `{}`\n"
+                    "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                ).format(
+                    fname_short, size_str,
+                    self.stats['new'], self.stats['existing'], self.stats['errors']
+                )
+
+            await self.message.edit(text, parse_mode='md')
+        except Exception as e:
+            logger.debug(f"Error en finish de progreso: {e}")
+
 def get_file_counts() -> Dict[str, int]:
     count_24h = len(list(config.DIR_DOWNLOADS.glob('*.txt')))
     count_old = len(list(config.DIR_ARCHIVE.glob('*.txt')))
@@ -794,6 +935,7 @@ async def _download_with_progress(
         start_time = time.time()
         last_update = [start_time]
         last_progress_log = [0]
+        _pending_cb = [None]  # Para evitar garbage collection de callbacks pendientes
 
         def progress(current, total):
             downloaded[0] = current
@@ -816,10 +958,9 @@ async def _download_with_progress(
                     eta = (total - current) / speed if speed > 0 else 0
                     pct = (current / total * 100) if total > 0 else 0
                     try:
-                        asyncio.get_event_loop().call_soon_threadsafe(
-                            lambda: asyncio.create_task(
-                                progress_callback(current, total, speed, eta, pct)
-                            )
+                        loop = asyncio.get_event_loop()
+                        _pending_cb[0] = loop.create_task(
+                            progress_callback(current, total, speed, eta, pct)
                         )
                     except Exception:
                         pass
@@ -859,10 +1000,8 @@ async def _download_with_progress(
                             eta = (file_size - downloaded[0]) / speed if speed > 0 and file_size > 0 else 0
                             pct = (downloaded[0] / file_size * 100) if file_size > 0 else 0
                             try:
-                                asyncio.get_event_loop().call_soon_threadsafe(
-                                    lambda: asyncio.create_task(
-                                        progress_callback(downloaded[0], file_size, speed, eta, pct)
-                                    )
+                                _pending_cb[0] = asyncio.create_task(
+                                    progress_callback(downloaded[0], file_size, speed, eta, pct)
                                 )
                             except Exception:
                                 pass
@@ -986,7 +1125,7 @@ async def _download_large_file_task(event, filename: str, dest_path: Path):
             await asyncio.sleep(config.DOWNLOAD_DELAY_BETWEEN)
 
 async def _auto_dl_worker():
-    """Worker que procesa la cola de auto-descarga SECUENCIALMENTE (1 a la vez)."""
+    """Worker que procesa la cola de auto-descarga SECUENCIALMENTE (1 a la vez) con progreso."""
     global auto_dl_queue, auto_dl_worker_running
     auto_dl_worker_running = True
     logger.info("Auto-DL Worker iniciado (modo secuencial)")
@@ -1014,11 +1153,31 @@ async def _auto_dl_worker():
                 'size': file_size,
                 'status': 'downloading'
             }
-            
-            success = await _download_with_progress(event, filename, dest_path)
+
+            # Crear tracker de progreso para auto-descarga
+            queue_remaining = auto_dl_queue.qsize()
+            tracker = DownloadProgressTracker(
+                chat_id=config.ADMIN_IDS[0],
+                filename=filename,
+                file_size=file_size,
+                file_index=1,
+                total_files=queue_remaining + 1,
+                stats={'new': 0, 'existing': 0, 'errors': 0}
+            )
+            await tracker.create_message(bot)
+
+            dl_start = time.time()
+            success = await _download_with_progress(
+                event, filename, dest_path,
+                progress_callback=tracker.update
+            )
+            dl_elapsed = time.time() - dl_start
             
             if not success and filename in active_downloads:
                 active_downloads[filename]['status'] = 'failed'
+
+            # Actualizar tracker con resultado final
+            await tracker.finish(success, dl_elapsed)
             
             # Delay entre descargas para EVITAR FloodWait
             logger.info(f"Auto-DL: Esperando {config.DOWNLOAD_DELAY_BETWEEN}s...")
@@ -1113,7 +1272,7 @@ async def realtime_listener(event):
         logger.error(f"Error en listener: {e}")
 
 async def process_pending_downloads(status_msg=None):
-    """Procesar descargas pendientes con progreso en tiempo real."""
+    """Procesar descargas pendientes con progreso en tiempo real en Telegram."""
     global pending_downloads
 
     if not pending_downloads:
@@ -1125,8 +1284,18 @@ async def process_pending_downloads(status_msg=None):
     stats = {'new': 0, 'existing': 0, 'errors': 0}
     start_time = time.time()
 
+    # Editar mensaje de estado inicial
     if status_msg:
-        await status_msg.edit(f"**Descargando {total} archivos pendientes...**")
+        try:
+            await status_msg.edit(
+                "╭───✦ 📥 INICIANDO DESCARGAS\n"
+                f"├● 📦 Total: `{total}` archivos en cola\n"
+                f"├● ⏳ Preparando...\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+                parse_mode='md'
+            )
+        except Exception:
+            pass
 
     to_download = list(pending_downloads)
     pending_downloads = []
@@ -1144,30 +1313,33 @@ async def process_pending_downloads(status_msg=None):
                 stats['existing'] += 1
                 continue
 
-            if status_msg:
-                try:
-                    fname_short = item['filename'][:35]
-                    await status_msg.edit(
-                        "╭───✦ 📥 DESCARGANDO ({}/{})\n"
-                        "├● 📄 `{}`\n"
-                        "├● 📊 Tamaño: `{}`\n\n"
-                        "├● ✅ Nuevos: `{}` │ 💾 Existentes: `{}` │ ❌ Errores: `{}`\n"
-                        "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈".format(
-                            idx, total, fname_short,
-                            _format_size(item.get('size', 0)),
-                            stats['new'], stats['existing'], stats['errors']
-                        )
-                    )
-                except MessageNotModifiedError:
-                    pass
-                except Exception:
-                    pass
+            # Crear tracker de progreso con actualización en Telegram
+            file_size = item.get('size', 0) or (msg.document.size if msg.document else 0)
+            tracker = DownloadProgressTracker(
+                chat_id=config.ADMIN_IDS[0],
+                filename=item['filename'],
+                file_size=file_size,
+                file_index=idx,
+                total_files=total,
+                stats=stats
+            )
+            await tracker.create_message(bot)
 
-            success = await _download_with_progress(msg, item['filename'], dest_path)
+            # Descargar con callback de progreso
+            dl_start = time.time()
+            success = await _download_with_progress(
+                msg, item['filename'], dest_path,
+                progress_callback=tracker.update
+            )
+            dl_elapsed = time.time() - dl_start
+
             if success:
                 stats['new'] += 1
             else:
                 stats['errors'] += 1
+
+            # Actualizar tracker con resultado final
+            await tracker.finish(success, dl_elapsed)
 
             # Pequeña pausa entre descargas para no saturar
             await asyncio.sleep(0.3)
@@ -1178,13 +1350,14 @@ async def process_pending_downloads(status_msg=None):
 
     elapsed = time.time() - start_time
 
+    # Resumen final
     if status_msg:
         report = (
-            "╭───✦ ✅ DESCARGA COMPLETADA\n"
+            "╭───✦ ✅ DESCARGAS COMPLETADAS\n"
             f"├● 📥 Nuevos: `{stats['new']}`\n"
             f"├● 💾 Existentes: `{stats['existing']}`\n"
             f"├● ❌ Errores: `{stats['errors']}`\n"
-            f"├● ⏱️ Tiempo: `{_format_time(elapsed)}`\n"
+            f"├● ⏱️ Tiempo total: `{_format_time(elapsed)}`\n"
             "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
         )
         try:
