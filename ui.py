@@ -13,12 +13,11 @@ from roles import UserRole
 class UI:
     @staticmethod
     def text(key: str, lang: str = 'es', *args) -> str:
+        # FIX #6: locale_manager.get() already calls .format(*args), 
+        # no need to call it again (was causing ValueError on braces in text)
         localized = locale_manager.get(key, lang, *args)
         if localized:
-            try:
-                return localized.format(*args) if args else localized
-            except (IndexError, KeyError):
-                return localized
+            return localized
         return locale_manager.get(key, 'es', *args) or key
 
 

@@ -1,6 +1,6 @@
 """
 ═══════════════════════════════════════════════════════════════
-  HJ ULP EXTRACTOR BOT — Handlers Module
+  HJ ULP EXTRACTOR BOT — Handlers Module v3.3
 ═══════════════════════════════════════════════════════════════
   • Comandos: /start, /url, /vip, /seller, /gp, etc.
   • Callbacks: todos los botones inline
@@ -10,6 +10,7 @@
 """
 
 import os
+import re
 import asyncio
 import subprocess
 import time
@@ -29,14 +30,14 @@ from ui import UI, Keyboards
 from utils import normalizar_url, get_file_counts, format_size, format_time
 from search import search_engine
 from download import (
-    _download_with_progress, DownloadProgressTracker,
+    DownloadProgressTracker,
     process_pending_downloads, realtime_listener, mover_y_limpiar_archivos
 )
-from state import (
-    temp_state, pending_downloads, active_downloads,
-    auto_download_enabled, auto_dl_queue, auto_dl_worker_running,
-    bot, userbot
-)
+
+# FIX #1,#2,#3: Usar `import state` en vez de `from state import X`
+# Los `from state import bot, userbot, auto_dl_queue, auto_download_enabled`
+# capturan None/False en import time y NUNCA se actualizan.
+import state
 
 # ═════════════════════════════════════════════════════════════
 # ANIMACIONES DE CARGA
@@ -69,10 +70,20 @@ async def animate_loading(msg, search_task: asyncio.Task, kw: str):
 # COMANDO /updateBot
 # ═════════════════════════════════════════════════════════════
 
+# FIX #18: FakeEvent movido a nivel de módulo (no se recrea cada vez)
+class _FakeEvent:
+    __slots__ = ('sender_id', '_reply')
+    def __init__(self, sender_id, reply_func):
+        self.sender_id = sender_id
+        self._reply = reply_func
+    async def reply(self, text, **kwargs):
+        return await self._reply(text, **kwargs)
+
+
 async def cmd_update_bot(event):
     """Actualizar el bot desde GitHub sin entrar al VPS.
     
-    FIX v3.2: Usa pm2 restart cuando está disponible (mejor que os.execv).
+    Usa pm2 restart cuando está disponible (mejor que os.execv).
     Si pm2 no está, hace fallback a os.execv.
     """
     uid = event.sender_id
@@ -132,13 +143,11 @@ async def cmd_update_bot(event):
                 ['pm2', 'list'], capture_output=True, timeout=5
             )
             if pm2_check.returncode == 0:
-                # pm2 está disponible - usar pm2 restart
                 logger.info("Reiniciando via pm2...")
                 subprocess.Popen(
                     ['pm2', 'restart', 'ulp-bot'],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                 )
-                # Salir del proceso actual (pm2 lo reiniciará)
                 import sys
                 sys.exit(0)
         except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -240,8 +249,7 @@ def register_handlers(bot_client):
             return
         if not e.is_group:
             return
-        from state import allowed_groups
-        allowed_groups.add(e.chat_id)
+        state.allowed_groups.add(e.chat_id)
         await e.reply("✅ Grupo añadido a la lista permitida.")
 
     @bot_client.on(events.NewMessage(pattern=r"/ungp"))
@@ -250,9 +258,8 @@ def register_handlers(bot_client):
             return
         if not e.is_group:
             return
-        from state import allowed_groups
-        if e.chat_id in allowed_groups:
-            allowed_groups.discard(e.chat_id)
+        if e.chat_id in state.allowed_groups:
+            state.allowed_groups.discard(e.chat_id)
             await e.reply("🗑 Grupo eliminado de la lista permitida.")
 
     @bot_client.on(events.NewMessage(pattern=r"/url (.+)"))
@@ -268,7 +275,7 @@ def register_handlers(bot_client):
                 parse_mode='md'
             )
         kw = normalizar_url(e.pattern_match.group(1))
-        temp_state[uid] = {'kw': kw}
+        state.temp_state[uid] = {'kw': kw}
         await e.reply(
             UI.text("search_step_time", lang, kw),
             buttons=Keyboards.time(),
@@ -289,7 +296,7 @@ def register_handlers(bot_client):
         for idx, target in enumerate(targets):
             uid = target if isinstance(target, int) else target['user_id']
             try:
-                await bot.send_message(uid, msg_text, parse_mode='md')
+                await state.bot.send_message(uid, msg_text, parse_mode='md')
                 sent += 1
                 await asyncio.sleep(0.05)
 
@@ -306,7 +313,7 @@ def register_handlers(bot_client):
                 logger.warning(f"FloodWait: {fw.seconds}s en broadcast")
                 await asyncio.sleep(fw.seconds + 1)
                 try:
-                    await bot.send_message(uid, msg_text, parse_mode='md')
+                    await state.bot.send_message(uid, msg_text, parse_mode='md')
                     sent += 1
                 except Exception:
                     errors += 1
@@ -345,22 +352,22 @@ def register_handlers(bot_client):
         await _broadcast(e.sender_id, vips_data, msg_text, status, "Broadcast VIP")
 
     # --- CONVERSATION HANDLER ---
-
-    @bot_client.on(events.NewMessage)
+    # FIX #22: Solo captura mensajes de usuarios en WAITING_KEYWORD
+    @bot_client.on(events.NewMessage(
+        func=lambda e: e.is_private and e.sender_id in state.temp_state and
+                       state.temp_state[e.sender_id].get('step') == 'WAITING_KEYWORD'
+    ))
     async def handle_conversation(e):
-        if not e.is_private:
-            return
         uid = e.sender_id
-        if uid in temp_state and temp_state[uid].get('step') == 'WAITING_KEYWORD':
-            user = db.get_user(uid)
-            lang = user.get('language', 'es')
-            kw = normalizar_url(e.text)
-            temp_state[uid] = {'kw': kw}
-            await e.reply(
-                UI.text("search_step_time", lang, kw),
-                buttons=Keyboards.time(),
-                parse_mode='md'
-            )
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        kw = normalizar_url(e.text)
+        state.temp_state[uid] = {'kw': kw}
+        await e.reply(
+            UI.text("search_step_time", lang, kw),
+            buttons=Keyboards.time(),
+            parse_mode='md'
+        )
 
     # ═════════════════════════════════════════════════════════════
     # CALLBACKS - TODOS LOS BOTONES FUNCIONALES
@@ -385,7 +392,7 @@ def register_handlers(bot_client):
 
             # ─── MI CUENTA ───
             elif data == "my_account":
-                exp = user['vip_expiry'][:10] if user['vip_expiry'] else "N/A"
+                exp = (user['vip_expiry'] or 'N/A')[:10] if user['vip_expiry'] else "N/A"
                 await e.edit(
                     UI.text("my_account", lang, uid, role.value, exp, user['search_count']),
                     buttons=Keyboards.back(),
@@ -426,15 +433,16 @@ def register_handlers(bot_client):
                 if role != UserRole.ADMIN:
                     return await e.answer("Acceso denegado.", alert=True)
                 counts = get_file_counts()
-                auto_status = "ON" if auto_download_enabled else "OFF"
-                queue_count = auto_dl_queue.qsize() if auto_dl_queue else 0
-                total_pending = len(pending_downloads) + queue_count
+                # FIX #3: usar state.auto_download_enabled (no stale import)
+                auto_status = "ON" if state.auto_download_enabled else "OFF"
+                queue_count = state.auto_dl_queue.qsize() if state.auto_dl_queue else 0
+                total_pending = len(state.pending_downloads) + queue_count
                 await e.edit(
                     UI.text("file_management", lang,
                             counts['total'], counts['24h'], counts['old'],
-                            auto_status, total_pending, len(active_downloads)),
+                            auto_status, total_pending, len(state.active_downloads)),
                     buttons=Keyboards.files_control(
-                        auto_download_enabled, total_pending, len(active_downloads)
+                        state.auto_download_enabled, total_pending, len(state.active_downloads)
                     ),
                     parse_mode='md'
                 )
@@ -442,41 +450,39 @@ def register_handlers(bot_client):
             elif data == "toggle_auto_on":
                 if role != UserRole.ADMIN:
                     return await e.answer("Acceso denegado.", alert=True)
-                import state as st
-                st.auto_download_enabled = True
+                state.auto_download_enabled = True
                 await e.answer("Auto-Descarga ACTIVADA (secuencial)", alert=True)
                 counts = get_file_counts()
-                queue_count = auto_dl_queue.qsize() if auto_dl_queue else 0
-                total_pending = len(pending_downloads) + queue_count
+                queue_count = state.auto_dl_queue.qsize() if state.auto_dl_queue else 0
+                total_pending = len(state.pending_downloads) + queue_count
                 await e.edit(
                     UI.text("file_management", lang,
                             counts['total'], counts['24h'], counts['old'],
-                            "ON", total_pending, len(active_downloads)),
-                    buttons=Keyboards.files_control(True, total_pending, len(active_downloads)),
+                            "ON", total_pending, len(state.active_downloads)),
+                    buttons=Keyboards.files_control(True, total_pending, len(state.active_downloads)),
                     parse_mode='md'
                 )
 
             elif data == "toggle_auto_off":
                 if role != UserRole.ADMIN:
                     return await e.answer("Acceso denegado.", alert=True)
-                import state as st
-                st.auto_download_enabled = False
+                state.auto_download_enabled = False
                 await e.answer("Auto-Descarga DESACTIVADA", alert=True)
                 counts = get_file_counts()
-                queue_count = auto_dl_queue.qsize() if auto_dl_queue else 0
-                total_pending = len(pending_downloads) + queue_count
+                queue_count = state.auto_dl_queue.qsize() if state.auto_dl_queue else 0
+                total_pending = len(state.pending_downloads) + queue_count
                 await e.edit(
                     UI.text("file_management", lang,
                             counts['total'], counts['24h'], counts['old'],
-                            "OFF", total_pending, len(active_downloads)),
-                    buttons=Keyboards.files_control(False, total_pending, len(active_downloads)),
+                            "OFF", total_pending, len(state.active_downloads)),
+                    buttons=Keyboards.files_control(False, total_pending, len(state.active_downloads)),
                     parse_mode='md'
                 )
 
             elif data == "dl_all":
                 if role != UserRole.ADMIN:
                     return await e.answer("Acceso denegado.", alert=True)
-                if not pending_downloads:
+                if not state.pending_downloads:
                     return await e.answer("No hay archivos pendientes.", alert=True)
                 msg = await e.edit("📥 **Procesando descargas pendientes...**", buttons=None)
                 asyncio.create_task(process_pending_downloads(msg))
@@ -484,8 +490,8 @@ def register_handlers(bot_client):
             elif data == "clear_pending":
                 if role != UserRole.ADMIN:
                     return await e.answer("Acceso denegado.", alert=True)
-                count = len(pending_downloads)
-                pending_downloads.clear()
+                count = len(state.pending_downloads)
+                state.pending_downloads.clear()
                 await e.edit(
                     f"🗑 **{count} archivos pendientes eliminados.**",
                     buttons=Keyboards.back("adm_files")
@@ -495,7 +501,7 @@ def register_handlers(bot_client):
             elif data == "search_init":
                 if role == UserRole.FREE:
                     return await e.answer("Necesitas VIP para buscar.", alert=True)
-                temp_state[uid] = {'step': 'WAITING_KEYWORD'}
+                state.temp_state[uid] = {'step': 'WAITING_KEYWORD'}
                 await e.edit(
                     UI.text("ask_domain", lang),
                     buttons=Keyboards.back(),
@@ -504,8 +510,8 @@ def register_handlers(bot_client):
 
             elif data.startswith("time_"):
                 t_opt = data.split("_")[1]
-                if uid in temp_state and temp_state[uid].get('kw'):
-                    temp_state[uid]['time'] = t_opt
+                if uid in state.temp_state and state.temp_state[uid].get('kw'):
+                    state.temp_state[uid]['time'] = t_opt
                     await e.edit(
                         "📄 **Formato de salida:**",
                         buttons=Keyboards.formats()
@@ -514,11 +520,11 @@ def register_handlers(bot_client):
                     await e.answer("Usa 'Nueva Búsqueda' primero.", alert=True)
 
             elif data.startswith("fmt_"):
-                if uid not in temp_state or not temp_state[uid].get('kw'):
+                if uid not in state.temp_state or not state.temp_state[uid].get('kw'):
                     return await e.answer("Sesión expirada. Inicia nueva búsqueda.", alert=True)
 
-                kw = temp_state[uid]['kw']
-                t_opt = temp_state[uid].get('time', '24h')
+                kw = state.temp_state[uid]['kw']
+                t_opt = state.temp_state[uid].get('time', '24h')
 
                 modo = SearchMode.ULP
                 tipo_texto = "ULP"
@@ -545,6 +551,7 @@ def register_handlers(bot_client):
 
                 if result_file:
                     db.add_search(uid)
+                    # FIX #19: Usar count directo en vez de re-leer el archivo
                     count = 0
                     with open(result_file, 'rb') as f:
                         for _ in f:
@@ -557,8 +564,8 @@ def register_handlers(bot_client):
                                 break
                             preview_lines.append(line.strip())
 
-                    if uid in temp_state:
-                        del temp_state[uid]
+                    if uid in state.temp_state:
+                        del state.temp_state[uid]
 
                     await e.delete()
 
@@ -566,16 +573,10 @@ def register_handlers(bot_client):
                     if len(preview_text) > 3000:
                         preview_text = preview_text[:3000] + "..."
 
-                    caption = (
-                        "╭───✦ ✅ BÚSQUEDA COMPLETADA\n"
-                        f"├● 🔍 Dominio: `{kw}`\n"
-                        f"├● 📑 Tipo: `{tipo_texto}`\n"
-                        f"├● 📊 Resultados: `{count}`\n"
-                        f"├● ⏱️ Tiempo: `{elapsed:.1f}s`\n"
-                        "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-                    )
+                    # FIX #8: Usar locale para caption de búsqueda
+                    caption = UI.text("search_completed", lang, kw, tipo_texto, count, elapsed)
 
-                    await bot.send_file(
+                    await state.bot.send_file(
                         uid, result_file,
                         caption=caption,
                         parse_mode='md'
@@ -594,10 +595,10 @@ def register_handlers(bot_client):
 
             # ─── REPORTAR URL ───
             elif data == "report_url":
-                kw = temp_state.get(uid, {}).get('kw', 'Desconocido')
+                kw = state.temp_state.get(uid, {}).get('kw', 'Desconocido')
                 for admin_id in config.ADMIN_IDS:
                     try:
-                        await bot.send_message(
+                        await state.bot.send_message(
                             admin_id,
                             f"⚠️ **REPORTE DE URL**\n\n👤 Usuario: `{uid}`\n🔍 URL: `{kw}`"
                         )
@@ -650,8 +651,9 @@ def register_handlers(bot_client):
                 else:
                     lines = []
                     for v in vips[:50]:
-                        exp = v.get('vip_expiry', 'N/A')
-                        if exp and len(exp) > 10:
+                        # FIX #16: .get('vip_expiry', 'N/A') no funciona si el valor es None
+                        exp = v.get('vip_expiry') or 'N/A'
+                        if exp != 'N/A' and len(exp) > 10:
                             exp = exp[:10]
                         lines.append(f"👤 `{v['user_id']}` → Exp: `{exp}`")
                     text = "👑 **VIPs**\n\n" + "\n".join(lines)
@@ -685,15 +687,7 @@ def register_handlers(bot_client):
             elif data == "adm_update_bot":
                 if role != UserRole.ADMIN:
                     return await e.answer("Acceso denegado.", alert=True)
-                # Crear un evento falso para reutilizar cmd_update_bot
-                class FakeEvent:
-                    def __init__(self, sender_id, reply_func):
-                        self.sender_id = sender_id
-                        self._reply = reply_func
-                    async def reply(self, text, **kwargs):
-                        return await self._reply(text, **kwargs)
-
-                fake_event = FakeEvent(uid, e.message.reply)
+                fake_event = _FakeEvent(uid, e.message.reply)
                 await cmd_update_bot(fake_event)
 
         except Exception as exc:

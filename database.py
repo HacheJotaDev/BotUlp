@@ -7,7 +7,6 @@
 import sqlite3
 import random
 import string
-import asyncio
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List
@@ -21,7 +20,7 @@ class Database:
 
     def __init__(self, db_path: Path):
         self.db_path = db_path
-        self._lock = asyncio.Lock()
+        # FIX #7/#21: Removed unused asyncio.Lock (all DB ops are sync)
         self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")

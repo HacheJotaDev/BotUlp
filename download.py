@@ -26,11 +26,11 @@ from config import config
 from logger_setup import logger
 from utils import format_size, format_time, progress_bar
 from database import db
-from state import (
-    active_downloads, pending_downloads, auto_download_enabled,
-    auto_dl_queue, auto_dl_worker_running, download_semaphore,
-    bot, userbot
-)
+
+# FIX #1,#2,#3: Usar `import state` en vez de `from state import X`
+# Los imports estáticos capturan None/False/[] en import time y NUNCA se actualizan
+# cuando bot.py asigna los valores reales (state.bot = bot_client, etc.)
+import state
 
 
 class DownloadProgressTracker:
@@ -358,7 +358,7 @@ async def _download_with_progress(
             part_size = config.DOWNLOAD_PART_SIZE_KB * 1024
 
             with open(temp_path, 'wb') as f:
-                async for chunk in userbot.iter_download(
+                async for chunk in state.userbot.iter_download(
                     doc,
                     request_size=part_size,
                     file_size=file_size if file_size > 0 else None
@@ -489,25 +489,24 @@ async def _download_with_progress(
         return False
 
     finally:
-        if filename in active_downloads:
-            active_downloads.pop(filename, None)
+        if filename in state.active_downloads:
+            state.active_downloads.pop(filename, None)
 
 
 async def _download_large_file_task(event, filename: str, dest_path: Path):
     """Task de descarga con semáforo para control de concurrencia."""
-    global download_semaphore
-    if download_semaphore is None:
-        download_semaphore = asyncio.Semaphore(config.MAX_CONCURRENT_DOWNLOADS)
+    if state.download_semaphore is None:
+        state.download_semaphore = asyncio.Semaphore(config.MAX_CONCURRENT_DOWNLOADS)
 
-    async with download_semaphore:
-        active_downloads[filename] = {
+    async with state.download_semaphore:
+        state.state.active_downloads[filename] = {
             'start_time': time.time(),
             'size': 0,
             'status': 'downloading'
         }
         success = await _download_with_progress(event, filename, dest_path)
-        if not success and filename in active_downloads:
-            active_downloads[filename]['status'] = 'failed'
+        if not success and filename in state.active_downloads:
+            state.state.active_downloads[filename]['status'] = 'failed'
         if success:
             logger.info(f"Esperando {config.DOWNLOAD_DELAY_BETWEEN}s antes de siguiente descarga...")
             await asyncio.sleep(config.DOWNLOAD_DELAY_BETWEEN)
@@ -515,13 +514,12 @@ async def _download_large_file_task(event, filename: str, dest_path: Path):
 
 async def _auto_dl_worker():
     """Worker que procesa la cola de auto-descarga SECUENCIALMENTE con progreso."""
-    global auto_dl_queue, auto_dl_worker_running
-    auto_dl_worker_running = True
+    state.auto_dl_worker_running = True
     logger.info("Auto-DL Worker iniciado (modo secuencial)")
 
     while True:
         try:
-            item = await auto_dl_queue.get()
+            item = await state.auto_dl_queue.get()
             if item is None:
                 break
 
@@ -531,17 +529,17 @@ async def _auto_dl_worker():
             file_size = item['size']
 
             if dest_path.exists() and dest_path.stat().st_size > 0:
-                auto_dl_queue.task_done()
+                state.state.auto_dl_queue.task_done()
                 continue
 
             logger.info(f"Auto-DL: Descargando {filename} ({format_size(file_size)})")
-            active_downloads[filename] = {
+            state.state.active_downloads[filename] = {
                 'start_time': time.time(),
                 'size': file_size,
                 'status': 'downloading'
             }
 
-            queue_remaining = auto_dl_queue.qsize()
+            queue_remaining = state.state.auto_dl_queue.qsize()
             tracker = DownloadProgressTracker(
                 chat_id=config.ADMIN_IDS[0],
                 filename=filename,
@@ -550,7 +548,7 @@ async def _auto_dl_worker():
                 total_files=queue_remaining + 1,
                 stats={'new': 0, 'existing': 0, 'errors': 0}
             )
-            await tracker.create_message(bot)
+            await tracker.create_message(state.bot)
 
             dl_start = time.time()
             success = await _download_with_progress(
@@ -559,15 +557,15 @@ async def _auto_dl_worker():
             )
             dl_elapsed = time.time() - dl_start
 
-            if not success and filename in active_downloads:
-                active_downloads[filename]['status'] = 'failed'
+            if not success and filename in state.active_downloads:
+                state.active_downloads[filename]['status'] = 'failed'
 
             await tracker.finish(success, dl_elapsed)
 
             logger.info(f"Auto-DL: Esperando {config.DOWNLOAD_DELAY_BETWEEN}s...")
             await asyncio.sleep(config.DOWNLOAD_DELAY_BETWEEN)
 
-            auto_dl_queue.task_done()
+            state.auto_dl_queue.task_done()
 
         except asyncio.CancelledError:
             break
@@ -612,34 +610,34 @@ async def realtime_listener(event):
         if dest_path.exists() and dest_path.stat().st_size > 0:
             return
 
-        if filename in active_downloads:
+        if filename in state.active_downloads:
             return
 
-        if auto_download_enabled:
-            if auto_dl_queue is not None:
-                await auto_dl_queue.put({
+        if state.auto_download_enabled:
+            if state.auto_dl_queue is not None:
+                await state.auto_dl_queue.put({
                     'event': event,
                     'filename': filename,
                     'dest_path': dest_path,
                     'size': file_size
                 })
-                queue_size = auto_dl_queue.qsize()
+                queue_size = state.auto_dl_queue.qsize()
                 logger.info(f"Auto-DL: Encolado {filename} (cola: {queue_size})")
             else:
-                active_downloads[filename] = {
+                state.active_downloads[filename] = {
                     'start_time': time.time(),
                     'size': file_size,
                     'status': 'starting'
                 }
                 asyncio.create_task(_download_large_file_task(event, filename, dest_path))
         else:
-            if not any(p['msg_id'] == event.id for p in pending_downloads):
+            if not any(p['msg_id'] == event.id for p in state.pending_downloads):
                 try:
                     chat = await event.get_chat()
                     chat_name = getattr(chat, 'title', f"Chat {event.chat_id}")
                 except Exception:
                     chat_name = "Unknown"
-                pending_downloads.append({
+                state.pending_downloads.append({
                     'chat_id': event.chat_id,
                     'msg_id': event.id,
                     'filename': filename,
@@ -654,12 +652,12 @@ async def realtime_listener(event):
 
 async def process_pending_downloads(status_msg=None):
     """Procesar descargas pendientes con progreso en tiempo real en Telegram."""
-    if not pending_downloads:
+    if not state.pending_downloads:
         if status_msg:
             await status_msg.edit("No hay archivos pendientes.")
         return
 
-    total = len(pending_downloads)
+    total = len(state.pending_downloads)
     stats = {'new': 0, 'existing': 0, 'errors': 0}
     start_time = time.time()
 
@@ -675,12 +673,12 @@ async def process_pending_downloads(status_msg=None):
         except Exception:
             pass
 
-    to_download = list(pending_downloads)
-    pending_downloads.clear()
+    to_download = list(state.pending_downloads)
+    state.pending_downloads.clear()
 
     for idx, item in enumerate(to_download, 1):
         try:
-            msg = await userbot.get_messages(item['chat_id'], ids=item['msg_id'])
+            msg = await state.userbot.get_messages(item['chat_id'], ids=item['msg_id'])
             if not msg or not msg.document:
                 stats['errors'] += 1
                 continue
@@ -700,7 +698,7 @@ async def process_pending_downloads(status_msg=None):
                 total_files=total,
                 stats=stats
             )
-            await tracker.create_message(bot)
+            await tracker.create_message(state.bot)
 
             dl_start = time.time()
             success = await _download_with_progress(

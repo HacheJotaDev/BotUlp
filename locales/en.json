@@ -16,5 +16,9 @@
     "key_generated": "╭───✦ ✅ KEY GENERATED SUCCESSFULLY\n├● 🔑 Code:\n`{}`\n├● 🔗 Redeem link:\n{}\n├● 📅 Days: {}\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "admin_panel": "╭───✦ 🔐 ADMIN PANEL\n├● 👑 VIPs: `{}`\n├● 💼 Sellers: `{}`\n├● 🔍 Searches: `{}`\n├● 👥 Total users: `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "stats_global": "╭───✦ 📊 GLOBAL STATISTICS\n├● 👑 VIP Users: `{}`\n├● 💼 Sellers: `{}`\n├● 🔍 Total Searches: `{}`\n├● 👥 Total Users: `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
-    "broadcast_done": "╭───✦ ✅ BROADCAST FINISHED\n├● 📬 Sent: `{}`\n├● 🚫 Failed: `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+    "broadcast_done": "╭───✦ ✅ BROADCAST FINISHED\n├● 📬 Sent: `{}`\n├● 🚫 Failed: `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "update_bot_start": "╭───✦ 🔄 UPDATING BOT\n├● ⏳ Downloading changes...\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "update_bot_success": "╭───✦ ✅ BOT UPDATED\n├● 🔄 Restarting in 3 seconds...\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "update_bot_fail": "╭───✦ ❌ UPDATE FAILED\n├● 📄 `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "update_bot_uptodate": "╭───✦ ✅ BOT UPDATED\n├● Already on latest version\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
 }

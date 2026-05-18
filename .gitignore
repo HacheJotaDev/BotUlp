@@ -1,10 +1,16 @@
 __pycache__/
 *.pyc
+*.pyo
+*.tmp
 SystemData/
 *.session
 *.session-journal
+*.db-journal
+*.db-wal
+.env
 bot_activity.log
 HJDescargas/
 Archivo_Historico/
 Cache_Resultados/
 Temp_Parts/
+venv/

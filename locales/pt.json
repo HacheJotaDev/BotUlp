@@ -16,5 +16,9 @@
     "key_generated": "╭───✦ ✅ KEY GERADA COM SUCESSO\n├● 🔑 Código:\n`{}`\n├● 🔗 Link de resgate:\n{}\n├● 📅 Dias: {}\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "admin_panel": "╭───✦ 🔐 PAINEL ADMIN\n├● 👑 VIPs: `{}`\n├● 💼 Sellers: `{}`\n├● 🔍 Buscas: `{}`\n├● 👥 Total usuários: `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "stats_global": "╭───✦ 📊 ESTATÍSTICAS GLOBAIS\n├● 👑 Usuários VIP: `{}`\n├● 💼 Sellers: `{}`\n├● 🔍 Total de Buscas: `{}`\n├● 👥 Total de Usuários: `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
-    "broadcast_done": "╭───✦ ✅ BROADCAST FINALIZADO\n├● 📬 Enviados: `{}`\n├● 🚫 Falharam: `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+    "broadcast_done": "╭───✦ ✅ BROADCAST FINALIZADO\n├● 📬 Enviados: `{}`\n├● 🚫 Falharam: `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "update_bot_start": "╭───✦ 🔄 ATUALIZANDO BOT\n├● ⏳ Baixando mudanças...\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "update_bot_success": "╭───✦ ✅ BOT ATUALIZADO\n├● 🔄 Reiniciando em 3 segundos...\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "update_bot_fail": "╭───✦ ❌ ERRO AO ATUALIZAR\n├● 📄 `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "update_bot_uptodate": "╭───✦ ✅ BOT ATUALIZADO\n├● Já está na última versão\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
 }

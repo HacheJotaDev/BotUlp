@@ -17,9 +17,14 @@ class ColoredFormatter(logging.Formatter):
     RESET = '\033[0m'
 
     def format(self, record):
-        color = self.COLORS.get(record.levelname, self.RESET)
-        record.levelname = f"{color}{record.levelname}{self.RESET}"
-        return super().format(record)
+        # FIX #11: Restaurar levelname después de formatear para evitar
+        # que los códigos ANSI se filtren al archivo de log
+        levelname = record.levelname
+        color = self.COLORS.get(levelname, self.RESET)
+        record.levelname = f"{color}{levelname}{self.RESET}"
+        result = super().format(record)
+        record.levelname = levelname  # Restaurar original
+        return result
 
 
 def setup_logging():

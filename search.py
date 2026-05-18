@@ -121,14 +121,20 @@ async def search_engine(kw: str, time_opt: str, modo: SearchMode) -> Optional[Pa
             logger.info(f"Cache HIT: {cache_key}")
             return cached_path
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     dirs = []
     if time_opt in ['24h', 'all']:
         dirs.append(config.DIR_DOWNLOADS)
     if time_opt in ['old', 'all']:
         dirs.append(config.DIR_ARCHIVE)
 
-    files = [f for d in dirs for f in d.glob('*.txt') if f.stat().st_size > 0]
+    def _safe_size(f):
+        try:
+            return f.stat().st_size
+        except OSError:
+            return 0
+
+    files = [f for d in dirs for f in d.glob('*.txt') if _safe_size(f) > 0]
     if not files:
         return None
 
@@ -150,7 +156,8 @@ async def search_engine(kw: str, time_opt: str, modo: SearchMode) -> Optional[Pa
         logger.warning(f"Resultados truncados: {len(final)} -> {config.SEARCH_MAX_RESULTS}")
         final = set(list(final)[:config.SEARCH_MAX_RESULTS])
 
-    out = config.DIR_CACHE / f"result_{int(time.time())}_{kw[:20]}.txt"
+    kw_safe = re.sub(r'[^\w\-.]', '_', kw[:20])
+    out = config.DIR_CACHE / f"result_{int(time.time())}_{kw_safe}.txt"
     with open(out, 'w', encoding='utf-8', buffering=1024*64) as f:
         f.write('\n'.join(final))
 

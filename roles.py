@@ -36,7 +36,14 @@ def get_user_role(uid: int) -> UserRole:
         exp = user.get('vip_expiry')
         if exp:
             try:
-                if datetime.now(timezone.utc) < datetime.fromisoformat(exp):
+                # FIX #12: fromisoformat() no parsea timezone en Python <3.11
+                # Reemplazar +00:00 con Z para compatibilidad, o usar fromisoformat directamente
+                exp_clean = exp.replace('+00:00', '+00:00')
+                dt = datetime.fromisoformat(exp_clean)
+                if dt.tzinfo is None:
+                    # Si no tiene timezone, asumir UTC
+                    dt = dt.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) < dt:
                     return UserRole.VIP
             except Exception:
                 pass

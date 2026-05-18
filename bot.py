@@ -1,6 +1,6 @@
 """
 ═══════════════════════════════════════════════════════════════
-  HJ ULP EXTRACTOR BOT — PRO EDITION v3.2
+  HJ ULP EXTRACTOR BOT — PRO EDITION v3.3
 ═══════════════════════════════════════════════════════════════
   • Motor de búsqueda paralelo con mmap ultra-rápido
   • Descarga de archivos hasta 4GB con streaming + progreso
@@ -15,11 +15,9 @@
 """
 
 import asyncio
-import time
 
 from config import config
 from logger_setup import logger
-from state import bot as bot_ref, userbot as userbot_ref
 from handlers import register_handlers
 from download import (
     _auto_dl_worker, realtime_listener, mover_y_limpiar_archivos
@@ -50,13 +48,13 @@ userbot_client = TelegramClient(
 
 async def main():
     """Punto de entrada principal del bot."""
-    logger.info("Iniciando HJ ULP PRO v3.2...")
+    logger.info("Iniciando HJ ULP PRO v3.3...")
 
     # Iniciar clientes
     await bot_client.start(bot_token=config.BOT_TOKEN)
     await userbot_client.start()
 
-    # Asignar referencias globales
+    # Asignar referencias globales (DESPUÉS de start, ANTES de handlers)
     import state
     state.bot = bot_client
     state.userbot = userbot_client
@@ -73,8 +71,8 @@ async def main():
         events.NewMessage(func=lambda e: e.document is not None)
     )
 
-    # Iniciar worker de auto-descarga
-    asyncio.create_task(_auto_dl_worker())
+    # Iniciar worker de auto-descarga (FIX #15: guardar referencia)
+    state.auto_dl_task = asyncio.create_task(_auto_dl_worker())
 
     # Iniciar limpieza periódica
     async def cleanup_loop():
@@ -85,17 +83,25 @@ async def main():
                 logger.error(f"Error en limpieza: {e}")
             await asyncio.sleep(3600)  # Cada hora
 
-    asyncio.create_task(cleanup_loop())
+    state.cleanup_task = asyncio.create_task(cleanup_loop())
 
     # Info del bot
     me = await bot_client.get_me()
     user_me = await userbot_client.get_me()
     logger.info(f"Bot: @{me.username} (ID: {me.id})")
     logger.info(f"Userbot: {user_me.first_name} (ID: {user_me.id})")
-    logger.info("HJ ULP PRO v3.2 — ACTIVO")
+    logger.info("HJ ULP PRO v3.3 — ACTIVO")
 
-    # Mantener corriendo
-    await bot_client.run_until_disconnected()
+    try:
+        # Mantener corriendo
+        await bot_client.run_until_disconnected()
+    finally:
+        # FIX #5: Desconectar userbot al salir
+        logger.info("Desconectando clientes...")
+        try:
+            await userbot_client.disconnect()
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':
@@ -103,6 +109,8 @@ if __name__ == '__main__':
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Bot detenido por usuario")
+    except SystemExit:
+        logger.info("Bot reiniciado via /updateBot")
     except Exception as e:
         logger.critical(f"Error fatal: {e}")
         import traceback

@@ -27,8 +27,9 @@ auto_dl_worker_running: bool = False
 # Estado temporal de usuarios (para conversaciones)
 temp_state: Dict[int, dict] = {}
 
-# Task de limpieza
+# Task de limpieza y auto-dl (FIX #15: guardar referencias para cancelación)
 cleanup_task: Optional[asyncio.Task] = None
+auto_dl_task: Optional[asyncio.Task] = None
 
 # Referencia a clientes Telegram (se asignan en bot.py)
 bot = None
