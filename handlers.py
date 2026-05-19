@@ -653,7 +653,16 @@ def register_handlers(bot_client):
                 if not sellers:
                     text = "💼 **SELLERS**\n\nNo hay sellers registrados."
                 else:
-                    lines = [f"👤 ID: `{s}`" for s in sellers]
+                    lines = []
+                    for sid in sellers:
+                        username = "None"
+                        try:
+                            entity = await state.bot.get_entity(sid)
+                            if entity and getattr(entity, 'username', None):
+                                username = f"@{entity.username}"
+                        except Exception:
+                            pass
+                        lines.append(f"👤 `{sid}` │ {username}")
                     text = "💼 **SELLERS**\n\n" + "\n".join(lines)
                 await e.edit(text, buttons=Keyboards.back("admin_enter"), parse_mode='md')
 
@@ -666,11 +675,18 @@ def register_handlers(bot_client):
                 else:
                     lines = []
                     for v in vips[:50]:
-                        # FIX #16: .get('vip_expiry', 'N/A') no funciona si el valor es None
                         exp = v.get('vip_expiry') or 'N/A'
                         if exp != 'N/A' and len(exp) > 10:
                             exp = exp[:10]
-                        lines.append(f"👤 `{v['user_id']}` → Exp: `{exp}`")
+                        uid = v['user_id']
+                        username = "None"
+                        try:
+                            entity = await state.bot.get_entity(uid)
+                            if entity and getattr(entity, 'username', None):
+                                username = f"@{entity.username}"
+                        except Exception:
+                            pass
+                        lines.append(f"👤 `{uid}` │ {username} → Exp: `{exp}`")
                     text = "👑 **VIPs**\n\n" + "\n".join(lines)
                     if len(vips) > 50:
                         text += f"\n\n... y {len(vips) - 50} más"
