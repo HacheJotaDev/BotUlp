@@ -188,7 +188,7 @@ def _get_commands_by_role(role: UserRole) -> str:
     elif role == UserRole.SELLER:
         return "/start │ /url │ /canjear"
     elif role == UserRole.ADMIN:
-        return "/start │ /url │ /canjear │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /updateBot"
+        return "/start │ /url │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /updateBot"
     return "/start │ /canjear"
 
 
