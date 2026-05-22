@@ -320,14 +320,16 @@ def register_handlers(bot_client):
         if e.is_group and e.chat_id not in state.allowed_groups:
             return
 
-        if role == UserRole.FREE:
+        # Si es FREE y NO está en un grupo permitido, acceso denegado
+        if role == UserRole.FREE and not (e.is_group and e.chat_id in state.allowed_groups):
             return await e.reply(
                 UI.text("access_denied", lang),
                 buttons=Keyboards.back() if e.is_private else None,
                 parse_mode='md'
             )
         kw = normalizar_url(e.pattern_match.group(1))
-        state.temp_state[uid] = {'kw': kw}
+        # Guardar chat_id para enviar resultados al lugar correcto (grupo o privado)
+        state.temp_state[uid] = {'kw': kw, 'chat_id': e.chat_id}
         await e.reply(
             UI.text("search_step_time", lang, kw),
             buttons=Keyboards.time(),
@@ -404,7 +406,8 @@ def register_handlers(bot_client):
         await _broadcast(e.sender_id, vips_data, msg_text, status, "Broadcast VIP")
 
     # --- CONVERSATION HANDLER ---
-    # FIX #22: Captura mensajes de usuarios en WAITING_KEYWORD (privado y grupos permitidos)
+    # Captura mensajes de usuarios en WAITING_KEYWORD (privado y grupos permitidos)
+    # En grupos permitidos, los FREE también pueden buscar
     @bot_client.on(events.NewMessage(
         func=lambda e: (e.is_private or (e.is_group and e.chat_id in state.allowed_groups)) and
                        e.sender_id in state.temp_state and
@@ -416,15 +419,17 @@ def register_handlers(bot_client):
         lang = user.get('language', 'es')
         role = get_user_role(uid)
 
-        # Verificar permisos en grupo
-        if e.is_group and role == UserRole.FREE:
+        # Si es FREE en privado, acceso denegado (en grupo permitido sí puede)
+        if role == UserRole.FREE and e.is_private:
             return await e.reply(
                 UI.text("access_denied", lang),
+                buttons=Keyboards.back(),
                 parse_mode='md'
             )
 
         kw = normalizar_url(e.text)
-        state.temp_state[uid] = {'kw': kw}
+        # Guardar chat_id para enviar resultados al lugar correcto
+        state.temp_state[uid] = {'kw': kw, 'chat_id': e.chat_id}
         await e.reply(
             UI.text("search_step_time", lang, kw),
             buttons=Keyboards.time(),
@@ -649,11 +654,6 @@ def register_handlers(bot_client):
                                 break
                             preview_lines.append(line.strip())
 
-                    if uid in state.temp_state:
-                        del state.temp_state[uid]
-
-                    await e.delete()
-
                     preview_text = '\n'.join(preview_lines)
                     if len(preview_text) > 3000:
                         preview_text = preview_text[:3000] + "..."
@@ -661,8 +661,24 @@ def register_handlers(bot_client):
                     # FIX #8: Usar locale para caption de búsqueda
                     caption = UI.text("search_completed", lang, kw, tipo_texto, count, elapsed)
 
+                    # Enviar resultado al chat donde se inició la búsqueda (grupo o privado)
+                    target_chat = state.temp_state.get(uid, {}).get('chat_id', uid) if uid in state.temp_state else uid
+                    # Si ya se borró temp_state, usar uid como fallback
+                    if not target_chat:
+                        target_chat = uid
+
+                    # Borrar temp_state DESPUÉS de obtener chat_id
+                    if uid in state.temp_state:
+                        del state.temp_state[uid]
+
+                    # Borrar mensaje de "buscando..."
+                    try:
+                        await e.delete()
+                    except Exception:
+                        pass
+
                     await state.bot.send_file(
-                        uid, result_file,
+                        target_chat, result_file,
                         caption=caption,
                         parse_mode='md'
                     )
