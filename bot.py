@@ -62,6 +62,12 @@ async def main():
     # Inicializar cola de auto-descarga
     state.auto_dl_queue = asyncio.Queue()
 
+    # Cargar grupos permitidos desde la base de datos
+    import state as _state
+    from database import db as _db
+    _state.allowed_groups = set(_db.get_allowed_groups())
+    logger.info(f"Grupos permitidos cargados: {len(_state.allowed_groups)}")
+
     # Registrar handlers
     register_handlers(bot_client)
 

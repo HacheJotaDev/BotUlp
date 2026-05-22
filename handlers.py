@@ -182,14 +182,14 @@ async def cmd_update_bot(event):
 def _get_commands_by_role(role: UserRole) -> str:
     """Construir la lista de comandos disponibles según el rol del usuario."""
     if role == UserRole.FREE:
-        return "/start"
+        return "/start │ /canjear"
     elif role == UserRole.VIP:
-        return "/start │ /url"
+        return "/start │ /url │ /canjear"
     elif role == UserRole.SELLER:
-        return "/start │ /url"
+        return "/start │ /url │ /canjear"
     elif role == UserRole.ADMIN:
-        return "/start │ /url │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /updateBot"
-    return "/start"
+        return "/start │ /url │ /canjear │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /updateBot"
+    return "/start │ /canjear"
 
 
 def register_handlers(bot_client):
@@ -197,6 +197,10 @@ def register_handlers(bot_client):
 
     @bot_client.on(events.NewMessage(pattern="/start"))
     async def start(e):
+        # Si estamos en un grupo que no está permitido, no responder
+        if e.is_group and e.chat_id not in state.allowed_groups:
+            return
+
         uid = e.sender_id
         user = db.get_user(uid)
         lang = user.get('language', 'es')
@@ -216,7 +220,7 @@ def register_handlers(bot_client):
 
         await e.reply(
             UI.text("welcome", lang, _get_commands_by_role(role), role.value, user['search_count']),
-            buttons=Keyboards.main(role, lang),
+            buttons=Keyboards.main(role, lang) if e.is_private else None,
             parse_mode='md'
         )
 
@@ -261,19 +265,49 @@ def register_handlers(bot_client):
         if get_user_role(e.sender_id) != UserRole.ADMIN:
             return
         if not e.is_group:
-            return
+            return await e.reply("⚠️ Este comando solo funciona en grupos.")
         state.allowed_groups.add(e.chat_id)
-        await e.reply("✅ Grupo añadido a la lista permitida.")
+        db.add_allowed_group(e.chat_id, e.sender_id)
+        await e.reply("✅ Grupo añadido a la lista permitida y guardado en la base de datos.")
 
     @bot_client.on(events.NewMessage(pattern=r"/ungp"))
     async def cmd_ungp(e):
         if get_user_role(e.sender_id) != UserRole.ADMIN:
             return
         if not e.is_group:
-            return
+            return await e.reply("⚠️ Este comando solo funciona en grupos.")
         if e.chat_id in state.allowed_groups:
             state.allowed_groups.discard(e.chat_id)
-            await e.reply("🗑 Grupo eliminado de la lista permitida.")
+            db.remove_allowed_group(e.chat_id)
+            await e.reply("🗑 Grupo eliminado de la lista permitida y de la base de datos.")
+        else:
+            await e.reply("⚠️ Este grupo no está en la lista permitida.")
+
+    @bot_client.on(events.NewMessage(pattern=r"/canjear (.+)"))
+    async def cmd_canjear(e):
+        """Canjear una key VIP directamente con /canjear <código>."""
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        code = e.pattern_match.group(1).strip()
+
+        # Si estamos en un grupo que no está permitido, no responder
+        if e.is_group and e.chat_id not in state.allowed_groups:
+            return
+
+        if db.redeem(uid, code):
+            role = get_user_role(uid)
+            await e.reply(
+                UI.text("redeem_success", lang),
+                buttons=Keyboards.main(role, lang),
+                parse_mode='md'
+            )
+        else:
+            await e.reply(
+                UI.text("canjear_invalid", lang),
+                buttons=Keyboards.back(),
+                parse_mode='md'
+            )
 
     @bot_client.on(events.NewMessage(pattern=r"/url (.+)"))
     async def cmd_url(e):
@@ -281,10 +315,15 @@ def register_handlers(bot_client):
         user = db.get_user(uid)
         lang = user.get('language', 'es')
         role = get_user_role(uid)
+
+        # Si estamos en un grupo que no está permitido, no responder
+        if e.is_group and e.chat_id not in state.allowed_groups:
+            return
+
         if role == UserRole.FREE:
             return await e.reply(
                 UI.text("access_denied", lang),
-                buttons=Keyboards.back(),
+                buttons=Keyboards.back() if e.is_private else None,
                 parse_mode='md'
             )
         kw = normalizar_url(e.pattern_match.group(1))
@@ -365,15 +404,25 @@ def register_handlers(bot_client):
         await _broadcast(e.sender_id, vips_data, msg_text, status, "Broadcast VIP")
 
     # --- CONVERSATION HANDLER ---
-    # FIX #22: Solo captura mensajes de usuarios en WAITING_KEYWORD
+    # FIX #22: Captura mensajes de usuarios en WAITING_KEYWORD (privado y grupos permitidos)
     @bot_client.on(events.NewMessage(
-        func=lambda e: e.is_private and e.sender_id in state.temp_state and
+        func=lambda e: (e.is_private or (e.is_group and e.chat_id in state.allowed_groups)) and
+                       e.sender_id in state.temp_state and
                        state.temp_state[e.sender_id].get('step') == 'WAITING_KEYWORD'
     ))
     async def handle_conversation(e):
         uid = e.sender_id
         user = db.get_user(uid)
         lang = user.get('language', 'es')
+        role = get_user_role(uid)
+
+        # Verificar permisos en grupo
+        if e.is_group and role == UserRole.FREE:
+            return await e.reply(
+                UI.text("access_denied", lang),
+                parse_mode='md'
+            )
+
         kw = normalizar_url(e.text)
         state.temp_state[uid] = {'kw': kw}
         await e.reply(
@@ -417,6 +466,14 @@ def register_handlers(bot_client):
                 contacts = "\n".join(config.SELLER_USERNAMES)
                 await e.edit(
                     UI.text("buy_vip_info", lang, contacts),
+                    buttons=Keyboards.back(),
+                    parse_mode='md'
+                )
+
+            # ─── CANJEAR KEY ───
+            elif data == "canjear_key":
+                await e.edit(
+                    UI.text("canjear_info", lang),
                     buttons=Keyboards.back(),
                     parse_mode='md'
                 )

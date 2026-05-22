@@ -10,7 +10,7 @@ from cachetools import LRUCache
 
 from config import config
 
-# Grupos permitidos
+# Grupos permitidos (se cargan desde la DB en bot.py al iniciar)
 allowed_groups: Set[int] = set()
 
 # Caché de búsqueda

@@ -55,6 +55,11 @@ class Database:
             chat_id INTEGER,
             downloaded_at TEXT DEFAULT CURRENT_TIMESTAMP
         )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS allowed_groups (
+            chat_id INTEGER PRIMARY KEY,
+            added_by INTEGER,
+            added_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )""")
 
         # Migraciones
         c.execute("PRAGMA table_info(users)")
@@ -184,6 +189,24 @@ class Database:
         c = self.conn.cursor()
         c.execute("SELECT user_id FROM users")
         return [row[0] for row in c.fetchall()]
+
+    def add_allowed_group(self, chat_id: int, added_by: int):
+        c = self.conn.cursor()
+        c.execute(
+            "INSERT OR IGNORE INTO allowed_groups (chat_id, added_by) VALUES (?, ?)",
+            (chat_id, added_by)
+        )
+        self.conn.commit()
+
+    def remove_allowed_group(self, chat_id: int):
+        c = self.conn.cursor()
+        c.execute("DELETE FROM allowed_groups WHERE chat_id = ?", (chat_id,))
+        self.conn.commit()
+
+    def get_allowed_groups(self) -> list:
+        c = self.conn.cursor()
+        c.execute("SELECT chat_id FROM allowed_groups")
+        return [row['chat_id'] for row in c.fetchall()]
 
     def log_download(self, filename: str, file_size: int, chat_id: int):
         c = self.conn.cursor()

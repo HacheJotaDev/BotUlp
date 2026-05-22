@@ -13,6 +13,8 @@
     "search_completed": "╭───✦ ✅ BUSCA CONCLUÍDA\n├● 🔍 Domínio: `{}`\n├● 📑 Tipo: `{}`\n├● 📊 Resultados: `{}`\n├● ⏱️ Tempo: `{:.1f}s`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "download_progress": "📥 Baixando: `{}`\n\n📊 Progresso: `{}`\n⚡ Velocidade: `{}`\n⏱️ ETA: `{}`",
     "redeem_success": "🎉 **Parabéns!**\n\nSua conta VIP foi ativada com sucesso.",
+    "canjear_invalid": "╭───✦ ❌ KEY INVÁLIDA\n├● O código inserido é inválido ou já foi usado\n├● Uso: /canjear HJ-XXXXXXXXXXXX\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "canjear_info": "╭───✦ 🔑 RESGATAR KEY VIP\n├● Use o comando para ativar seu VIP:\n├● /canjear HJ-XXXXXXXXXXXX\n├●\n├● 💡 Exemplo:\n├● /canjear HJ-ABC123DEF456\n├●\n├● 📬 Consiga uma key contatando:\n├● @hjofc20\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "key_generated": "╭───✦ ✅ KEY GERADA COM SUCESSO\n├● 🔑 Código:\n`{}`\n├● 🔗 Link de resgate:\n{}\n├● 📅 Dias: {}\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "admin_panel": "╭───✦ 🔐 PAINEL ADMIN\n├● 👑 VIPs: `{}`\n├● 💼 Sellers: `{}`\n├● 🔍 Buscas: `{}`\n├● 👥 Total usuários: `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "stats_global": "╭───✦ 📊 ESTATÍSTICAS GLOBAIS\n├● 👑 Usuários VIP: `{}`\n├● 💼 Sellers: `{}`\n├● 🔍 Total de Buscas: `{}`\n├● 👥 Total de Usuários: `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",

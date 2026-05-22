@@ -103,6 +103,24 @@ class LocaleManager:
             ),
             "download_progress": "📥 Descargando: `{}`\n\n📊 Progreso: `{}`\n⚡ Velocidad: `{}`\n⏱️ ETA: `{}`",
             "redeem_success": "🎉 **¡Felicidades!**\n\nTu cuenta VIP ha sido activada exitosamente.",
+            "canjear_invalid": (
+                "╭───✦ ❌ KEY INVÁLIDA\n"
+                "├● El código ingresado no es válido o ya fue usado\n"
+                "├● Usa: /canjear HJ-XXXXXXXXXXXX\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
+            "canjear_info": (
+                "╭───✦ 🔑 CANJEAR KEY VIP\n"
+                "├● Usa el comando para activar tu VIP:\n"
+                "├● /canjear HJ-XXXXXXXXXXXX\n"
+                "├●\n"
+                "├● 💡 Ejemplo:\n"
+                "├● /canjear HJ-ABC123DEF456\n"
+                "├●\n"
+                "├● 📬 Consigue una key contactando a:\n"
+                "├● @hjofc20\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
             "key_generated": (
                 "╭───✦ ✅ KEY GENERADA EXITOSAMENTE\n"
                 "├● 🔑 Código:\n`{}`\n"

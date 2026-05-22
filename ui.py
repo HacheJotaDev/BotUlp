@@ -29,6 +29,7 @@ class Keyboards:
         if role == UserRole.FREE:
             return [
                 [Button.inline("💰 COMPRAR VIP", b"buy_vip_info")],
+                [Button.inline("🔑 CANJEAR KEY", b"canjear_key")],
                 [Button.inline("👤 Mi Cuenta", b"my_account")],
                 lang_btn
             ]
