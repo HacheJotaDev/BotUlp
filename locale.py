@@ -33,7 +33,7 @@ class LocaleManager:
                 "╰───✦ 🚀 by @hjofc20\n"
                 "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n"
                 "╭───✦ COMANDOS\n"
-                "├● │ /start │ /url\n"
+                "├● │ {}\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
                 "🌟 Soporte:\n"
                 "  ✦ @hjofc20\n\n"

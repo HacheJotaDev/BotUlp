@@ -179,6 +179,19 @@ async def cmd_update_bot(event):
 # HANDLERS DE COMANDOS
 # ═════════════════════════════════════════════════════════════
 
+def _get_commands_by_role(role: UserRole) -> str:
+    """Construir la lista de comandos disponibles según el rol del usuario."""
+    if role == UserRole.FREE:
+        return "/start"
+    elif role == UserRole.VIP:
+        return "/start │ /url"
+    elif role == UserRole.SELLER:
+        return "/start │ /url"
+    elif role == UserRole.ADMIN:
+        return "/start │ /url │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /updateBot"
+    return "/start"
+
+
 def register_handlers(bot_client):
     """Registrar todos los handlers en el bot client."""
 
@@ -202,7 +215,7 @@ def register_handlers(bot_client):
                 return
 
         await e.reply(
-            UI.text("welcome", lang, role.value, user['search_count']),
+            UI.text("welcome", lang, _get_commands_by_role(role), role.value, user['search_count']),
             buttons=Keyboards.main(role, lang),
             parse_mode='md'
         )
@@ -385,7 +398,7 @@ def register_handlers(bot_client):
             # ─── VOLVER AL MENÚ PRINCIPAL ───
             if data == "back_main":
                 await e.edit(
-                    UI.text("welcome", lang, role.value, user['search_count']),
+                    UI.text("welcome", lang, _get_commands_by_role(role), role.value, user['search_count']),
                     buttons=Keyboards.main(role, lang),
                     parse_mode='md'
                 )
@@ -423,7 +436,7 @@ def register_handlers(bot_client):
                 await e.answer(UI.text("language_selected", new_lang), alert=True)
                 user = db.get_user(uid)
                 await e.edit(
-                    UI.text("welcome", new_lang, role.value, user['search_count']),
+                    UI.text("welcome", new_lang, _get_commands_by_role(role), role.value, user['search_count']),
                     buttons=Keyboards.main(role, new_lang),
                     parse_mode='md'
                 )

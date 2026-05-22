@@ -1,5 +1,5 @@
 {
-    "welcome": "╭───✦ ☾ HJ ULP PRO ☽ 彡\n├● ▸ Búsqueda ultra-rápida (paralela)\n├● ▸ Bases actualizadas 24/7\n├● ▸ Privacidad & anonimato total\n├● ▸ Data lista para usar\n╰───✦ 🚀 by @hjofc20\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n╭───✦ COMANDOS\n├● │ /start │ /url\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n🌟 Soporte:\n  ✦ @hjofc20\n\n👤 **Rol:** `{}` │ 📊 **Búsquedas:** `{}`",
+    "welcome": "╭───✦ ☾ HJ ULP PRO ☽ 彡\n├● ▸ Búsqueda ultra-rápida (paralela)\n├● ▸ Bases actualizadas 24/7\n├● ▸ Privacidad & anonimato total\n├● ▸ Data lista para usar\n╰───✦ 🚀 by @hjofc20\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n╭───✦ COMANDOS\n├● │ {}\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n🌟 Soporte:\n  ✦ @hjofc20\n\n👤 **Rol:** `{}` │ 📊 **Búsquedas:** `{}`",
     "buy_vip_info": "╭───✦ 💰 COMPRAR VIP ACCESS 💰\n├● ⟡ 1 día  »  6$\n├● ⟡ 3 días »  10$\n├● ⟡ 7 días »  25$\n├● ⟡ 30 días » 100$\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n📬 **CONTACTO:**\n{}",
     "file_management": "╭───✦ 📂 GESTIÓN DE ARCHIVOS\n├● 📊 **Base de Datos:**\n├● 📁 Total: `{}` archivos\n├● ⚡ Últimas 24h: `{}`\n├● 🗄️ Histórico: `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n╭───✦ 🔄 DESCARGAS\n├● ♻️ Auto-Download: `{}`\n├● 📝 En cola: `{}` archivos\n├● ⬇️ Activos: `{}` descargas\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "no_results": "╭───✦ ❌ SIN RESULTADOS\n├● No se encontraron datos para `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
