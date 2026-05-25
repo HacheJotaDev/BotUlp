@@ -49,7 +49,7 @@ class Config:
 
     # Auto-limpieza
     ARCHIVE_AFTER_HOURS: int = 24
-    DELETE_AFTER_HOURS: int = 72
+    DELETE_AFTER_HOURS: int = 120
 
     # Git repo para /updateBot
     GIT_REPO_URL: str = "https://github.com/HacheJotaDev/BotUlp.git"
