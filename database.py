@@ -145,7 +145,25 @@ class Database:
         if not row:
             return False
         days = row['days']
-        expiry = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+        # Extender VIP existente: si ya es VIP con tiempo restante, sumar días
+        now = datetime.now(timezone.utc)
+        c.execute("SELECT vip_expiry FROM users WHERE user_id = ?", (uid,))
+        user_row = c.fetchone()
+        if user_row and user_row['vip_expiry']:
+            try:
+                existing_exp = datetime.fromisoformat(user_row['vip_expiry'])
+                if existing_exp.tzinfo is None:
+                    existing_exp = existing_exp.replace(tzinfo=timezone.utc)
+                # Si aún no expira, partir desde la fecha de expiración actual
+                if existing_exp > now:
+                    base = existing_exp
+                else:
+                    base = now
+            except Exception:
+                base = now
+        else:
+            base = now
+        expiry = (base + timedelta(days=days)).isoformat()
         c.execute("UPDATE keys SET is_used = 1, used_by = ? WHERE key_code = ?", (uid, code))
         c.execute(
             "INSERT INTO users (user_id, role, vip_expiry) VALUES (?, 'VIP', ?) "
@@ -161,6 +179,7 @@ class Database:
         self.conn.commit()
 
     def get_stats(self) -> dict:
+        self.cleanup_expired_vips()
         c = self.conn.cursor()
         c.execute("SELECT COUNT(*) FROM users WHERE role='VIP'")
         vips = c.fetchone()[0]
@@ -175,7 +194,23 @@ class Database:
             'searches': total_searches, 'total_users': total_users
         }
 
+    def cleanup_expired_vips(self) -> int:
+        """Cambiar a FREE los VIPs cuya fecha de expiración ya pasó. Retorna la cantidad limpiada."""
+        c = self.conn.cursor()
+        now_iso = datetime.now(timezone.utc).isoformat()
+        c.execute(
+            "UPDATE users SET role='FREE', vip_expiry=NULL "
+            "WHERE role='VIP' AND vip_expiry IS NOT NULL AND vip_expiry < ?",
+            (now_iso,)
+        )
+        count = c.rowcount
+        if count > 0:
+            self.conn.commit()
+            logger.info(f"VIPs expirados limpiados: {count}")
+        return count
+
     def list_vips(self) -> List[dict]:
+        self.cleanup_expired_vips()
         c = self.conn.cursor()
         c.execute("SELECT user_id, vip_expiry, search_count FROM users WHERE role='VIP' OR role='SELLER'")
         return [dict(r) for r in c.fetchall()]

@@ -85,6 +85,10 @@ async def main():
         while True:
             try:
                 await mover_y_limpiar_archivos()
+                # Limpiar VIPs expirados
+                cleaned = _db.cleanup_expired_vips()
+                if cleaned > 0:
+                    logger.info(f"Limpieza VIP: {cleaned} usuarios expirados removidos")
             except Exception as e:
                 logger.error(f"Error en limpieza: {e}")
             await asyncio.sleep(3600)  # Cada hora
