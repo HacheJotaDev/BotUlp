@@ -364,9 +364,7 @@ def register_handlers(bot_client):
         # Guardar chat_id para enviar resultados al lugar correcto
         state.temp_state[uid] = {'chat_id': e.chat_id}
         await e.reply(
-            "📧 **MAIL ACCESS**\n\n"
-            "🚫 Sin: gmail, outlook, yahoo, hotmail (incluye ISO)\n\n"
-            "⏱️ **Selecciona el rango de tiempo:**",
+            UI.text("ma_intro", lang),
             buttons=Keyboards.ma_time(),
             parse_mode='md'
         )
@@ -650,13 +648,8 @@ def register_handlers(bot_client):
                 if uid not in state.temp_state:
                     return await e.answer("Sesión expirada. Usa /ma primero.", alert=True)
 
-                tipo_texto = "MAIL:PASS 🚫"
-
                 msg = await e.edit(
-                    f"⚙️ **Buscando TODOS los correos...**\n\n"
-                    f"📧 MAIL ACCESS\n"
-                    f"🚫 Sin: gmail, outlook, yahoo, hotmail (incluye ISO)\n"
-                    f"⠋ Procesando",
+                    UI.text("ma_searching", lang),
                     buttons=None,
                     parse_mode='md'
                 )
@@ -676,14 +669,7 @@ def register_handlers(bot_client):
                         for _ in f:
                             count += 1
 
-                    caption = (
-                        f"╭───✦ 📧 **MAIL ACCESS**\n"
-                        f"├● 🔍 **Todos los correos**\n"
-                        f"├● 📊 Resultados: `{count}`\n"
-                        f"├● ⏱️ Tiempo: `{elapsed:.1f}s`\n"
-                        f"├● 🚫 Sin: gmail, outlook, yahoo, hotmail (incluye ISO)\n"
-                        f"╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-                    )
+                    caption = UI.text("ma_completed", lang, count, elapsed)
 
                     target_chat = state.temp_state.get(uid, {}).get('chat_id', uid) if uid in state.temp_state else uid
                     if not target_chat:
@@ -711,8 +697,7 @@ def register_handlers(bot_client):
                     if uid in state.temp_state:
                         del state.temp_state[uid]
                     await e.edit(
-                        "⚠️ **No se encontraron resultados**\n\n"
-                        "No hay correos mail:pass (filtrados) en el rango seleccionado.",
+                        UI.text("ma_no_results", lang),
                         buttons=Keyboards.back(),
                         parse_mode='md'
                     )

@@ -170,6 +170,31 @@ class LocaleManager:
                 "├● Ya está en la última versión\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
+            "ma_intro": (
+                "╭───✦ 📧 MAIL ACCESS\n"
+                "├● 🚫 Sin: gmail, outlook, yahoo, hotmail\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
+                "⏱️ **Selecciona el rango de tiempo:**"
+            ),
+            "ma_searching": (
+                "⚙️ **Buscando todos los correos...**\n\n"
+                "📧 MAIL ACCESS\n"
+                "🚫 Sin: gmail, outlook, yahoo, hotmail\n"
+                "⠋ Procesando"
+            ),
+            "ma_completed": (
+                "╭───✦ 📧 MAIL ACCESS\n"
+                "├● 🔍 Todos los correos\n"
+                "├● 📊 Resultados: `{}`\n"
+                "├● ⏱️ Tiempo: `{:.1f}s`\n"
+                "├● 🚫 Sin: gmail, outlook, yahoo, hotmail\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
+            "ma_no_results": (
+                "╭───✦ ⚠️ SIN RESULTADOS\n"
+                "├● No hay correos filtrados en el rango seleccionado\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
         }
 
         # Cargar archivos de locale externos

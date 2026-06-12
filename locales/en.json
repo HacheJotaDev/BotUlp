@@ -22,5 +22,9 @@
     "update_bot_start": "╭───✦ 🔄 UPDATING BOT\n├● ⏳ Downloading changes...\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "update_bot_success": "╭───✦ ✅ BOT UPDATED\n├● 🔄 Restarting in 3 seconds...\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "update_bot_fail": "╭───✦ ❌ UPDATE FAILED\n├● 📄 `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
-    "update_bot_uptodate": "╭───✦ ✅ BOT UPDATED\n├● Already on latest version\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+    "update_bot_uptodate": "╭───✦ ✅ BOT UPDATED\n├● Already on latest version\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "ma_intro": "╭───✦ 📧 MAIL ACCESS\n├● 🚫 Without: gmail, outlook, yahoo, hotmail\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n⏱️ **Select the time range:**",
+    "ma_searching": "⚙️ **Searching all emails...**\n\n📧 MAIL ACCESS\n🚫 Without: gmail, outlook, yahoo, hotmail\n⠋ Processing",
+    "ma_completed": "╭───✦ 📧 MAIL ACCESS\n├● 🔍 All emails\n├● 📊 Results: `{}`\n├● ⏱️ Time: `{:.1f}s`\n├● 🚫 Without: gmail, outlook, yahoo, hotmail\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "ma_no_results": "╭───✦ ⚠️ NO RESULTS\n├● No filtered emails found in the selected range\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
 }
