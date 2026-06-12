@@ -173,6 +173,165 @@ def _search_file(path: Path, kw: str, modo: SearchMode, cancel_event: threading.
     return list(res_set)
 
 
+def _search_file_ma(path: Path, cancel_event: threading.Event = None) -> List[str]:
+    """Búsqueda /ma: lee TODAS las líneas, extrae mail:pass excluyendo dominios comunes.
+    
+    No usa keyword — escanea todo el archivo línea por línea.
+    Límites duros de resultados y tiempo igual que _search_file.
+    """
+    if cancel_event and cancel_event.is_set():
+        return []
+
+    res_set = set()
+    start_time = time.time()
+    lines_processed = 0
+
+    try:
+        file_size = path.stat().st_size
+        if file_size == 0:
+            return []
+
+        with open(path, 'r', encoding='utf-8', errors='ignore', buffering=1024*64) as f:
+            for line in f:
+                # === LÍMITES DUROS ===
+                if len(res_set) >= MAX_RESULTS_PER_FILE:
+                    break
+
+                if lines_processed >= MAX_MATCHES_PER_FILE:
+                    logger.info(f"[MA] {path.name}: hard stop {MAX_MATCHES_PER_FILE} líneas")
+                    break
+
+                if time.time() - start_time > FILE_TIME_LIMIT:
+                    logger.info(f"[MA] {path.name}: time limit {FILE_TIME_LIMIT}s")
+                    break
+
+                lines_processed += 1
+                if lines_processed % 1000 == 0 and cancel_event and cancel_event.is_set():
+                    break
+
+                decoded = line.strip()
+                if not decoded:
+                    continue
+
+                try:
+                    clean_line = decoded.replace("|", ":").replace(";", ":")
+                    parts = [p.strip() for p in clean_line.split(":") if p.strip()]
+
+                    user = ""
+                    password = ""
+
+                    if len(parts) >= 3:
+                        user = parts[-2]
+                        password = parts[-1]
+                    elif len(parts) == 2:
+                        user = parts[0]
+                        password = parts[1]
+                    else:
+                        continue
+
+                    if not user or not password:
+                        continue
+
+                    if _EMAIL_RE.match(user):
+                        user_lower = user.lower()
+                        at_idx = user_lower.find("@")
+                        if at_idx != -1:
+                            domain_part = user_lower[at_idx:]
+                            if domain_part not in EXCLUDED_DOMAINS:
+                                res_set.add(f"{user}:{password}")
+
+                except Exception:
+                    pass
+
+    except Exception:
+        pass
+
+    elapsed = time.time() - start_time
+    if elapsed > 5 or len(res_set) > 0:
+        logger.info(f"[MA] {path.name}: {len(res_set)} resultados en {elapsed:.1f}s ({lines_processed} líneas)")
+
+    return list(res_set)
+
+
+async def search_ma(time_opt: str) -> Optional[Path]:
+    """Motor de búsqueda /ma: TODOS los mail:pass filtrados (sin keyword)."""
+    cache_key = f"__MA__:{time_opt}"
+    if cache_key in state.search_memory_cache:
+        cached_path = state.search_memory_cache[cache_key]
+        if cached_path and cached_path.exists():
+            logger.info(f"Cache HIT: {cache_key}")
+            return cached_path
+
+    loop = asyncio.get_running_loop()
+    dirs = []
+    if time_opt in ['24h', 'all']:
+        dirs.append(config.DIR_DOWNLOADS)
+    if time_opt in ['old', 'all']:
+        dirs.append(config.DIR_ARCHIVE)
+
+    def _safe_size(f):
+        try:
+            return f.stat().st_size
+        except OSError:
+            return 0
+
+    files = [f for d in dirs for f in d.glob('*.txt') if _safe_size(f) > 0]
+    if not files:
+        return None
+
+    cancel_event = threading.Event()
+
+    logger.info(f"[MA] Búsqueda: {len(files)} archivos, modo MAIL_FILTERED")
+
+    tasks = [
+        loop.run_in_executor(executor, _search_file_ma, f, cancel_event)
+        for f in files
+    ]
+
+    search_start = time.time()
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            timeout=600
+        )
+    except asyncio.TimeoutError:
+        cancel_event.set()
+        logger.warning("[MA] Timeout global, usando resultados parciales")
+        await asyncio.sleep(2)
+        results = []
+        for t in tasks:
+            try:
+                if t.done() and not t.cancelled():
+                    r = t.result()
+                    if isinstance(r, list):
+                        results.append(r)
+            except Exception:
+                pass
+
+    final = set()
+    for r in results:
+        if isinstance(r, list):
+            final.update(r)
+
+    if not final:
+        return None
+
+    if len(final) > config.SEARCH_MAX_RESULTS:
+        logger.info(f"[MA] Resultados truncados: {len(final)} -> {config.SEARCH_MAX_RESULTS}")
+        final = set(list(final)[:config.SEARCH_MAX_RESULTS])
+
+    out = config.DIR_CACHE / f"result_ma_{int(time.time())}.txt"
+
+    with open(out, 'w', encoding='utf-8', buffering=1024*64) as f:
+        f.write('\n'.join(final))
+
+    elapsed = time.time() - search_start
+    logger.info(f"[MA] Completada: {len(final)} resultados en {elapsed:.1f}s")
+
+    state.search_memory_cache[cache_key] = out
+    return out
+
+
 async def search_engine(kw: str, time_opt: str, modo: SearchMode) -> Optional[Path]:
     """Motor de búsqueda PARALELO con caché + límites de seguridad.
     

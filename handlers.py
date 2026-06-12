@@ -28,7 +28,7 @@ from roles import UserRole, SearchMode, get_user_role
 from locale import locale_manager
 from ui import UI, Keyboards
 from utils import normalizar_url, get_file_counts, format_size, format_time
-from search import search_engine
+from search import search_engine, search_ma
 from download import (
     DownloadProgressTracker,
     process_pending_downloads, realtime_listener, mover_y_limpiar_archivos
@@ -338,11 +338,12 @@ def register_handlers(bot_client):
 
     # ═════════════════════════════════════════════════════════════
     # COMANDO /ma — MAIL:PASS filtrado (sin gmail/outlook/yahoo/hotmail)
+    # No requiere dominio — busca TODOS los correos
     # ═════════════════════════════════════════════════════════════
 
     @bot_client.on(events.NewMessage(pattern=r"/ma$"))
     async def cmd_ma(e):
-        """Búsqueda MAIL:PASS filtrada — excluye gmail, outlook, yahoo, hotmail."""
+        """Búsqueda MAIL:PASS filtrada — TODOS los correos, excluye gmail/outlook/yahoo/hotmail."""
         uid = e.sender_id
         user = db.get_user(uid)
         lang = user.get('language', 'es')
@@ -360,16 +361,13 @@ def register_handlers(bot_client):
                 parse_mode='md'
             )
 
-        # Poner al usuario en estado de espera de keyword
-        state.temp_state[uid] = {
-            'step': 'WAITING_KEYWORD_MA',
-            'chat_id': e.chat_id
-        }
+        # Guardar chat_id para enviar resultados al lugar correcto
+        state.temp_state[uid] = {'chat_id': e.chat_id}
         await e.reply(
-            "📧 **MAIL:PASS Filtrado**\n\n"
+            "📧 **MAIL:PASS Filtrado — Todos los correos**\n\n"
             "🚫 Excluidos: gmail.com, outlook.com, yahoo.com, hotmail.com\n\n"
-            "✏️ **Envía el dominio/URL a buscar:**",
-            buttons=Keyboards.back(),
+            "⏱️ **Selecciona el rango de tiempo:**",
+            buttons=Keyboards.ma_time(),
             parse_mode='md'
         )
 
@@ -470,42 +468,6 @@ def register_handlers(bot_client):
         await e.reply(
             UI.text("search_step_time", lang, kw),
             buttons=Keyboards.time(),
-            parse_mode='md'
-        )
-
-    # Conversation handler para /ma — WAITING_KEYWORD_MA
-    @bot_client.on(events.NewMessage(
-        func=lambda e: (e.is_private or (e.is_group and e.chat_id in state.allowed_groups)) and
-                       e.sender_id in state.temp_state and
-                       state.temp_state[e.sender_id].get('step') == 'WAITING_KEYWORD_MA'
-    ))
-    async def handle_ma_conversation(e):
-        uid = e.sender_id
-        user = db.get_user(uid)
-        lang = user.get('language', 'es')
-        role = get_user_role(uid)
-
-        # Si es FREE en privado, acceso denegado (en grupo permitido sí puede)
-        if role == UserRole.FREE and e.is_private:
-            return await e.reply(
-                UI.text("access_denied", lang),
-                buttons=Keyboards.back(),
-                parse_mode='md'
-            )
-
-        kw = normalizar_url(e.text)
-        # Guardar con modo MAIL_FILTERED forzado
-        chat_id = state.temp_state[uid].get('chat_id', e.chat_id)
-        state.temp_state[uid] = {
-            'kw': kw,
-            'chat_id': chat_id,
-            'forced_mode': 'MAIL_FILTERED'
-        }
-        await e.reply(
-            f"📧 **MAIL:PASS Filtrado** — `{kw}`\n\n"
-            f"🚫 Excluidos: gmail.com, outlook.com, yahoo.com, hotmail.com\n\n"
-            f"⏱️ **Selecciona el rango de tiempo:**",
-            buttons=Keyboards.ma_time(),
             parse_mode='md'
         )
 
@@ -682,19 +644,16 @@ def register_handlers(bot_client):
                 else:
                     await e.answer("Usa 'Nueva Búsqueda' primero.", alert=True)
 
-            # ─── /ma TIME CALLBACKS (búsqueda directa sin preguntar formato) ───
+            # ─── /ma TIME CALLBACKS (búsqueda directa sin keyword, sin preguntar formato) ───
             elif data.startswith("ma_time_"):
                 t_opt = data.split("ma_time_")[1]
-                if uid not in state.temp_state or not state.temp_state[uid].get('kw'):
-                    return await e.answer("Sesión expirada. Usa /ma <url> primero.", alert=True)
+                if uid not in state.temp_state:
+                    return await e.answer("Sesión expirada. Usa /ma primero.", alert=True)
 
-                kw = state.temp_state[uid]['kw']
-                # Forzar modo MAIL_FILTERED
-                modo = SearchMode.MAIL_FILTERED
                 tipo_texto = "MAIL:PASS 🚫"
 
                 msg = await e.edit(
-                    f"⚙️ **Buscando** `{kw}`...\n\n"
+                    f"⚙️ **Buscando TODOS los correos...**\n\n"
                     f"📧 Modo: MAIL:PASS Filtrado\n"
                     f"🚫 Sin gmail/outlook/yahoo/hotmail\n"
                     f"⠋ Procesando",
@@ -703,9 +662,9 @@ def register_handlers(bot_client):
                 )
 
                 start_time = time.time()
-                search_task = asyncio.create_task(search_engine(kw, t_opt, modo))
+                search_task = asyncio.create_task(search_ma(t_opt))
 
-                await animate_loading(msg, search_task, kw)
+                await animate_loading(msg, search_task, "ALL")
 
                 result_file = await search_task
                 elapsed = time.time() - start_time
@@ -717,18 +676,15 @@ def register_handlers(bot_client):
                         for _ in f:
                             count += 1
 
-                    preview_lines = []
-                    with open(result_file, 'r', encoding='utf-8') as f:
-                        for i, line in enumerate(f):
-                            if i >= config.SEARCH_RESULT_PREVIEW_LINES:
-                                break
-                            preview_lines.append(line.strip())
-
-                    preview_text = '\n'.join(preview_lines)
-                    if len(preview_text) > 3000:
-                        preview_text = preview_text[:3000] + "..."
-
-                    caption = UI.text("search_completed", lang, kw, tipo_texto, count, elapsed)
+                    caption = (
+                        f"╭───✦ 📧 **BÚSQUEDA COMPLETADA**\n"
+                        f"├● 🔍 **Todos los correos**\n"
+                        f"├● 📄 Formato: `{tipo_texto}`\n"
+                        f"├● 📊 Resultados: `{count}`\n"
+                        f"├● ⏱️ Tiempo: `{elapsed:.1f}s`\n"
+                        f"├● 🚫 Sin: gmail, outlook, yahoo, hotmail\n"
+                        f"╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                    )
 
                     target_chat = state.temp_state.get(uid, {}).get('chat_id', uid) if uid in state.temp_state else uid
                     if not target_chat:
@@ -753,9 +709,12 @@ def register_handlers(bot_client):
                     except Exception:
                         pass
                 else:
+                    if uid in state.temp_state:
+                        del state.temp_state[uid]
                     await e.edit(
-                        UI.text("no_results", lang, kw),
-                        buttons=Keyboards.no_results(kw),
+                        "⚠️ **No se encontraron resultados**\n\n"
+                        "No hay correos mail:pass (filtrados) en el rango seleccionado.",
+                        buttons=Keyboards.back(),
                         parse_mode='md'
                     )
 
