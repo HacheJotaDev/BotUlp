@@ -31,6 +31,14 @@ executor = ThreadPoolExecutor(
 # Regex pre-compilado
 _EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
 
+# Dominios excluidos para el modo MAIL_FILTERED (/ma)
+EXCLUDED_DOMAINS = {
+    "@gmail.com",
+    "@outlook.com",
+    "@yahoo.com",
+    "@hotmail.com",
+}
+
 # Límites para evitar que dominios populares cuelguen el bot
 MAX_RESULTS_PER_FILE = 10000    # Máximo de resultados únicos por archivo
 MAX_MATCHES_PER_FILE = 100000   # Máximo de MATCHES procesados por archivo (hard stop)
@@ -140,6 +148,12 @@ def _search_file(path: Path, kw: str, modo: SearchMode, cancel_event: threading.
                             if modo == SearchMode.MAIL:
                                 if _EMAIL_RE.match(user):
                                     res_set.add(f"{user}:{password}")
+                            elif modo == SearchMode.MAIL_FILTERED:
+                                if _EMAIL_RE.match(user):
+                                    user_lower = user.lower()
+                                    domain_part = user_lower[user_lower.index("@"):]
+                                    if domain_part not in EXCLUDED_DOMAINS:
+                                        res_set.add(f"{user}:{password}")
                             elif modo == SearchMode.USERPASS:
                                 if "@" not in user:
                                     res_set.add(f"{user}:{password}")

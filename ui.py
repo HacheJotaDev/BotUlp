@@ -64,6 +64,16 @@ class Keyboards:
         ]
 
     @staticmethod
+    def ma_time():
+        """Teclado de tiempo para /ma (MAIL:PASS filtrado)."""
+        return [
+            [Button.inline("⚡ Últimas 24h", b"ma_time_24h")],
+            [Button.inline("🗂 24h + Antiguos", b"ma_time_all")],
+            [Button.inline("📅 Solo Antiguos", b"ma_time_old")],
+            [Button.inline("❌ Cancelar", b"back_main")]
+        ]
+
+    @staticmethod
     def formats():
         return [
             [Button.inline("📄 ULP (Completo)", b"fmt_ulp")],

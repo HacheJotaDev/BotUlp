@@ -22,6 +22,7 @@ class SearchMode(Enum):
     ULP = "ULP"
     MAIL = "MAIL:PASS"
     USERPASS = "USER:PASS"
+    MAIL_FILTERED = "MAIL:PASS(FILTERED)"
 
 
 def get_user_role(uid: int) -> UserRole:

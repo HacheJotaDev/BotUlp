@@ -184,11 +184,11 @@ def _get_commands_by_role(role: UserRole) -> str:
     if role == UserRole.FREE:
         return "/start │ /canjear"
     elif role == UserRole.VIP:
-        return "/start │ /url │ /canjear"
+        return "/start │ /url │ /ma │ /canjear"
     elif role == UserRole.SELLER:
-        return "/start │ /url"
+        return "/start │ /url │ /ma"
     elif role == UserRole.ADMIN:
-        return "/start │ /url │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /updateBot"
+        return "/start │ /url │ /ma │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /updateBot"
     return "/start │ /canjear"
 
 
@@ -333,6 +333,45 @@ def register_handlers(bot_client):
         await e.reply(
             UI.text("search_step_time", lang, kw),
             buttons=Keyboards.time(),
+            parse_mode='md'
+        )
+
+    # ═════════════════════════════════════════════════════════════
+    # COMANDO /ma — MAIL:PASS filtrado (sin gmail/outlook/yahoo/hotmail)
+    # ═════════════════════════════════════════════════════════════
+
+    @bot_client.on(events.NewMessage(pattern=r"/ma (.+)"))
+    async def cmd_ma(e):
+        """Búsqueda MAIL:PASS filtrada — excluye gmail, outlook, yahoo, hotmail."""
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        role = get_user_role(uid)
+
+        # Si estamos en un grupo que no está permitido, no responder
+        if e.is_group and e.chat_id not in state.allowed_groups:
+            return
+
+        # Si es FREE y NO está en un grupo permitido, acceso denegado
+        if role == UserRole.FREE and not (e.is_group and e.chat_id in state.allowed_groups):
+            return await e.reply(
+                UI.text("access_denied", lang),
+                buttons=Keyboards.back() if e.is_private else None,
+                parse_mode='md'
+            )
+
+        kw = normalizar_url(e.pattern_match.group(1))
+        # Guardar estado con modo MAIL_FILTERED forzado
+        state.temp_state[uid] = {
+            'kw': kw,
+            'chat_id': e.chat_id,
+            'forced_mode': 'MAIL_FILTERED'
+        }
+        await e.reply(
+            f"📧 **MAIL:PASS Filtrado** — `{kw}`\n\n"
+            f"🚫 Excluidos: gmail.com, outlook.com, yahoo.com, hotmail.com\n\n"
+            f"⏱️ **Selecciona el rango de tiempo:**",
+            buttons=Keyboards.ma_time(),
             parse_mode='md'
         )
 
@@ -608,6 +647,83 @@ def register_handlers(bot_client):
                     )
                 else:
                     await e.answer("Usa 'Nueva Búsqueda' primero.", alert=True)
+
+            # ─── /ma TIME CALLBACKS (búsqueda directa sin preguntar formato) ───
+            elif data.startswith("ma_time_"):
+                t_opt = data.split("ma_time_")[1]
+                if uid not in state.temp_state or not state.temp_state[uid].get('kw'):
+                    return await e.answer("Sesión expirada. Usa /ma <url> primero.", alert=True)
+
+                kw = state.temp_state[uid]['kw']
+                # Forzar modo MAIL_FILTERED
+                modo = SearchMode.MAIL_FILTERED
+                tipo_texto = "MAIL:PASS 🚫"
+
+                msg = await e.edit(
+                    f"⚙️ **Buscando** `{kw}`...\n\n"
+                    f"📧 Modo: MAIL:PASS Filtrado\n"
+                    f"🚫 Sin gmail/outlook/yahoo/hotmail\n"
+                    f"⠋ Procesando",
+                    buttons=None,
+                    parse_mode='md'
+                )
+
+                start_time = time.time()
+                search_task = asyncio.create_task(search_engine(kw, t_opt, modo))
+
+                await animate_loading(msg, search_task, kw)
+
+                result_file = await search_task
+                elapsed = time.time() - start_time
+
+                if result_file:
+                    db.add_search(uid)
+                    count = 0
+                    with open(result_file, 'rb') as f:
+                        for _ in f:
+                            count += 1
+
+                    preview_lines = []
+                    with open(result_file, 'r', encoding='utf-8') as f:
+                        for i, line in enumerate(f):
+                            if i >= config.SEARCH_RESULT_PREVIEW_LINES:
+                                break
+                            preview_lines.append(line.strip())
+
+                    preview_text = '\n'.join(preview_lines)
+                    if len(preview_text) > 3000:
+                        preview_text = preview_text[:3000] + "..."
+
+                    caption = UI.text("search_completed", lang, kw, tipo_texto, count, elapsed)
+
+                    target_chat = state.temp_state.get(uid, {}).get('chat_id', uid) if uid in state.temp_state else uid
+                    if not target_chat:
+                        target_chat = uid
+
+                    if uid in state.temp_state:
+                        del state.temp_state[uid]
+
+                    try:
+                        await e.delete()
+                    except Exception:
+                        pass
+
+                    await state.bot.send_file(
+                        target_chat, result_file,
+                        caption=caption,
+                        parse_mode='md'
+                    )
+
+                    try:
+                        os.remove(result_file)
+                    except Exception:
+                        pass
+                else:
+                    await e.edit(
+                        UI.text("no_results", lang, kw),
+                        buttons=Keyboards.no_results(kw),
+                        parse_mode='md'
+                    )
 
             elif data.startswith("fmt_"):
                 if uid not in state.temp_state or not state.temp_state[uid].get('kw'):
