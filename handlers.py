@@ -340,7 +340,7 @@ def register_handlers(bot_client):
     # COMANDO /ma — MAIL:PASS filtrado (sin gmail/outlook/yahoo/hotmail)
     # ═════════════════════════════════════════════════════════════
 
-    @bot_client.on(events.NewMessage(pattern=r"/ma (.+)"))
+    @bot_client.on(events.NewMessage(pattern=r"/ma$"))
     async def cmd_ma(e):
         """Búsqueda MAIL:PASS filtrada — excluye gmail, outlook, yahoo, hotmail."""
         uid = e.sender_id
@@ -360,18 +360,16 @@ def register_handlers(bot_client):
                 parse_mode='md'
             )
 
-        kw = normalizar_url(e.pattern_match.group(1))
-        # Guardar estado con modo MAIL_FILTERED forzado
+        # Poner al usuario en estado de espera de keyword
         state.temp_state[uid] = {
-            'kw': kw,
-            'chat_id': e.chat_id,
-            'forced_mode': 'MAIL_FILTERED'
+            'step': 'WAITING_KEYWORD_MA',
+            'chat_id': e.chat_id
         }
         await e.reply(
-            f"📧 **MAIL:PASS Filtrado** — `{kw}`\n\n"
-            f"🚫 Excluidos: gmail.com, outlook.com, yahoo.com, hotmail.com\n\n"
-            f"⏱️ **Selecciona el rango de tiempo:**",
-            buttons=Keyboards.ma_time(),
+            "📧 **MAIL:PASS Filtrado**\n\n"
+            "🚫 Excluidos: gmail.com, outlook.com, yahoo.com, hotmail.com\n\n"
+            "✏️ **Envía el dominio/URL a buscar:**",
+            buttons=Keyboards.back(),
             parse_mode='md'
         )
 
@@ -472,6 +470,42 @@ def register_handlers(bot_client):
         await e.reply(
             UI.text("search_step_time", lang, kw),
             buttons=Keyboards.time(),
+            parse_mode='md'
+        )
+
+    # Conversation handler para /ma — WAITING_KEYWORD_MA
+    @bot_client.on(events.NewMessage(
+        func=lambda e: (e.is_private or (e.is_group and e.chat_id in state.allowed_groups)) and
+                       e.sender_id in state.temp_state and
+                       state.temp_state[e.sender_id].get('step') == 'WAITING_KEYWORD_MA'
+    ))
+    async def handle_ma_conversation(e):
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        role = get_user_role(uid)
+
+        # Si es FREE en privado, acceso denegado (en grupo permitido sí puede)
+        if role == UserRole.FREE and e.is_private:
+            return await e.reply(
+                UI.text("access_denied", lang),
+                buttons=Keyboards.back(),
+                parse_mode='md'
+            )
+
+        kw = normalizar_url(e.text)
+        # Guardar con modo MAIL_FILTERED forzado
+        chat_id = state.temp_state[uid].get('chat_id', e.chat_id)
+        state.temp_state[uid] = {
+            'kw': kw,
+            'chat_id': chat_id,
+            'forced_mode': 'MAIL_FILTERED'
+        }
+        await e.reply(
+            f"📧 **MAIL:PASS Filtrado** — `{kw}`\n\n"
+            f"🚫 Excluidos: gmail.com, outlook.com, yahoo.com, hotmail.com\n\n"
+            f"⏱️ **Selecciona el rango de tiempo:**",
+            buttons=Keyboards.ma_time(),
             parse_mode='md'
         )
 
