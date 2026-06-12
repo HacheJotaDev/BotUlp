@@ -10,7 +10,6 @@
 """
 
 import imaplib
-import socket
 import threading
 import time
 from pathlib import Path
@@ -19,8 +18,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from logger_setup import logger
 
-TIMEOUT = 10
-socket.setdefaulttimeout(TIMEOUT)
+# Timeout por conexión IMAP (NO usar socket.setdefaulttimeout — es global)
+IMAP_TIMEOUT = 10
 
 # Máximo de hilos concurrentes para IMAP
 MAX_IMAP_WORKERS = 30
@@ -30,7 +29,10 @@ _write_lock = threading.Lock()
 
 
 def _detectar_tipo(correo: str) -> str:
-    """Detectar tipo de correo según dominio."""
+    """Detectar tipo de correo según dominio.
+    Sin DNS lookup — solo clasificación por dominio conocido.
+    Los demás se tratan como hosting y se intenta imap.<domain>.
+    """
     try:
         dominio = correo.split("@")[1].lower()
     except (IndexError, AttributeError):
@@ -40,11 +42,8 @@ def _detectar_tipo(correo: str) -> str:
         return "gmail"
     if dominio in ("hotmail.com", "outlook.com", "live.com", "msn.com"):
         return "outlook"
-    try:
-        socket.gethostbyname("imap." + dominio)
-        return "hosting"
-    except Exception:
-        return "desconocido"
+    # Todo lo demás: hosting — se intentará imap.<domain>
+    return "hosting"
 
 
 def _servidor_imap(tipo: str, dominio: str) -> str:
@@ -69,7 +68,8 @@ def _check_single(email: str, password: str) -> Tuple[bool, str, str]:
     imap_server = _servidor_imap(tipo, dominio)
 
     try:
-        imap = imaplib.IMAP4_SSL(imap_server, 993)
+        # Timeout por conexión, NO global
+        imap = imaplib.IMAP4_SSL(imap_server, 993, timeout=IMAP_TIMEOUT)
         imap.login(email, password)
         imap.select("INBOX")
         imap.logout()
@@ -138,8 +138,8 @@ def imap_check_file(input_path: Path, output_path: Path, progress_callback=None)
             with _write_lock:
                 checked += 1
 
-            # Callback de progreso cada 5 combos
-            if progress_callback and checked % 5 == 0:
+            # Callback de progreso cada 3 combos (más frecuente para mejor UX)
+            if progress_callback and checked % 3 == 0:
                 try:
                     progress_callback(checked, total, len(hits_list))
                 except Exception:

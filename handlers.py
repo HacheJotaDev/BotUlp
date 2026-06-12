@@ -406,7 +406,7 @@ def register_handlers(bot_client):
                 parse_mode='md'
             )
 
-        # Descargar el archivo
+        # Mensaje inicial de progreso
         status_msg = await e.reply(
             UI.text("imap_processing", lang, 0, "?", 0),
             parse_mode='md'
@@ -441,7 +441,16 @@ def register_handlers(bot_client):
                 shutil.rmtree(temp_dir, ignore_errors=True)
                 return
 
-            # Callback de progreso
+            # Actualizar mensaje con el total real
+            await status_msg.edit(
+                UI.text("imap_processing", lang, 0, total, 0),
+                parse_mode='md'
+            )
+
+            # Capturar el event loop del hilo principal ANTES del executor
+            main_loop = asyncio.get_running_loop()
+
+            # Callback de progreso — thread-safe
             progress_data = {'last_edit': 0}
 
             def progress_cb(checked, tot, hits):
@@ -450,21 +459,23 @@ def register_handlers(bot_client):
                 if now - progress_data['last_edit'] < 3:
                     return
                 progress_data['last_edit'] = now
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        asyncio.ensure_future(
-                            status_msg.edit(
-                                UI.text("imap_processing", lang, checked, tot, hits),
-                                parse_mode='md'
-                            )
+
+                async def _update_msg():
+                    try:
+                        await status_msg.edit(
+                            UI.text("imap_processing", lang, checked, tot, hits),
+                            parse_mode='md'
                         )
-                except Exception:
-                    pass
+                    except Exception:
+                        pass
+
+                # Usar call_soon_threadsafe para agendar la corrutina desde un hilo
+                main_loop.call_soon_threadsafe(
+                    lambda: asyncio.ensure_future(_update_msg(), loop=main_loop)
+                )
 
             # Ejecutar IMAP check en executor (no bloquear el event loop)
-            loop = asyncio.get_running_loop()
-            stats = await loop.run_in_executor(
+            stats = await main_loop.run_in_executor(
                 None,
                 lambda: imap_check_file(
                     Path(input_path), Path(output_path),
