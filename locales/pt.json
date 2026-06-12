@@ -26,5 +26,10 @@
     "ma_intro": "╭───✦ 📧 MAIL ACCESS\n├● 🚫 Sem: gmail, outlook, yahoo, hotmail\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n⏱️ **Selecione o período de tempo:**",
     "ma_searching": "⚙️ **Buscando todos os emails...**\n\n📧 MAIL ACCESS\n🚫 Sem: gmail, outlook, yahoo, hotmail\n⠋ Processando",
     "ma_completed": "╭───✦ 📧 MAIL ACCESS\n├● 🔍 Todos os emails\n├● 📊 Resultados: `{}`\n├● ⏱️ Tempo: `{:.1f}s`\n├● 🚫 Sem: gmail, outlook, yahoo, hotmail\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
-    "ma_no_results": "╭───✦ ⚠️ SEM RESULTADOS\n├● Nenhum email filtrado encontrado no período selecionado\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+    "ma_no_results": "╭───✦ ⚠️ SEM RESULTADOS\n├● Nenhum email filtrado encontrado no período selecionado\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "imap_intro": "╭───✦ 📧 IMAP CHECKER\n├● Responda a um arquivo .txt com mail:pass\n├● Uso: responder ao arquivo + /imap\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "imap_no_file": "╭───✦ ❌ IMAP CHECKER\n├● Responda a um arquivo .txt com combos mail:pass\n├● Exemplo: responder ao arquivo + /imap\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "imap_processing": "⚙️ **IMAP Check em andamento...**\n\n📧 Verificando combos\n📊 Progresso: `{}/{}` | Hits: `{}`\n⠋ Processando",
+    "imap_completed": "╭───✦ 📧 IMAP CHECK\n├● 📊 Total: `{}`\n├● ✅ Hits: `{}`\n├● ❌ Bads: `{}`\n├● ⏱️ Tempo: `{:.1f}s`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "imap_no_hits": "╭───✦ 📧 IMAP CHECK\n├● 📊 Total: `{}`\n├● ❌ 0 Hits encontrados\n├● ⏱️ Tempo: `{:.1f}s`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
 }

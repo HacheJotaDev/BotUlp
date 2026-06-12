@@ -195,6 +195,39 @@ class LocaleManager:
                 "├● No hay correos filtrados en el rango seleccionado\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
+            "imap_intro": (
+                "╭───✦ 📧 IMAP CHECKER\n"
+                "├● Responde a un archivo .txt con mail:pass\n"
+                "├● Usa: responder a archivo + /imap\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
+            "imap_no_file": (
+                "╭───✦ ❌ IMAP CHECKER\n"
+                "├● Responde a un archivo .txt con combos mail:pass\n"
+                "├● Ejemplo: responder a archivo + /imap\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
+            "imap_processing": (
+                "⚙️ **IMAP Check en progreso...**\n\n"
+                "📧 Chequeando combos\n"
+                "📊 Progreso: `{}/{}` | Hits: `{}`\n"
+                "⠋ Procesando"
+            ),
+            "imap_completed": (
+                "╭───✦ 📧 IMAP CHECK\n"
+                "├● 📊 Total: `{}`\n"
+                "├● ✅ Hits: `{}`\n"
+                "├● ❌ Bads: `{}`\n"
+                "├● ⏱️ Tiempo: `{:.1f}s`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
+            "imap_no_hits": (
+                "╭───✦ 📧 IMAP CHECK\n"
+                "├● 📊 Total: `{}`\n"
+                "├● ❌ 0 Hits encontrados\n"
+                "├● ⏱️ Tiempo: `{:.1f}s`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
         }
 
         # Cargar archivos de locale externos

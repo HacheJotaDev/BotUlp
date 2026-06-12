@@ -14,6 +14,9 @@ import re
 import asyncio
 import subprocess
 import time
+import tempfile
+import shutil
+from pathlib import Path
 
 from telethon import events
 from telethon.errors import (
@@ -29,6 +32,7 @@ from locale import locale_manager
 from ui import UI, Keyboards
 from utils import normalizar_url, get_file_counts, format_size, format_time
 from search import search_engine, search_ma
+from imap_checker import imap_check_file
 from download import (
     DownloadProgressTracker,
     process_pending_downloads, realtime_listener, mover_y_limpiar_archivos
@@ -184,11 +188,11 @@ def _get_commands_by_role(role: UserRole) -> str:
     if role == UserRole.FREE:
         return "/start │ /canjear"
     elif role == UserRole.VIP:
-        return "/start │ /url │ /ma │ /canjear"
+        return "/start │ /url │ /ma │ /imap │ /canjear"
     elif role == UserRole.SELLER:
-        return "/start │ /url │ /ma"
+        return "/start │ /url │ /ma │ /imap"
     elif role == UserRole.ADMIN:
-        return "/start │ /url │ /ma │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /updateBot"
+        return "/start │ /url │ /ma │ /imap │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /updateBot"
     return "/start │ /canjear"
 
 
@@ -368,6 +372,139 @@ def register_handlers(bot_client):
             buttons=Keyboards.ma_time(),
             parse_mode='md'
         )
+
+    # ═════════════════════════════════════════════════════════════
+    # COMANDO /imap — IMAP Checker (responder a archivo mail:pass)
+    # Solo VIP / SELLER / ADMIN
+    # ═════════════════════════════════════════════════════════════
+
+    @bot_client.on(events.NewMessage(pattern=r"/imap$"))
+    async def cmd_imap(e):
+        """IMAP Checker — responde a un archivo .txt con mail:pass y devuelve hits."""
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        role = get_user_role(uid)
+
+        # Si estamos en un grupo que no está permitido, no responder
+        if e.is_group and e.chat_id not in state.allowed_groups:
+            return
+
+        # Solo VIP, SELLER, ADMIN
+        if role == UserRole.FREE:
+            return await e.reply(
+                UI.text("access_denied", lang),
+                buttons=Keyboards.back() if e.is_private else None,
+                parse_mode='md'
+            )
+
+        # Verificar que es respuesta a un mensaje con archivo
+        reply = await e.get_reply_message()
+        if not reply or not reply.document:
+            return await e.reply(
+                UI.text("imap_no_file", lang),
+                parse_mode='md'
+            )
+
+        # Descargar el archivo
+        status_msg = await e.reply(
+            UI.text("imap_processing", lang, 0, "?", 0),
+            parse_mode='md'
+        )
+
+        try:
+            # Descargar archivo a temporales
+            temp_dir = tempfile.mkdtemp(prefix="imap_")
+            input_path = os.path.join(temp_dir, "combos.txt")
+            output_path = os.path.join(temp_dir, "hits.txt")
+
+            await state.bot.download_media(reply, file=input_path)
+
+            # Verificar que se descargó
+            if not os.path.isfile(input_path):
+                await status_msg.edit(
+                    UI.text("imap_no_file", lang),
+                    parse_mode='md'
+                )
+                return
+
+            # Contar combos
+            with open(input_path, 'r', encoding='utf-8', errors='ignore') as f:
+                total = sum(1 for line in f if ":" in line.strip())
+
+            if total == 0:
+                await status_msg.edit(
+                    UI.text("imap_no_file", lang),
+                    parse_mode='md'
+                )
+                # Limpiar
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                return
+
+            # Callback de progreso
+            progress_data = {'last_edit': 0}
+
+            def progress_cb(checked, tot, hits):
+                now = time.time()
+                # Solo actualizar cada 3 segundos
+                if now - progress_data['last_edit'] < 3:
+                    return
+                progress_data['last_edit'] = now
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        asyncio.ensure_future(
+                            status_msg.edit(
+                                UI.text("imap_processing", lang, checked, tot, hits),
+                                parse_mode='md'
+                            )
+                        )
+                except Exception:
+                    pass
+
+            # Ejecutar IMAP check en executor (no bloquear el event loop)
+            loop = asyncio.get_running_loop()
+            stats = await loop.run_in_executor(
+                None,
+                lambda: imap_check_file(
+                    Path(input_path), Path(output_path),
+                    progress_callback=progress_cb
+                )
+            )
+
+            # Enviar resultados
+            if stats['hits'] > 0 and os.path.isfile(output_path):
+                caption = UI.text("imap_completed", lang, stats['total'], stats['hits'], stats['bads'], stats['elapsed'])
+                await state.bot.send_file(
+                    e.chat_id, output_path,
+                    caption=caption,
+                    parse_mode='md'
+                )
+                # Borrar mensaje de progreso
+                try:
+                    await status_msg.delete()
+                except Exception:
+                    pass
+            else:
+                await status_msg.edit(
+                    UI.text("imap_no_hits", lang, stats['total'], stats['elapsed']),
+                    parse_mode='md'
+                )
+
+            # Limpiar temporales
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+        except Exception as exc:
+            logger.error(f"Error en /imap: {exc}")
+            await status_msg.edit(
+                f"❌ **Error en IMAP Check**\n\n`{str(exc)[:200]}`",
+                parse_mode='md'
+            )
+            # Limpiar temporales
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception:
+                pass
 
     # --- BROADCAST ---
 
