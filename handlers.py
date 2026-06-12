@@ -364,8 +364,8 @@ def register_handlers(bot_client):
         # Guardar chat_id para enviar resultados al lugar correcto
         state.temp_state[uid] = {'chat_id': e.chat_id}
         await e.reply(
-            "📧 **MAIL:PASS Filtrado — Todos los correos**\n\n"
-            "🚫 Excluidos: gmail.com, outlook.com, yahoo.com, hotmail.com\n\n"
+            "📧 **MAIL ACCESS**\n\n"
+            "🚫 Sin: gmail, outlook, yahoo, hotmail (incluye ISO)\n\n"
             "⏱️ **Selecciona el rango de tiempo:**",
             buttons=Keyboards.ma_time(),
             parse_mode='md'
@@ -654,8 +654,8 @@ def register_handlers(bot_client):
 
                 msg = await e.edit(
                     f"⚙️ **Buscando TODOS los correos...**\n\n"
-                    f"📧 Modo: MAIL:PASS Filtrado\n"
-                    f"🚫 Sin gmail/outlook/yahoo/hotmail\n"
+                    f"📧 MAIL ACCESS\n"
+                    f"🚫 Sin: gmail, outlook, yahoo, hotmail (incluye ISO)\n"
                     f"⠋ Procesando",
                     buttons=None,
                     parse_mode='md'
@@ -677,12 +677,11 @@ def register_handlers(bot_client):
                             count += 1
 
                     caption = (
-                        f"╭───✦ 📧 **BÚSQUEDA COMPLETADA**\n"
+                        f"╭───✦ 📧 **MAIL ACCESS**\n"
                         f"├● 🔍 **Todos los correos**\n"
-                        f"├● 📄 Formato: `{tipo_texto}`\n"
                         f"├● 📊 Resultados: `{count}`\n"
                         f"├● ⏱️ Tiempo: `{elapsed:.1f}s`\n"
-                        f"├● 🚫 Sin: gmail, outlook, yahoo, hotmail\n"
+                        f"├● 🚫 Sin: gmail, outlook, yahoo, hotmail (incluye ISO)\n"
                         f"╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
                     )
 

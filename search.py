@@ -32,12 +32,14 @@ executor = ThreadPoolExecutor(
 _EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
 
 # Dominios excluidos para el modo MAIL_FILTERED (/ma)
-EXCLUDED_DOMAINS = {
-    "@gmail.com",
-    "@outlook.com",
-    "@yahoo.com",
-    "@hotmail.com",
-}
+# Se usa base domain: @yahoo. excluye @yahoo.com, @yahoo.com.br, @yahoo.es, etc.
+# Gmail no tiene ISO variants así que solo @gmail.com
+EXCLUDED_DOMAIN_PREFIXES = (
+    "@gmail.",
+    "@outlook.",
+    "@yahoo.",
+    "@hotmail.",
+)
 
 # Límites para evitar que dominios populares cuelguen el bot
 MAX_RESULTS_PER_FILE = 10000    # Máximo de resultados únicos por archivo
@@ -151,9 +153,11 @@ def _search_file(path: Path, kw: str, modo: SearchMode, cancel_event: threading.
                             elif modo == SearchMode.MAIL_FILTERED:
                                 if _EMAIL_RE.match(user):
                                     user_lower = user.lower()
-                                    domain_part = user_lower[user_lower.index("@"):]
-                                    if domain_part not in EXCLUDED_DOMAINS:
-                                        res_set.add(f"{user}:{password}")
+                                    at_idx = user_lower.find("@")
+                                    if at_idx != -1:
+                                        domain_part = user_lower[at_idx:]
+                                        if not domain_part.startswith(EXCLUDED_DOMAIN_PREFIXES):
+                                            res_set.add(f"{user}:{password}")
                             elif modo == SearchMode.USERPASS:
                                 if "@" not in user:
                                     res_set.add(f"{user}:{password}")
@@ -237,7 +241,7 @@ def _search_file_ma(path: Path, cancel_event: threading.Event = None) -> List[st
                         at_idx = user_lower.find("@")
                         if at_idx != -1:
                             domain_part = user_lower[at_idx:]
-                            if domain_part not in EXCLUDED_DOMAINS:
+                            if not domain_part.startswith(EXCLUDED_DOMAIN_PREFIXES):
                                 res_set.add(f"{user}:{password}")
 
                 except Exception:
