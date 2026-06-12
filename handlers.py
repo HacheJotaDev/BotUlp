@@ -149,7 +149,7 @@ async def cmd_update_bot(event):
             if pm2_check.returncode == 0:
                 logger.info("Reiniciando via pm2...")
                 subprocess.Popen(
-                    ['pm2', 'restart', 'ulp-bot'],
+                    ['pm2', 'restart', 'botulp'],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                 )
                 import sys
