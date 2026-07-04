@@ -16,11 +16,10 @@ from logger_setup import logger
 
 
 class Database:
-    """Base de datos SQLite con WAL mode para máximo rendimiento concurrente."""
+    """Base de datos SQLite con WAL mode para maximo rendimiento concurrente."""
 
     def __init__(self, db_path: Path):
         self.db_path = db_path
-        # FIX #7/#21: Removed unused asyncio.Lock (all DB ops are sync)
         self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
@@ -38,7 +37,8 @@ class Database:
             search_count INTEGER DEFAULT 0,
             language TEXT DEFAULT 'es',
             first_seen TEXT DEFAULT CURRENT_TIMESTAMP,
-            last_active TEXT DEFAULT CURRENT_TIMESTAMP
+            last_active TEXT DEFAULT CURRENT_TIMESTAMP,
+            free_search_used INTEGER DEFAULT 0
         )""")
         c.execute("""CREATE TABLE IF NOT EXISTS keys (
             key_code TEXT PRIMARY KEY,
@@ -69,14 +69,15 @@ class Database:
             ('language', "ALTER TABLE users ADD COLUMN language TEXT DEFAULT 'es'"),
             ('first_seen', "ALTER TABLE users ADD COLUMN first_seen TEXT DEFAULT CURRENT_TIMESTAMP"),
             ('last_active', "ALTER TABLE users ADD COLUMN last_active TEXT DEFAULT CURRENT_TIMESTAMP"),
+            ('free_search_used', "ALTER TABLE users ADD COLUMN free_search_used INTEGER DEFAULT 0"),
         ]
         for col_name, alter_sql in migrations:
             if col_name not in columns:
-                logger.info(f"Migrando DB: añadiendo columna '{col_name}'...")
+                logger.info(f"Migrando DB: agregando columna '{col_name}'...")
                 try:
                     c.execute(alter_sql)
                     self.conn.commit()
-                    logger.info(f"Columna '{col_name}' añadida correctamente.")
+                    logger.info(f"Columna '{col_name}' agregada correctamente.")
                 except Exception as e:
                     logger.error(f"Error migrando DB: {e}")
 
@@ -96,7 +97,8 @@ class Database:
             return {
                 'user_id': uid, 'role': 'FREE', 'vip_expiry': None,
                 'search_count': 0, 'language': 'es',
-                'first_seen': now, 'last_active': now
+                'first_seen': now, 'last_active': now,
+                'free_search_used': 0
             }
         try:
             c.execute(
@@ -107,6 +109,20 @@ class Database:
         except Exception:
             pass
         return dict(row)
+
+    def is_new_user(self, uid: int) -> bool:
+        """Verificar si el usuario es nuevo (nunca ha usado su busqueda gratis)."""
+        user = self.get_user(uid)
+        return user.get('free_search_used', 0) == 0
+
+    def mark_free_search_used(self, uid: int):
+        """Marcar que el usuario ya uso su busqueda gratis."""
+        c = self.conn.cursor()
+        c.execute(
+            "UPDATE users SET free_search_used = 1, search_count = search_count + 1 WHERE user_id = ?",
+            (uid,)
+        )
+        self.conn.commit()
 
     def set_language(self, uid: int, lang: str):
         c = self.conn.cursor()
@@ -145,7 +161,6 @@ class Database:
         if not row:
             return False
         days = row['days']
-        # Extender VIP existente: si ya es VIP con tiempo restante, sumar días
         now = datetime.now(timezone.utc)
         c.execute("SELECT vip_expiry FROM users WHERE user_id = ?", (uid,))
         user_row = c.fetchone()
@@ -154,7 +169,6 @@ class Database:
                 existing_exp = datetime.fromisoformat(user_row['vip_expiry'])
                 if existing_exp.tzinfo is None:
                     existing_exp = existing_exp.replace(tzinfo=timezone.utc)
-                # Si aún no expira, partir desde la fecha de expiración actual
                 if existing_exp > now:
                     base = existing_exp
                 else:
@@ -189,13 +203,16 @@ class Database:
         total_searches = c.fetchone()[0] or 0
         c.execute("SELECT COUNT(*) FROM users")
         total_users = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM users WHERE free_search_used = 0")
+        new_users = c.fetchone()[0]
         return {
             'vips': vips, 'sellers': sellers,
-            'searches': total_searches, 'total_users': total_users
+            'searches': total_searches, 'total_users': total_users,
+            'new_users': new_users
         }
 
     def cleanup_expired_vips(self) -> int:
-        """Cambiar a FREE los VIPs cuya fecha de expiración ya pasó. Retorna la cantidad limpiada."""
+        """Cambiar a FREE los VIPs cuya fecha de expiracion ya paso. Retorna la cantidad limpiada."""
         c = self.conn.cursor()
         now_iso = datetime.now(timezone.utc).isoformat()
         c.execute(

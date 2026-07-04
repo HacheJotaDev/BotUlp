@@ -13,7 +13,7 @@ from logger_setup import logger
 
 
 class LocaleManager:
-    """Gestor de idiomas con soporte de fallback a español."""
+    """Gestor de idiomas con soporte de fallback a espanol."""
 
     def __init__(self, locales_dir: Path):
         self.locales_dir = locales_dir
@@ -22,11 +22,30 @@ class LocaleManager:
         self._load_translations()
 
     def _load_translations(self):
-        # Español base integrado
+        # Espanol base integrado
         self.translations['es'] = {
+            "welcome_new": (
+                "╭───✦ ☾ HJ ULP PRO ☽ 彡\n"
+                "├● ▸ Busqueda ultra-rapida (paralela)\n"
+                "├● ▸ Bases actualizadas 24/7\n"
+                "├● ▸ Privacidad & anonimato total\n"
+                "├● ▸ Data lista para usar\n"
+                "╰───✦ 🚀 by @hjofc20\n"
+                "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n"
+                "╭───✦ 🎁 BIENVENIDO NUEVO USUARIO\n"
+                "├● Tienes **1 busqueda gratis** para probar\n"
+                "├● Despues necesitaras VIP para seguir buscando\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n"
+                "╭───✦ COMANDOS\n"
+                "├● │ {}\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
+                "🌟 Soporte:\n"
+                "  ✦ @hjofc20\n\n"
+                "👤 **Rol:** `{}` │ 📊 **Busquedas:** `{}`"
+            ),
             "welcome": (
                 "╭───✦ ☾ HJ ULP PRO ☽ 彡\n"
-                "├● ▸ Búsqueda ultra-rápida (paralela)\n"
+                "├● ▸ Busqueda ultra-rapida (paralela)\n"
                 "├● ▸ Bases actualizadas 24/7\n"
                 "├● ▸ Privacidad & anonimato total\n"
                 "├● ▸ Data lista para usar\n"
@@ -37,23 +56,23 @@ class LocaleManager:
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
                 "🌟 Soporte:\n"
                 "  ✦ @hjofc20\n\n"
-                "👤 **Rol:** `{}` │ 📊 **Búsquedas:** `{}`"
+                "👤 **Rol:** `{}` │ 📊 **Busquedas:** `{}`"
             ),
             "buy_vip_info": (
                 "╭───✦ 💰 COMPRAR VIP ACCESS 💰\n"
-                "├● ⟡ 1 día  »  6$\n"
-                "├● ⟡ 3 días »  10$\n"
-                "├● ⟡ 7 días »  25$\n"
-                "├● ⟡ 30 días » 100$\n"
+                "├● ⟡ 1 dia  »  6$\n"
+                "├● ⟡ 3 dias »  10$\n"
+                "├● ⟡ 7 dias »  25$\n"
+                "├● ⟡ 30 dias »  100$\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
                 "📬 **CONTACTO:**\n{}"
             ),
             "file_management": (
-                "╭───✦ 📂 GESTIÓN DE ARCHIVOS\n"
+                "╭───✦ 📂 GESTION DE ARCHIVOS\n"
                 "├● 📊 **Base de Datos:**\n"
                 "├● 📁 Total: `{}` archivos\n"
-                "├● ⚡ Últimas 24h: `{}`\n"
-                "├● 🗄️ Histórico: `{}`\n"
+                "├● ⚡ Ultimas 24h: `{}`\n"
+                "├● 🗄️ Historico: `{}`\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n"
                 "╭───✦ 🔄 DESCARGAS\n"
                 "├● ♻️ Auto-Download: `{}`\n"
@@ -67,7 +86,7 @@ class LocaleManager:
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
             "search_step_time": (
-                "╭───✦ 🔍 BÚSQUEDA\n"
+                "╭───✦ 🔍 BUSQUEDA\n"
                 "├● 🔍 **Dominio:** `{}`\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
                 "⏳ Selecciona el rango de tiempo:"
@@ -75,11 +94,17 @@ class LocaleManager:
             "loading": "⚙️ **Procesando...**",
             "access_denied": (
                 "╭───✦ 🚫 ACCESO DENEGADO\n"
-                "├● Solo usuarios VIP pueden realizar búsquedas\n"
+                "├● Tu busqueda gratis ya fue usada\n"
+                "├● Necesitas VIP para seguir buscando\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
+            "access_denied_no_free": (
+                "╭───✦ 🚫 ACCESO DENEGADO\n"
+                "├● Solo usuarios VIP pueden realizar busquedas\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
             "ask_domain": (
-                "╭───✦ 🔍 NUEVA BÚSQUEDA\n"
+                "╭───✦ 🔍 NUEVA BUSQUEDA\n"
                 "├● Escribe el dominio a buscar\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
@@ -90,22 +115,32 @@ class LocaleManager:
                 "├● 🆔 ID: `{}`\n"
                 "├● 🎖 Rango: `{}`\n"
                 "├● 📅 Expira: `{}`\n"
-                "├● 📊 Búsquedas: `{}`\n"
+                "├● 📊 Busquedas: `{}`\n"
+                "├● 🔍 Busqueda gratis: `{}`\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
             "search_completed": (
-                "╭───✦ ✅ BÚSQUEDA COMPLETADA\n"
+                "╭───✦ ✅ BUSQUEDA COMPLETADA\n"
                 "├● 🔍 Dominio: `{}`\n"
                 "├● 📑 Tipo: `{}`\n"
                 "├● 📊 Resultados: `{}`\n"
                 "├● ⏱️ Tiempo: `{:.1f}s`\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
+            "search_completed_free": (
+                "╭───✦ ✅ BUSQUEDA COMPLETADA\n"
+                "├● 🔍 Dominio: `{}`\n"
+                "├● 📑 Tipo: `{}`\n"
+                "├● 📊 Resultados: `{}`\n"
+                "├● ⏱️ Tiempo: `{:.1f}s`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
+                "🎁 Esta fue tu **busqueda gratis**. Para seguir buscando, compra VIP."
+            ),
             "download_progress": "📥 Descargando: `{}`\n\n📊 Progreso: `{}`\n⚡ Velocidad: `{}`\n⏱️ ETA: `{}`",
-            "redeem_success": "🎉 **¡Felicidades!**\n\nTu cuenta VIP ha sido activada exitosamente.",
+            "redeem_success": "🎉 **Felicidades!**\n\nTu cuenta VIP ha sido activada exitosamente.",
             "canjear_invalid": (
-                "╭───✦ ❌ KEY INVÁLIDA\n"
-                "├● El código ingresado no es válido o ya fue usado\n"
+                "╭───✦ ❌ KEY INVALIDA\n"
+                "├● El codigo ingresado no es valido o ya fue usado\n"
                 "├● Usa: /canjear HJ-XXXXXXXXXXXX\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
@@ -123,25 +158,27 @@ class LocaleManager:
             ),
             "key_generated": (
                 "╭───✦ ✅ KEY GENERADA EXITOSAMENTE\n"
-                "├● 🔑 Código:\n`{}`\n"
+                "├● 🔑 Codigo:\n`{}`\n"
                 "├● 🔗 Link de canje:\n{}\n"
-                "├● 📅 Días: {}\n"
+                "├● 📅 Dias: {}\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
             "admin_panel": (
                 "╭───✦ 🔐 PANEL ADMIN\n"
                 "├● 👑 VIPs: `{}`\n"
                 "├● 💼 Sellers: `{}`\n"
-                "├● 🔍 Búsquedas: `{}`\n"
+                "├● 🔍 Busquedas: `{}`\n"
                 "├● 👥 Total usuarios: `{}`\n"
+                "├● 🆕 Nuevos (sin buscar): `{}`\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
             "stats_global": (
-                "╭───✦ 📊 ESTADÍSTICAS GLOBALES\n"
+                "╭───✦ 📊 ESTADISTICAS GLOBALES\n"
                 "├● 👑 Usuarios VIP: `{}`\n"
                 "├● 💼 Sellers: `{}`\n"
-                "├● 🔍 Búsquedas Totales: `{}`\n"
+                "├● 🔍 Busquedas Totales: `{}`\n"
                 "├● 👥 Total Usuarios: `{}`\n"
+                "├● 🆕 Nuevos (sin buscar): `{}`\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
             "broadcast_done": (
@@ -167,32 +204,7 @@ class LocaleManager:
             ),
             "update_bot_uptodate": (
                 "╭───✦ ✅ BOT ACTUALIZADO\n"
-                "├● Ya está en la última versión\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "ma_intro": (
-                "╭───✦ 📧 MAIL ACCESS\n"
-                "├● 🚫 Sin: gmail, outlook, yahoo, hotmail\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
-                "⏱️ **Selecciona el rango de tiempo:**"
-            ),
-            "ma_searching": (
-                "⚙️ **Buscando todos los correos...**\n\n"
-                "📧 MAIL ACCESS\n"
-                "🚫 Sin: gmail, outlook, yahoo, hotmail\n"
-                "⠋ Procesando"
-            ),
-            "ma_completed": (
-                "╭───✦ 📧 MAIL ACCESS\n"
-                "├● 🔍 Todos los correos\n"
-                "├● 📊 Resultados: `{}`\n"
-                "├● ⏱️ Tiempo: `{:.1f}s`\n"
-                "├● 🚫 Sin: gmail, outlook, yahoo, hotmail\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "ma_no_results": (
-                "╭───✦ ⚠️ SIN RESULTADOS\n"
-                "├● No hay correos filtrados en el rango seleccionado\n"
+                "├● Ya esta en la ultima version\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
             "imap_intro": (

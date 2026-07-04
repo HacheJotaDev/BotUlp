@@ -22,7 +22,6 @@ class SearchMode(Enum):
     ULP = "ULP"
     MAIL = "MAIL:PASS"
     USERPASS = "USER:PASS"
-    MAIL_FILTERED = "MAIL:PASS(FILTERED)"
 
 
 def get_user_role(uid: int) -> UserRole:
@@ -37,15 +36,25 @@ def get_user_role(uid: int) -> UserRole:
         exp = user.get('vip_expiry')
         if exp:
             try:
-                # FIX #12: fromisoformat() no parsea timezone en Python <3.11
-                # Reemplazar +00:00 con Z para compatibilidad, o usar fromisoformat directamente
-                exp_clean = exp.replace('+00:00', '+00:00')
-                dt = datetime.fromisoformat(exp_clean)
+                dt = datetime.fromisoformat(exp)
                 if dt.tzinfo is None:
-                    # Si no tiene timezone, asumir UTC
                     dt = dt.replace(tzinfo=timezone.utc)
                 if datetime.now(timezone.utc) < dt:
                     return UserRole.VIP
             except Exception:
                 pass
     return UserRole.FREE
+
+
+def can_search(uid: int) -> bool:
+    """Verificar si un usuario puede realizar busquedas.
+    
+    Usuarios VIP, SELLER y ADMIN siempre pueden.
+    Usuarios FREE pueden si aun no usaron su busqueda gratis.
+    """
+    role = get_user_role(uid)
+    if role in (UserRole.VIP, UserRole.SELLER, UserRole.ADMIN):
+        return True
+    if role == UserRole.FREE:
+        return db.is_new_user(uid)
+    return False

@@ -13,8 +13,6 @@ from roles import UserRole
 class UI:
     @staticmethod
     def text(key: str, lang: str = 'es', *args) -> str:
-        # FIX #6: locale_manager.get() already calls .format(*args), 
-        # no need to call it again (was causing ValueError on braces in text)
         localized = locale_manager.get(key, lang, *args)
         if localized:
             return localized
@@ -23,34 +21,36 @@ class UI:
 
 class Keyboards:
     @staticmethod
-    def main(role: UserRole, lang: str = 'es'):
+    def main(role: UserRole, lang: str = 'es', has_free_search: bool = False):
         lang_btn = [Button.inline("🌐 Idioma / Language", b"ch_lang")]
 
         if role == UserRole.FREE:
-            return [
-                [Button.inline("💰 COMPRAR VIP", b"buy_vip_info")],
-                [Button.inline("🔑 CANJEAR KEY", b"canjear_key")],
-                [Button.inline("👤 Mi Cuenta", b"my_account")],
-                lang_btn
-            ]
+            buttons = []
+            if has_free_search:
+                buttons.append([Button.inline("🔍 BÚSQUEDA GRATIS (1/1)", b"search_init")])
+            buttons.append([Button.inline("💰 COMPRAR VIP", b"buy_vip_info")])
+            buttons.append([Button.inline("🔑 CANJEAR KEY", b"canjear_key")])
+            buttons.append([Button.inline("👤 MI CUENTA", b"my_account")])
+            buttons.append(lang_btn)
+            return buttons
         elif role == UserRole.VIP:
             return [
                 [Button.inline("🔍 NUEVA BÚSQUEDA", b"search_init")],
-                [Button.inline("👤 Mi Cuenta", b"my_account")],
+                [Button.inline("👤 MI CUENTA", b"my_account")],
                 lang_btn
             ]
         elif role == UserRole.SELLER:
             return [
                 [Button.inline("🔍 NUEVA BÚSQUEDA", b"search_init")],
                 [Button.inline("🔑 GENERAR KEY", b"seller_genkey")],
-                [Button.inline("👤 Mi Cuenta", b"my_account")]
+                [Button.inline("👤 MI CUENTA", b"my_account")]
             ]
         elif role == UserRole.ADMIN:
             return [
                 [Button.inline("🔍 NUEVA BÚSQUEDA", b"search_init")],
                 [Button.inline("🔐 PANEL ADMIN", b"admin_enter")],
                 [Button.inline("📂 GESTIÓN ARCHIVOS", b"adm_files")],
-                [Button.inline("👤 Mi Cuenta", b"my_account")]
+                [Button.inline("👤 MI CUENTA", b"my_account")]
             ]
         return []
 
@@ -60,16 +60,6 @@ class Keyboards:
             [Button.inline("⚡ Últimas 24h", b"time_24h")],
             [Button.inline("🗂 24h + Antiguos", b"time_all")],
             [Button.inline("📅 Solo Antiguos", b"time_old")],
-            [Button.inline("❌ Cancelar", b"back_main")]
-        ]
-
-    @staticmethod
-    def ma_time():
-        """Teclado de tiempo para /ma (MAIL:PASS filtrado)."""
-        return [
-            [Button.inline("⚡ Últimas 24h", b"ma_time_24h")],
-            [Button.inline("🗂 24h + Antiguos", b"ma_time_all")],
-            [Button.inline("📅 Solo Antiguos", b"ma_time_old")],
             [Button.inline("❌ Cancelar", b"back_main")]
         ]
 

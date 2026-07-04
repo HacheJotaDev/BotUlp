@@ -1,16 +1,17 @@
 """
 ═══════════════════════════════════════════════════════════════
-  HJ ULP EXTRACTOR BOT — Handlers Module v3.3
+  HJ ULP EXTRACTOR BOT — Handlers Module v3.5
 ═══════════════════════════════════════════════════════════════
-  • Comandos: /start, /url, /vip, /seller, /gp, etc.
+  • Comandos: /start, /url, /vip, /seller, /gp, /imap, etc.
   • Callbacks: todos los botones inline
-  • /updateBot: actualización remota desde Telegram
+  • /updateBot: actualizacion remota desde Telegram
   • Broadcast: /bc, /bcvip
+  • Sistema de busqueda gratis para nuevos usuarios
+  • v3.5: Eliminado /ma, codigo optimizado
 ═══════════════════════════════════════════════════════════════
 """
 
 import os
-import re
 import asyncio
 import subprocess
 import time
@@ -27,20 +28,17 @@ from telethon.errors import (
 from config import config
 from logger_setup import logger
 from database import db
-from roles import UserRole, SearchMode, get_user_role
+from roles import UserRole, SearchMode, get_user_role, can_search
 from locale import locale_manager
 from ui import UI, Keyboards
 from utils import normalizar_url, get_file_counts, format_size, format_time
-from search import search_engine, search_ma
+from search import search_engine
 from imap_checker import imap_check_file
 from download import (
     DownloadProgressTracker,
     process_pending_downloads, realtime_listener, mover_y_limpiar_archivos
 )
 
-# FIX #1,#2,#3: Usar `import state` en vez de `from state import X`
-# Los `from state import bot, userbot, auto_dl_queue, auto_download_enabled`
-# capturan None/False en import time y NUNCA se actualizan.
 import state
 
 # ═════════════════════════════════════════════════════════════
@@ -52,7 +50,7 @@ LOADING_FRAMES = [
 ]
 
 async def animate_loading(msg, search_task: asyncio.Task, kw: str):
-    """Animación de carga elegante durante la búsqueda."""
+    """Animacion de carga elegante durante la busqueda."""
     i = 0
     while not search_task.done():
         frame = LOADING_FRAMES[i % len(LOADING_FRAMES)]
@@ -74,7 +72,6 @@ async def animate_loading(msg, search_task: asyncio.Task, kw: str):
 # COMANDO /updateBot
 # ═════════════════════════════════════════════════════════════
 
-# FIX #18: FakeEvent movido a nivel de módulo (no se recrea cada vez)
 class _FakeEvent:
     __slots__ = ('sender_id', '_reply')
     def __init__(self, sender_id, reply_func):
@@ -85,11 +82,7 @@ class _FakeEvent:
 
 
 async def cmd_update_bot(event):
-    """Actualizar el bot desde GitHub sin entrar al VPS.
-    
-    Usa pm2 restart cuando está disponible (mejor que os.execv).
-    Si pm2 no está, hace fallback a os.execv.
-    """
+    """Actualizar el bot desde GitHub sin entrar al VPS."""
     uid = event.sender_id
     if uid not in config.ADMIN_IDS:
         return
@@ -101,7 +94,6 @@ async def cmd_update_bot(event):
     )
 
     try:
-        # Git pull
         result = subprocess.run(
             ['git', 'pull', 'origin', 'main'],
             capture_output=True, text=True, timeout=60,
@@ -121,16 +113,14 @@ async def cmd_update_bot(event):
             )
             return
 
-        # Verificar si hubo cambios
         if "Already up to date" in output or "Already up-to-date" in output:
             await status_msg.edit(
                 "╭───✦ ✅ BOT ACTUALIZADO\n"
-                "├● Ya está en la última versión\n"
+                "├● Ya esta en la ultima version\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             )
             return
 
-        # Hubo cambios - reiniciar el bot
         await status_msg.edit(
             "╭───✦ ✅ BOT ACTUALIZADO\n"
             "├● 🔄 Cambios descargados\n"
@@ -138,10 +128,8 @@ async def cmd_update_bot(event):
             "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
         )
 
-        # Esperar 3 segundos para que el mensaje llegue
         await asyncio.sleep(3)
 
-        # Intentar reiniciar con pm2 (mejor para VPS)
         try:
             pm2_check = subprocess.run(
                 ['pm2', 'list'], capture_output=True, timeout=5
@@ -157,19 +145,18 @@ async def cmd_update_bot(event):
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
-        # Fallback: reiniciar usando os.execv (si no hay pm2)
         import sys
         os.execv(sys.executable, [sys.executable] + sys.argv)
 
     except subprocess.TimeoutExpired:
         await status_msg.edit(
             "╭───✦ ❌ ERROR AL ACTUALIZAR\n"
-            "├● 📄 `Timeout: git pull tardó demasiado`\n"
+            "├● 📄 `Timeout: git pull tardo demasiado`\n"
             "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
             parse_mode='md'
         )
     except SystemExit:
-        raise  # Permitir que sys.exit() funcione
+        raise
     except Exception as e:
         logger.error(f"Error en /updateBot: {e}")
         await status_msg.edit(
@@ -180,28 +167,106 @@ async def cmd_update_bot(event):
         )
 
 # ═════════════════════════════════════════════════════════════
-# HANDLERS DE COMANDOS
+# HELPERS
 # ═════════════════════════════════════════════════════════════
 
-def _get_commands_by_role(role: UserRole) -> str:
-    """Construir la lista de comandos disponibles según el rol del usuario."""
+def _get_commands_by_role(role: UserRole, has_free: bool = False) -> str:
+    """Construir la lista de comandos disponibles segun el rol del usuario."""
     if role == UserRole.FREE:
-        return "/start │ /canjear"
+        cmds = "/start │ /canjear"
+        if has_free:
+            cmds += " │ /url"
+        return cmds
     elif role == UserRole.VIP:
-        return "/start │ /url │ /ma │ /imap │ /canjear"
+        return "/start │ /url │ /imap │ /canjear"
     elif role == UserRole.SELLER:
-        return "/start │ /url │ /ma │ /imap"
+        return "/start │ /url │ /imap"
     elif role == UserRole.ADMIN:
-        return "/start │ /url │ /ma │ /imap │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /updateBot"
+        return "/start │ /url │ /imap │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /updateBot"
     return "/start │ /canjear"
 
+
+def _get_access_denied_text(lang: str) -> str:
+    """Obtener texto de acceso denegado segun idioma. Prioriza el mensaje de 'busqueda gratis usada'."""
+    key = "access_denied"
+    text = locale_manager.get(key, lang)
+    if text and text != key:
+        return text
+    return locale_manager.get("access_denied_no_free", lang) or locale_manager.get("access_denied", 'es')
+
+
+async def _check_search_access(uid: int, lang: str, is_group_allowed: bool, is_private: bool):
+    """Verificar si un usuario puede buscar. Retorna (allowed: bool, is_free_search: bool)."""
+    role = get_user_role(uid)
+
+    # VIP, SELLER, ADMIN siempre pueden (en privado o grupo permitido)
+    if role in (UserRole.VIP, UserRole.SELLER, UserRole.ADMIN):
+        return True, False
+
+    # FREE en grupo permitido
+    if role == UserRole.FREE and is_group_allowed and not is_private:
+        return True, False
+
+    # FREE con busqueda gratis disponible
+    if role == UserRole.FREE and db.is_new_user(uid):
+        return True, True
+
+    return False, False
+
+
+def _get_file_counts_display() -> tuple:
+    """Obtener conteos de archivos y estado de auto-download. Retorna (counts, auto_status, total_pending, active_count)."""
+    counts = get_file_counts()
+    auto_status = "ON" if state.auto_download_enabled else "OFF"
+    queue_count = 0
+    try:
+        if state.auto_dl_queue is not None:
+            queue_count = state.auto_dl_queue.qsize()
+    except Exception:
+        pass
+    total_pending = len(state.pending_downloads) + queue_count
+    active_count = len(state.active_downloads)
+    return counts, auto_status, total_pending, active_count
+
+
+async def _send_search_result(target_chat, result_file, caption, e=None, msg=None):
+    """Enviar archivo de resultados y limpiar."""
+    try:
+        await state.bot.send_file(
+            target_chat, result_file,
+            caption=caption,
+            parse_mode='md'
+        )
+    except Exception as ex:
+        logger.error(f"Error enviando resultado: {ex}")
+
+    # Borrar mensaje de "buscando..."
+    if e:
+        try:
+            await e.delete()
+        except Exception:
+            pass
+    elif msg:
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+
+    try:
+        os.remove(result_file)
+    except Exception:
+        pass
+
+
+# ═════════════════════════════════════════════════════════════
+# HANDLERS DE COMANDOS
+# ═════════════════════════════════════════════════════════════
 
 def register_handlers(bot_client):
     """Registrar todos los handlers en el bot client."""
 
     @bot_client.on(events.NewMessage(pattern="/start"))
     async def start(e):
-        # Si estamos en un grupo que no está permitido, no responder
         if e.is_group and e.chat_id not in state.allowed_groups:
             return
 
@@ -209,22 +274,33 @@ def register_handlers(bot_client):
         user = db.get_user(uid)
         lang = user.get('language', 'es')
         role = get_user_role(uid)
+        has_free = db.is_new_user(uid) and role == UserRole.FREE
 
+        # Si viene con parametro (deep link para canjear key)
         args = e.message.message.split()
         if len(args) > 1:
             code = args[1]
             if db.redeem(uid, code):
                 role = get_user_role(uid)
+                has_free = False  # Si ya es VIP, no necesita gratis
                 await e.reply(
                     locale_manager.get("redeem_success", lang),
-                    buttons=Keyboards.main(role, lang),
+                    buttons=Keyboards.main(role, lang, has_free),
                     parse_mode='md'
                 )
                 return
 
+        # Elegir texto de bienvenida
+        if has_free:
+            welcome_key = "welcome_new"
+        else:
+            welcome_key = "welcome"
+
+        welcome_text = UI.text(welcome_key, lang, _get_commands_by_role(role, has_free), role.value, user['search_count'])
+
         await e.reply(
-            UI.text("welcome", lang, _get_commands_by_role(role), role.value, user['search_count']),
-            buttons=Keyboards.main(role, lang) if e.is_private else None,
+            welcome_text,
+            buttons=Keyboards.main(role, lang, has_free) if e.is_private else None,
             parse_mode='md'
         )
 
@@ -272,7 +348,7 @@ def register_handlers(bot_client):
             return await e.reply("⚠️ Este comando solo funciona en grupos.")
         state.allowed_groups.add(e.chat_id)
         db.add_allowed_group(e.chat_id, e.sender_id)
-        await e.reply("✅ Grupo añadido a la lista permitida y guardado en la base de datos.")
+        await e.reply("✅ Grupo anadido a la lista permitida y guardado en la base de datos.")
 
     @bot_client.on(events.NewMessage(pattern=r"/ungp"))
     async def cmd_ungp(e):
@@ -285,17 +361,16 @@ def register_handlers(bot_client):
             db.remove_allowed_group(e.chat_id)
             await e.reply("🗑 Grupo eliminado de la lista permitida y de la base de datos.")
         else:
-            await e.reply("⚠️ Este grupo no está en la lista permitida.")
+            await e.reply("⚠️ Este grupo no esta en la lista permitida.")
 
     @bot_client.on(events.NewMessage(pattern=r"/canjear (.+)"))
     async def cmd_canjear(e):
-        """Canjear una key VIP directamente con /canjear <código>."""
+        """Canjear una key VIP directamente con /canjear <codigo>."""
         uid = e.sender_id
         user = db.get_user(uid)
         lang = user.get('language', 'es')
         code = e.pattern_match.group(1).strip()
 
-        # Si estamos en un grupo que no está permitido, no responder
         if e.is_group and e.chat_id not in state.allowed_groups:
             return
 
@@ -303,7 +378,7 @@ def register_handlers(bot_client):
             role = get_user_role(uid)
             await e.reply(
                 UI.text("redeem_success", lang),
-                buttons=Keyboards.main(role, lang),
+                buttons=Keyboards.main(role, lang, False),
                 parse_mode='md'
             )
         else:
@@ -318,22 +393,25 @@ def register_handlers(bot_client):
         uid = e.sender_id
         user = db.get_user(uid)
         lang = user.get('language', 'es')
-        role = get_user_role(uid)
+        is_group_allowed = e.is_group and e.chat_id in state.allowed_groups
 
-        # Si estamos en un grupo que no está permitido, no responder
-        if e.is_group and e.chat_id not in state.allowed_groups:
+        if e.is_group and not is_group_allowed:
             return
 
-        # Si es FREE y NO está en un grupo permitido, acceso denegado
-        if role == UserRole.FREE and not (e.is_group and e.chat_id in state.allowed_groups):
+        allowed, is_free_search = await _check_search_access(uid, lang, is_group_allowed, e.is_private)
+
+        if not allowed:
             return await e.reply(
-                UI.text("access_denied", lang),
+                _get_access_denied_text(lang),
                 buttons=Keyboards.back() if e.is_private else None,
                 parse_mode='md'
             )
+
         kw = normalizar_url(e.pattern_match.group(1))
-        # Guardar chat_id para enviar resultados al lugar correcto (grupo o privado)
-        state.temp_state[uid] = {'kw': kw, 'chat_id': e.chat_id}
+        state.temp_state[uid] = {
+            'kw': kw, 'chat_id': e.chat_id,
+            'is_free_search': is_free_search
+        }
         await e.reply(
             UI.text("search_step_time", lang, kw),
             buttons=Keyboards.time(),
@@ -341,41 +419,7 @@ def register_handlers(bot_client):
         )
 
     # ═════════════════════════════════════════════════════════════
-    # COMANDO /ma — MAIL:PASS filtrado (sin gmail/outlook/yahoo/hotmail)
-    # No requiere dominio — busca TODOS los correos
-    # ═════════════════════════════════════════════════════════════
-
-    @bot_client.on(events.NewMessage(pattern=r"/ma$"))
-    async def cmd_ma(e):
-        """Búsqueda MAIL:PASS filtrada — TODOS los correos, excluye gmail/outlook/yahoo/hotmail."""
-        uid = e.sender_id
-        user = db.get_user(uid)
-        lang = user.get('language', 'es')
-        role = get_user_role(uid)
-
-        # Si estamos en un grupo que no está permitido, no responder
-        if e.is_group and e.chat_id not in state.allowed_groups:
-            return
-
-        # Si es FREE y NO está en un grupo permitido, acceso denegado
-        if role == UserRole.FREE and not (e.is_group and e.chat_id in state.allowed_groups):
-            return await e.reply(
-                UI.text("access_denied", lang),
-                buttons=Keyboards.back() if e.is_private else None,
-                parse_mode='md'
-            )
-
-        # Guardar chat_id para enviar resultados al lugar correcto
-        state.temp_state[uid] = {'chat_id': e.chat_id}
-        await e.reply(
-            UI.text("ma_intro", lang),
-            buttons=Keyboards.ma_time(),
-            parse_mode='md'
-        )
-
-    # ═════════════════════════════════════════════════════════════
     # COMANDO /imap — IMAP Checker (responder a archivo mail:pass)
-    # Solo VIP / SELLER / ADMIN
     # ═════════════════════════════════════════════════════════════
 
     @bot_client.on(events.NewMessage(pattern=r"/imap$"))
@@ -386,19 +430,16 @@ def register_handlers(bot_client):
         lang = user.get('language', 'es')
         role = get_user_role(uid)
 
-        # Si estamos en un grupo que no está permitido, no responder
         if e.is_group and e.chat_id not in state.allowed_groups:
             return
 
-        # Solo VIP, SELLER, ADMIN
         if role == UserRole.FREE:
             return await e.reply(
-                UI.text("access_denied", lang),
+                UI.text("access_denied_no_free", lang),
                 buttons=Keyboards.back() if e.is_private else None,
                 parse_mode='md'
             )
 
-        # Verificar que es respuesta a un mensaje con archivo
         reply = await e.get_reply_message()
         if not reply or not reply.document:
             return await e.reply(
@@ -406,56 +447,40 @@ def register_handlers(bot_client):
                 parse_mode='md'
             )
 
-        # Mensaje inicial de progreso
         status_msg = await e.reply(
             UI.text("imap_processing", lang, 0, "?", 0),
             parse_mode='md'
         )
 
         try:
-            # Descargar archivo a temporales
             temp_dir = tempfile.mkdtemp(prefix="imap_")
             input_path = os.path.join(temp_dir, "combos.txt")
             output_path = os.path.join(temp_dir, "hits.txt")
 
             await state.bot.download_media(reply, file=input_path)
 
-            # Verificar que se descargó
             if not os.path.isfile(input_path):
-                await status_msg.edit(
-                    UI.text("imap_no_file", lang),
-                    parse_mode='md'
-                )
+                await status_msg.edit(UI.text("imap_no_file", lang), parse_mode='md')
                 return
 
-            # Contar combos
             with open(input_path, 'r', encoding='utf-8', errors='ignore') as f:
                 total = sum(1 for line in f if ":" in line.strip())
 
             if total == 0:
-                await status_msg.edit(
-                    UI.text("imap_no_file", lang),
-                    parse_mode='md'
-                )
-                # Limpiar
+                await status_msg.edit(UI.text("imap_no_file", lang), parse_mode='md')
                 shutil.rmtree(temp_dir, ignore_errors=True)
                 return
 
-            # Actualizar mensaje con el total real
             await status_msg.edit(
                 UI.text("imap_processing", lang, 0, total, 0),
                 parse_mode='md'
             )
 
-            # Capturar el event loop del hilo principal ANTES del executor
             main_loop = asyncio.get_running_loop()
-
-            # Callback de progreso — thread-safe
             progress_data = {'last_edit': 0}
 
             def progress_cb(checked, tot, hits):
                 now = time.time()
-                # Solo actualizar cada 3 segundos
                 if now - progress_data['last_edit'] < 3:
                     return
                 progress_data['last_edit'] = now
@@ -469,12 +494,10 @@ def register_handlers(bot_client):
                     except Exception:
                         pass
 
-                # Usar call_soon_threadsafe para agendar la corrutina desde un hilo
                 main_loop.call_soon_threadsafe(
                     lambda: asyncio.ensure_future(_update_msg(), loop=main_loop)
                 )
 
-            # Ejecutar IMAP check en executor (no bloquear el event loop)
             stats = await main_loop.run_in_executor(
                 None,
                 lambda: imap_check_file(
@@ -483,7 +506,6 @@ def register_handlers(bot_client):
                 )
             )
 
-            # Enviar resultados
             if stats['hits'] > 0 and os.path.isfile(output_path):
                 caption = UI.text("imap_completed", lang, stats['total'], stats['hits'], stats['bads'], stats['elapsed'])
                 await state.bot.send_file(
@@ -491,7 +513,6 @@ def register_handlers(bot_client):
                     caption=caption,
                     parse_mode='md'
                 )
-                # Borrar mensaje de progreso
                 try:
                     await status_msg.delete()
                 except Exception:
@@ -502,7 +523,6 @@ def register_handlers(bot_client):
                     parse_mode='md'
                 )
 
-            # Limpiar temporales
             shutil.rmtree(temp_dir, ignore_errors=True)
 
         except Exception as exc:
@@ -511,7 +531,6 @@ def register_handlers(bot_client):
                 f"❌ **Error en IMAP Check**\n\n`{str(exc)[:200]}`",
                 parse_mode='md'
             )
-            # Limpiar temporales
             try:
                 shutil.rmtree(temp_dir, ignore_errors=True)
             except Exception:
@@ -529,9 +548,9 @@ def register_handlers(bot_client):
         errors = 0
 
         for idx, target in enumerate(targets):
-            uid = target if isinstance(target, int) else target['user_id']
+            uid_t = target if isinstance(target, int) else target['user_id']
             try:
-                await state.bot.send_message(uid, msg_text, parse_mode='md')
+                await state.bot.send_message(uid_t, msg_text, parse_mode='md')
                 sent += 1
                 await asyncio.sleep(0.05)
 
@@ -548,7 +567,7 @@ def register_handlers(bot_client):
                 logger.warning(f"FloodWait: {fw.seconds}s en broadcast")
                 await asyncio.sleep(fw.seconds + 1)
                 try:
-                    await state.bot.send_message(uid, msg_text, parse_mode='md')
+                    await state.bot.send_message(uid_t, msg_text, parse_mode='md')
                     sent += 1
                 except Exception:
                     errors += 1
@@ -587,8 +606,6 @@ def register_handlers(bot_client):
         await _broadcast(e.sender_id, vips_data, msg_text, status, "Broadcast VIP")
 
     # --- CONVERSATION HANDLER ---
-    # Captura mensajes de usuarios en WAITING_KEYWORD (privado y grupos permitidos)
-    # En grupos permitidos, los FREE también pueden buscar
     @bot_client.on(events.NewMessage(
         func=lambda e: (e.is_private or (e.is_group and e.chat_id in state.allowed_groups)) and
                        e.sender_id in state.temp_state and
@@ -599,18 +616,22 @@ def register_handlers(bot_client):
         user = db.get_user(uid)
         lang = user.get('language', 'es')
         role = get_user_role(uid)
+        is_group_allowed = e.is_group and e.chat_id in state.allowed_groups
 
-        # Si es FREE en privado, acceso denegado (en grupo permitido sí puede)
-        if role == UserRole.FREE and e.is_private:
+        allowed, is_free_search = await _check_search_access(uid, lang, is_group_allowed, e.is_private)
+
+        if not allowed:
             return await e.reply(
-                UI.text("access_denied", lang),
+                _get_access_denied_text(lang),
                 buttons=Keyboards.back(),
                 parse_mode='md'
             )
 
         kw = normalizar_url(e.text)
-        # Guardar chat_id para enviar resultados al lugar correcto
-        state.temp_state[uid] = {'kw': kw, 'chat_id': e.chat_id}
+        state.temp_state[uid] = {
+            'kw': kw, 'chat_id': e.chat_id,
+            'is_free_search': is_free_search
+        }
         await e.reply(
             UI.text("search_step_time", lang, kw),
             buttons=Keyboards.time(),
@@ -630,19 +651,22 @@ def register_handlers(bot_client):
         data = e.data.decode()
 
         try:
-            # ─── VOLVER AL MENÚ PRINCIPAL ───
+            # ─── VOLVER AL MENU PRINCIPAL ───
             if data == "back_main":
+                has_free = db.is_new_user(uid) and role == UserRole.FREE
+                welcome_key = "welcome_new" if has_free else "welcome"
                 await e.edit(
-                    UI.text("welcome", lang, _get_commands_by_role(role), role.value, user['search_count']),
-                    buttons=Keyboards.main(role, lang),
+                    UI.text(welcome_key, lang, _get_commands_by_role(role, has_free), role.value, user['search_count']),
+                    buttons=Keyboards.main(role, lang, has_free),
                     parse_mode='md'
                 )
 
             # ─── MI CUENTA ───
             elif data == "my_account":
                 exp = (user['vip_expiry'] or 'N/A')[:10] if user['vip_expiry'] else "N/A"
+                free_status = "Disponible" if db.is_new_user(uid) else "Usada"
                 await e.edit(
-                    UI.text("my_account", lang, uid, role.value, exp, user['search_count']),
+                    UI.text("my_account", lang, uid, role.value, exp, user['search_count'], free_status),
                     buttons=Keyboards.back(),
                     parse_mode='md'
                 )
@@ -678,32 +702,25 @@ def register_handlers(bot_client):
                 db.set_language(uid, new_lang)
                 await e.answer(UI.text("language_selected", new_lang), alert=True)
                 user = db.get_user(uid)
+                has_free = db.is_new_user(uid) and role == UserRole.FREE
+                welcome_key = "welcome_new" if has_free else "welcome"
                 await e.edit(
-                    UI.text("welcome", new_lang, _get_commands_by_role(role), role.value, user['search_count']),
-                    buttons=Keyboards.main(role, new_lang),
+                    UI.text(welcome_key, new_lang, _get_commands_by_role(role, has_free), role.value, user['search_count']),
+                    buttons=Keyboards.main(role, new_lang, has_free),
                     parse_mode='md'
                 )
 
-            # ─── GESTIÓN DE ARCHIVOS ───
+            # ─── GESTION DE ARCHIVOS ───
             elif data in ("adm_files", "refresh_files"):
                 if role != UserRole.ADMIN:
                     return await e.answer("Acceso denegado.", alert=True)
-                counts = get_file_counts()
-                # FIX #3: usar state.auto_download_enabled (no stale import)
-                auto_status = "ON" if state.auto_download_enabled else "OFF"
-                queue_count = 0
-                try:
-                    if state.auto_dl_queue is not None:
-                        queue_count = state.auto_dl_queue.qsize()
-                except Exception:
-                    pass
-                total_pending = len(state.pending_downloads) + queue_count
+                counts, auto_status, total_pending, active_count = _get_file_counts_display()
                 await e.edit(
                     UI.text("file_management", lang,
                             counts['total'], counts['24h'], counts['old'],
-                            auto_status, total_pending, len(state.active_downloads)),
+                            auto_status, total_pending, active_count),
                     buttons=Keyboards.files_control(
-                        state.auto_download_enabled, total_pending, len(state.active_downloads)
+                        state.auto_download_enabled, total_pending, active_count
                     ),
                     parse_mode='md'
                 )
@@ -713,19 +730,12 @@ def register_handlers(bot_client):
                     return await e.answer("Acceso denegado.", alert=True)
                 state.auto_download_enabled = True
                 await e.answer("Auto-Descarga ACTIVADA (secuencial)", alert=True)
-                counts = get_file_counts()
-                queue_count = 0
-                try:
-                    if state.auto_dl_queue is not None:
-                        queue_count = state.auto_dl_queue.qsize()
-                except Exception:
-                    pass
-                total_pending = len(state.pending_downloads) + queue_count
+                counts, _, total_pending, active_count = _get_file_counts_display()
                 await e.edit(
                     UI.text("file_management", lang,
                             counts['total'], counts['24h'], counts['old'],
-                            "ON", total_pending, len(state.active_downloads)),
-                    buttons=Keyboards.files_control(True, total_pending, len(state.active_downloads)),
+                            "ON", total_pending, active_count),
+                    buttons=Keyboards.files_control(True, total_pending, active_count),
                     parse_mode='md'
                 )
 
@@ -734,19 +744,12 @@ def register_handlers(bot_client):
                     return await e.answer("Acceso denegado.", alert=True)
                 state.auto_download_enabled = False
                 await e.answer("Auto-Descarga DESACTIVADA", alert=True)
-                counts = get_file_counts()
-                queue_count = 0
-                try:
-                    if state.auto_dl_queue is not None:
-                        queue_count = state.auto_dl_queue.qsize()
-                except Exception:
-                    pass
-                total_pending = len(state.pending_downloads) + queue_count
+                counts, _, total_pending, active_count = _get_file_counts_display()
                 await e.edit(
                     UI.text("file_management", lang,
                             counts['total'], counts['24h'], counts['old'],
-                            "OFF", total_pending, len(state.active_downloads)),
-                    buttons=Keyboards.files_control(False, total_pending, len(state.active_downloads)),
+                            "OFF", total_pending, active_count),
+                    buttons=Keyboards.files_control(False, total_pending, active_count),
                     parse_mode='md'
                 )
 
@@ -768,11 +771,25 @@ def register_handlers(bot_client):
                     buttons=Keyboards.back("adm_files")
                 )
 
-            # ─── BÚSQUEDA ───
+            # ─── BUSQUEDA ───
             elif data == "search_init":
-                if role == UserRole.FREE:
-                    return await e.answer("Necesitas VIP para buscar.", alert=True)
-                state.temp_state[uid] = {'step': 'WAITING_KEYWORD'}
+                # Verificar acceso a busqueda
+                allowed, is_free_search = await _check_search_access(
+                    uid, lang,
+                    False,  # callback siempre es privado
+                    True
+                )
+
+                if not allowed:
+                    return await e.answer(
+                        _get_access_denied_text(lang),
+                        alert=True
+                    )
+
+                ts = state.temp_state.get(uid, {})
+                ts['step'] = 'WAITING_KEYWORD'
+                ts['is_free_search'] = is_free_search
+                state.temp_state[uid] = ts
                 await e.edit(
                     UI.text("ask_domain", lang),
                     buttons=Keyboards.back(),
@@ -788,74 +805,15 @@ def register_handlers(bot_client):
                         buttons=Keyboards.formats()
                     )
                 else:
-                    await e.answer("Usa 'Nueva Búsqueda' primero.", alert=True)
-
-            # ─── /ma TIME CALLBACKS (búsqueda directa sin keyword, sin preguntar formato) ───
-            elif data.startswith("ma_time_"):
-                t_opt = data.split("ma_time_")[1]
-                if uid not in state.temp_state:
-                    return await e.answer("Sesión expirada. Usa /ma primero.", alert=True)
-
-                msg = await e.edit(
-                    UI.text("ma_searching", lang),
-                    buttons=None,
-                    parse_mode='md'
-                )
-
-                start_time = time.time()
-                search_task = asyncio.create_task(search_ma(t_opt))
-
-                await animate_loading(msg, search_task, "ALL")
-
-                result_file = await search_task
-                elapsed = time.time() - start_time
-
-                if result_file:
-                    db.add_search(uid)
-                    count = 0
-                    with open(result_file, 'rb') as f:
-                        for _ in f:
-                            count += 1
-
-                    caption = UI.text("ma_completed", lang, count, elapsed)
-
-                    target_chat = state.temp_state.get(uid, {}).get('chat_id', uid) if uid in state.temp_state else uid
-                    if not target_chat:
-                        target_chat = uid
-
-                    if uid in state.temp_state:
-                        del state.temp_state[uid]
-
-                    try:
-                        await e.delete()
-                    except Exception:
-                        pass
-
-                    await state.bot.send_file(
-                        target_chat, result_file,
-                        caption=caption,
-                        parse_mode='md'
-                    )
-
-                    try:
-                        os.remove(result_file)
-                    except Exception:
-                        pass
-                else:
-                    if uid in state.temp_state:
-                        del state.temp_state[uid]
-                    await e.edit(
-                        UI.text("ma_no_results", lang),
-                        buttons=Keyboards.back(),
-                        parse_mode='md'
-                    )
+                    await e.answer("Usa 'Nueva Busqueda' primero.", alert=True)
 
             elif data.startswith("fmt_"):
                 if uid not in state.temp_state or not state.temp_state[uid].get('kw'):
-                    return await e.answer("Sesión expirada. Inicia nueva búsqueda.", alert=True)
+                    return await e.answer("Sesion expirada. Inicia nueva busqueda.", alert=True)
 
                 kw = state.temp_state[uid]['kw']
                 t_opt = state.temp_state[uid].get('time', '24h')
+                is_free_search = state.temp_state[uid].get('is_free_search', False)
 
                 modo = SearchMode.ULP
                 tipo_texto = "ULP"
@@ -881,54 +839,35 @@ def register_handlers(bot_client):
                 elapsed = time.time() - start_time
 
                 if result_file:
-                    db.add_search(uid)
-                    # FIX #19: Usar count directo en vez de re-leer el archivo
+                    # Marcar busqueda usada
+                    if is_free_search:
+                        db.mark_free_search_used(uid)
+                    else:
+                        db.add_search(uid)
+
+                    # Contar resultados
                     count = 0
                     with open(result_file, 'rb') as f:
                         for _ in f:
                             count += 1
 
-                    preview_lines = []
-                    with open(result_file, 'r', encoding='utf-8') as f:
-                        for i, line in enumerate(f):
-                            if i >= config.SEARCH_RESULT_PREVIEW_LINES:
-                                break
-                            preview_lines.append(line.strip())
+                    # Caption segun si fue busqueda gratis
+                    if is_free_search:
+                        caption = UI.text("search_completed_free", lang, kw, tipo_texto, count, elapsed)
+                    else:
+                        caption = UI.text("search_completed", lang, kw, tipo_texto, count, elapsed)
 
-                    preview_text = '\n'.join(preview_lines)
-                    if len(preview_text) > 3000:
-                        preview_text = preview_text[:3000] + "..."
-
-                    # FIX #8: Usar locale para caption de búsqueda
-                    caption = UI.text("search_completed", lang, kw, tipo_texto, count, elapsed)
-
-                    # Enviar resultado al chat donde se inició la búsqueda (grupo o privado)
-                    target_chat = state.temp_state.get(uid, {}).get('chat_id', uid) if uid in state.temp_state else uid
-                    # Si ya se borró temp_state, usar uid como fallback
+                    target_chat = state.temp_state.get(uid, {}).get('chat_id', uid)
                     if not target_chat:
                         target_chat = uid
 
-                    # Borrar temp_state DESPUÉS de obtener chat_id
                     if uid in state.temp_state:
                         del state.temp_state[uid]
 
-                    # Borrar mensaje de "buscando..."
-                    try:
-                        await e.delete()
-                    except Exception:
-                        pass
-
-                    await state.bot.send_file(
-                        target_chat, result_file,
-                        caption=caption,
-                        parse_mode='md'
-                    )
-
-                    try:
-                        os.remove(result_file)
-                    except Exception:
-                        pass
+                    await _send_search_result(target_chat, result_file, caption, e=e)
                 else:
+                    if uid in state.temp_state:
+                        del state.temp_state[uid]
                     await e.edit(
                         UI.text("no_results", lang, kw),
                         buttons=Keyboards.no_results(kw),
@@ -956,7 +895,8 @@ def register_handlers(bot_client):
                 await e.edit(
                     UI.text("admin_panel", lang,
                             stats['vips'], stats['sellers'],
-                            stats['searches'], stats['total_users']),
+                            stats['searches'], stats['total_users'],
+                            stats['new_users']),
                     buttons=Keyboards.admin(),
                     parse_mode='md'
                 )
@@ -968,7 +908,8 @@ def register_handlers(bot_client):
                 await e.edit(
                     UI.text("stats_global", lang,
                             stats['vips'], stats['sellers'],
-                            stats['searches'], stats['total_users']),
+                            stats['searches'], stats['total_users'],
+                            stats['new_users']),
                     buttons=Keyboards.back("admin_enter"),
                     parse_mode='md'
                 )
@@ -1005,18 +946,18 @@ def register_handlers(bot_client):
                         exp = v.get('vip_expiry') or 'N/A'
                         if exp != 'N/A' and len(exp) > 10:
                             exp = exp[:10]
-                        uid = v['user_id']
+                        vuid = v['user_id']
                         username = "None"
                         try:
-                            entity = await state.bot.get_entity(uid)
+                            entity = await state.bot.get_entity(vuid)
                             if entity and getattr(entity, 'username', None):
                                 username = f"@{entity.username}"
                         except Exception:
                             pass
-                        lines.append(f"👤 `{uid}` │ {username} → Exp: `{exp}`")
+                        lines.append(f"👤 `{vuid}` │ {username} → Exp: `{exp}`")
                     text = "👑 **VIPs**\n\n" + "\n".join(lines)
                     if len(vips) > 50:
-                        text += f"\n\n... y {len(vips) - 50} más"
+                        text += f"\n\n... y {len(vips) - 50} mas"
                 await e.edit(text, buttons=Keyboards.back("admin_enter"), parse_mode='md')
 
             elif data == "adm_genkey":
