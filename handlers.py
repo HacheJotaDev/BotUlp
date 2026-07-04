@@ -515,19 +515,23 @@ def register_handlers(bot_client):
         if e.is_group and not is_group_allowed:
             return
 
+        # Anti-superposicion: si ya esta buscando, bloquear inmediatamente
+        if uid in state.active_searches:
+            try:
+                await e.reply(
+                    UI.text("search_already_running", lang),
+                    parse_mode='md'
+                )
+            except Exception:
+                pass
+            return
+
         allowed, is_free_search = await _check_search_access(uid, lang, is_group_allowed, e.is_private)
 
         if not allowed:
             return await e.reply(
                 _get_access_denied_text(lang),
                 buttons=Keyboards.back() if e.is_private else None,
-                parse_mode='md'
-            )
-
-        # Anti-superposicion: si ya esta buscando, bloquear
-        if uid in state.active_searches:
-            return await e.reply(
-                UI.text("search_already_running", lang),
                 parse_mode='md'
             )
 
@@ -737,6 +741,17 @@ def register_handlers(bot_client):
     ))
     async def handle_conversation(e):
         uid = e.sender_id
+
+        # Anti-superposicion: si ya esta buscando, bloquear inmediatamente
+        if uid in state.active_searches:
+            try:
+                user = db.get_user(uid)
+                lang = user.get('language', 'es')
+                await e.reply(UI.text("search_already_running", lang), parse_mode='md')
+            except Exception:
+                pass
+            return
+
         user = db.get_user(uid)
         lang = user.get('language', 'es')
         role = get_user_role(uid)
@@ -748,13 +763,6 @@ def register_handlers(bot_client):
             return await e.reply(
                 _get_access_denied_text(lang),
                 buttons=Keyboards.back(),
-                parse_mode='md'
-            )
-
-        # Anti-superposicion: si ya esta buscando, bloquear
-        if uid in state.active_searches:
-            return await e.reply(
-                UI.text("search_already_running", lang),
                 parse_mode='md'
             )
 
@@ -982,10 +990,12 @@ def register_handlers(bot_client):
                     return
 
                 # Ejecutar busqueda
+                chat_id = state.temp_state[uid].get('chat_id', uid)
+                state.temp_state.pop(uid, None)
                 await _execute_search(
                     uid=uid, kw=kw, t_opt=t_opt, modo=modo,
                     tipo_texto=tipo_texto, is_free_search=is_free_search,
-                    chat_id=state.temp_state.get(uid, {}).get('chat_id', uid),
+                    chat_id=chat_id,
                     lang=lang, callback_event=e
                 )
 
