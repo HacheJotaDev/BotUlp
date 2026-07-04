@@ -524,6 +524,13 @@ def register_handlers(bot_client):
                 parse_mode='md'
             )
 
+        # Anti-superposicion: si ya esta buscando, bloquear
+        if uid in state.active_searches:
+            return await e.reply(
+                UI.text("search_already_running", lang),
+                parse_mode='md'
+            )
+
         kw = normalizar_url(e.pattern_match.group(1))
         state.temp_state[uid] = {
             'kw': kw, 'chat_id': e.chat_id,
@@ -744,6 +751,13 @@ def register_handlers(bot_client):
                 parse_mode='md'
             )
 
+        # Anti-superposicion: si ya esta buscando, bloquear
+        if uid in state.active_searches:
+            return await e.reply(
+                UI.text("search_already_running", lang),
+                parse_mode='md'
+            )
+
         kw = normalizar_url(e.text)
         state.temp_state[uid] = {
             'kw': kw, 'chat_id': e.chat_id,
@@ -900,6 +914,13 @@ def register_handlers(bot_client):
                 if not allowed:
                     return await e.answer(
                         _get_access_denied_text(lang),
+                        alert=True
+                    )
+
+                # Anti-superposicion: si ya esta buscando, bloquear
+                if uid in state.active_searches:
+                    return await e.answer(
+                        UI.text("search_already_running", lang),
                         alert=True
                     )
 

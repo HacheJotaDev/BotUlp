@@ -9,6 +9,7 @@
     "access_denied": "╭───✦ 🚫 ACESSO NEGADO\n├● Sua busca gratis ja foi usada\n├● Voce precisa de VIP para continuar buscando\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "access_denied_no_free": "╭───✦ 🚫 ACESSO NEGADO\n├● Apenas usuarios VIP podem buscar\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "search_in_progress": "⏳ **Espere sua busca anterior terminar.**\n\nSua nova busca iniciara automaticamente quando a atual terminar.\nPosicao na fila: `{}`",
+    "search_already_running": "⏳ **Voce tem uma busca em andamento.**\n\nAguarde ela terminar para iniciar uma nova.",
     "ask_domain": "╭───✦ 🔍 NOVA BUSCA\n├● Digite o dominio para buscar\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "language_selected": "🌐 Idioma atualizado com sucesso.",
     "select_language": "🌐 **SELECT LANGUAGE / IDIOMA / IDIOMA**\n\nEscolha seu idioma preferido:",

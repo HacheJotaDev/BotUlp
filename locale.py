@@ -108,6 +108,10 @@ class LocaleManager:
                 "Tu nueva busqueda se iniciara automaticamente cuando la actual termine.\n"
                 "Posicion en cola: `{}`"
             ),
+            "search_already_running": (
+                "⏳ **Tienes una busqueda en curso.**\n\n"
+                "Espera a que termine para iniciar una nueva."
+            ),
             "ask_domain": (
                 "╭───✦ 🔍 NUEVA BUSQUEDA\n"
                 "├● Escribe el dominio a buscar\n"
