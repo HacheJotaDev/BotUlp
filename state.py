@@ -27,6 +27,10 @@ auto_dl_worker_running: bool = False
 # Estado temporal de usuarios (para conversaciones)
 temp_state: Dict[int, dict] = {}
 
+# Control de busquedas por usuario (cola anti-superposicion)
+active_searches: Set[int] = set()  # UIDs con busqueda en curso
+search_queue: Dict[int, list] = {}  # UID -> lista de busquedas encoladas
+
 # Task de limpieza y auto-dl (FIX #15: guardar referencias para cancelación)
 cleanup_task: Optional[asyncio.Task] = None
 auto_dl_task: Optional[asyncio.Task] = None

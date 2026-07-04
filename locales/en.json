@@ -8,6 +8,7 @@
     "loading": "⚙️ **Processing...**",
     "access_denied": "╭───✦ 🚫 ACCESS DENIED\n├● Your free search has already been used\n├● You need VIP to keep searching\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "access_denied_no_free": "╭───✦ 🚫 ACCESS DENIED\n├● Only VIP users can search\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "search_in_progress": "⏳ **Wait for your current search to finish.**\n\nYour new search will start automatically when the current one completes.\nQueue position: `{}`",
     "ask_domain": "╭───✦ 🔍 NEW SEARCH\n├● Type the domain to search\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "language_selected": "🌐 Language updated successfully.",
     "select_language": "🌐 **SELECT LANGUAGE / IDIOMA / IDIOMA**\n\nChoose your preferred language:",

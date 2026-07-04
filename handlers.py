@@ -8,6 +8,7 @@
   • Broadcast: /bc, /bcvip
   • Sistema de busqueda gratis para nuevos usuarios
   • v3.5: Eliminado /ma, codigo optimizado
+  • Cola de busquedas por usuario (anti-superposicion)
 ═══════════════════════════════════════════════════════════════
 """
 
@@ -264,6 +265,122 @@ async def _send_search_result(target_chat, result_file, caption, e=None, msg=Non
 
 def register_handlers(bot_client):
     """Registrar todos los handlers en el bot client."""
+
+    async def _execute_search(uid, kw, t_opt, modo, tipo_texto, is_free_search,
+                                chat_id, lang, callback_event=None):
+        """Ejecutar una busqueda completa con animacion, resultado y procesamiento de cola."""
+        state.active_searches.add(uid)
+
+        # Mensaje de carga
+        if callback_event:
+            try:
+                loading_msg = await callback_event.edit(
+                    f"⚙️ **Buscando** `{kw}`...\n\n⠋ Procesando",
+                    buttons=None,
+                    parse_mode='md'
+                )
+            except Exception:
+                loading_msg = await state.bot.send_message(
+                    chat_id,
+                    f"⚙️ **Buscando** `{kw}`...\n\n⠋ Procesando",
+                    parse_mode='md'
+                )
+        else:
+            loading_msg = await state.bot.send_message(
+                chat_id,
+                f"⚙️ **Buscando** `{kw}`...\n\n⠋ Procesando",
+                parse_mode='md'
+            )
+
+        try:
+            start_time = time.time()
+            search_task = asyncio.create_task(search_engine(kw, t_opt, modo))
+
+            await animate_loading(loading_msg, search_task, kw)
+
+            result_file = await search_task
+            elapsed = time.time() - start_time
+
+            if result_file:
+                if is_free_search:
+                    db.mark_free_search_used(uid)
+                else:
+                    db.add_search(uid)
+
+                count = 0
+                with open(result_file, 'rb') as f:
+                    for _ in f:
+                        count += 1
+
+                if is_free_search:
+                    caption = UI.text("search_completed_free", lang, kw, tipo_texto, count, elapsed)
+                else:
+                    caption = UI.text("search_completed", lang, kw, tipo_texto, count, elapsed)
+
+                if callback_event:
+                    await _send_search_result(chat_id, result_file, caption, e=callback_event)
+                else:
+                    await _send_search_result(chat_id, result_file, caption, msg=loading_msg)
+            else:
+                no_res_text = UI.text("no_results", lang, kw)
+                no_res_kb = Keyboards.no_results(kw)
+                if callback_event:
+                    try:
+                        await callback_event.edit(no_res_text, buttons=no_res_kb, parse_mode='md')
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        await loading_msg.edit(no_res_text, buttons=no_res_kb, parse_mode='md')
+                    except Exception:
+                        pass
+        except Exception as exc:
+            logger.error(f"Error en busqueda de {uid}: {exc}")
+            try:
+                await loading_msg.edit(
+                    f"❌ **Error en busqueda**\n\n`{str(exc)[:200]}`",
+                    parse_mode='md'
+                )
+            except Exception:
+                pass
+        finally:
+            state.active_searches.discard(uid)
+            await _process_next_in_queue(uid)
+
+    async def _process_next_in_queue(uid):
+        """Si hay busquedas encoladas para este usuario, ejecutar la siguiente."""
+        queue = state.search_queue.get(uid)
+        if not queue:
+            return
+
+        next_search = queue.pop(0)
+        if not queue:
+            del state.search_queue[uid]
+
+        logger.info(f"Procesando busqueda encolada para {uid}: {next_search['kw']}")
+
+        try:
+            await _execute_search(
+                uid=uid,
+                kw=next_search['kw'],
+                t_opt=next_search['t_opt'],
+                modo=next_search['modo'],
+                tipo_texto=next_search['tipo_texto'],
+                is_free_search=next_search['is_free_search'],
+                chat_id=next_search['chat_id'],
+                lang=next_search['lang'],
+                callback_event=None
+            )
+        except Exception as exc:
+            logger.error(f"Error en busqueda encolada de {uid}: {exc}")
+            try:
+                await state.bot.send_message(
+                    next_search['chat_id'],
+                    f"❌ **Error en busqueda encolada**\n\n`{str(exc)[:200]}`",
+                    parse_mode='md'
+                )
+            except Exception:
+                pass
 
     @bot_client.on(events.NewMessage(pattern="/start"))
     async def start(e):
@@ -807,6 +924,7 @@ def register_handlers(bot_client):
                 else:
                     await e.answer("Usa 'Nueva Busqueda' primero.", alert=True)
 
+            # ─── EJECUTAR BUSQUEDA (con cola anti-superposicion) ───
             elif data.startswith("fmt_"):
                 if uid not in state.temp_state or not state.temp_state[uid].get('kw'):
                     return await e.answer("Sesion expirada. Inicia nueva busqueda.", alert=True)
@@ -824,55 +942,31 @@ def register_handlers(bot_client):
                     modo = SearchMode.USERPASS
                     tipo_texto = "USER:PASS"
 
-                msg = await e.edit(
-                    f"⚙️ **Buscando** `{kw}`...\n\n⠋ Procesando",
-                    buttons=None,
-                    parse_mode='md'
-                )
-
-                start_time = time.time()
-                search_task = asyncio.create_task(search_engine(kw, t_opt, modo))
-
-                await animate_loading(msg, search_task, kw)
-
-                result_file = await search_task
-                elapsed = time.time() - start_time
-
-                if result_file:
-                    # Marcar busqueda usada
-                    if is_free_search:
-                        db.mark_free_search_used(uid)
-                    else:
-                        db.add_search(uid)
-
-                    # Contar resultados
-                    count = 0
-                    with open(result_file, 'rb') as f:
-                        for _ in f:
-                            count += 1
-
-                    # Caption segun si fue busqueda gratis
-                    if is_free_search:
-                        caption = UI.text("search_completed_free", lang, kw, tipo_texto, count, elapsed)
-                    else:
-                        caption = UI.text("search_completed", lang, kw, tipo_texto, count, elapsed)
-
-                    target_chat = state.temp_state.get(uid, {}).get('chat_id', uid)
-                    if not target_chat:
-                        target_chat = uid
-
-                    if uid in state.temp_state:
-                        del state.temp_state[uid]
-
-                    await _send_search_result(target_chat, result_file, caption, e=e)
-                else:
-                    if uid in state.temp_state:
-                        del state.temp_state[uid]
-                    await e.edit(
-                        UI.text("no_results", lang, kw),
-                        buttons=Keyboards.no_results(kw),
-                        parse_mode='md'
+                # Si ya esta buscando, encolar y avisar
+                if uid in state.active_searches:
+                    queue = state.search_queue.setdefault(uid, [])
+                    queue.append({
+                        'kw': kw, 't_opt': t_opt, 'modo': modo,
+                        'tipo_texto': tipo_texto, 'is_free_search': is_free_search,
+                        'chat_id': state.temp_state[uid].get('chat_id', uid),
+                        'lang': lang
+                    })
+                    position = len(queue)
+                    await e.answer(
+                        UI.text("search_in_progress", lang, position),
+                        alert=True
                     )
+                    if uid in state.temp_state:
+                        del state.temp_state[uid]
+                    return
+
+                # Ejecutar busqueda
+                await _execute_search(
+                    uid=uid, kw=kw, t_opt=t_opt, modo=modo,
+                    tipo_texto=tipo_texto, is_free_search=is_free_search,
+                    chat_id=state.temp_state.get(uid, {}).get('chat_id', uid),
+                    lang=lang, callback_event=e
+                )
 
             # ─── REPORTAR URL ───
             elif data == "report_url":

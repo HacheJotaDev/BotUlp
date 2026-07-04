@@ -103,6 +103,11 @@ class LocaleManager:
                 "├● Solo usuarios VIP pueden realizar busquedas\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
+            "search_in_progress": (
+                "⏳ **Espera a que termine tu busqueda anterior.**\n\n"
+                "Tu nueva busqueda se iniciara automaticamente cuando la actual termine.\n"
+                "Posicion en cola: `{}`"
+            ),
             "ask_domain": (
                 "╭───✦ 🔍 NUEVA BUSQUEDA\n"
                 "├● Escribe el dominio a buscar\n"
