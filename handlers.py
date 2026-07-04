@@ -230,13 +230,23 @@ def _get_file_counts_display() -> tuple:
     return counts, auto_status, total_pending, active_count
 
 
-async def _send_search_result(target_chat, result_file, caption, e=None, msg=None):
+async def _auto_delete_msg(msg, delay=4):
+    """Eliminar un mensaje despues de un delay."""
+    await asyncio.sleep(delay)
+    try:
+        await msg.delete()
+    except Exception:
+        pass
+
+
+async def _send_search_result(target_chat, result_file, caption, e=None, msg=None, reply_to=None):
     """Enviar archivo de resultados y limpiar."""
     try:
         await state.bot.send_file(
             target_chat, result_file,
             caption=caption,
-            parse_mode='md'
+            parse_mode='md',
+            reply_to=reply_to
         )
     except Exception as ex:
         logger.error(f"Error enviando resultado: {ex}")
@@ -267,7 +277,7 @@ def register_handlers(bot_client):
     """Registrar todos los handlers en el bot client."""
 
     async def _execute_search(uid, kw, t_opt, modo, tipo_texto, is_free_search,
-                                chat_id, lang, callback_event=None):
+                                chat_id, lang, callback_event=None, reply_to=None):
         """Ejecutar una busqueda completa con animacion, resultado y procesamiento de cola."""
         state.active_searches.add(uid)
 
@@ -317,10 +327,9 @@ def register_handlers(bot_client):
                 else:
                     caption = UI.text("search_completed", lang, kw, tipo_texto, count, elapsed)
 
-                if callback_event:
-                    await _send_search_result(chat_id, result_file, caption, e=callback_event)
-                else:
-                    await _send_search_result(chat_id, result_file, caption, msg=loading_msg)
+                await _send_search_result(chat_id, result_file, caption,
+                                               e=callback_event, msg=loading_msg,
+                                               reply_to=reply_to)
             else:
                 no_res_text = UI.text("no_results", lang, kw)
                 no_res_kb = Keyboards.no_results(kw)
@@ -369,7 +378,8 @@ def register_handlers(bot_client):
                 is_free_search=next_search['is_free_search'],
                 chat_id=next_search['chat_id'],
                 lang=next_search['lang'],
-                callback_event=None
+                callback_event=None,
+                reply_to=next_search.get('reply_to')
             )
         except Exception as exc:
             logger.error(f"Error en busqueda encolada de {uid}: {exc}")
@@ -515,17 +525,6 @@ def register_handlers(bot_client):
         if e.is_group and not is_group_allowed:
             return
 
-        # Anti-superposicion: si ya esta buscando, bloquear inmediatamente
-        if uid in state.active_searches:
-            try:
-                await e.reply(
-                    UI.text("search_already_running", lang),
-                    parse_mode='md'
-                )
-            except Exception:
-                pass
-            return
-
         allowed, is_free_search = await _check_search_access(uid, lang, is_group_allowed, e.is_private)
 
         if not allowed:
@@ -536,9 +535,24 @@ def register_handlers(bot_client):
             )
 
         kw = normalizar_url(e.pattern_match.group(1))
+
+        # Anti-superposicion: encolar con defaults y auto-eliminar aviso
+        if uid in state.active_searches:
+            try:
+                wait_msg = await e.reply(UI.text("search_already_running", lang), parse_mode='md')
+                asyncio.create_task(_auto_delete_msg(wait_msg, 5))
+            except Exception:
+                pass
+            state.search_queue.setdefault(uid, []).append({
+                'kw': kw, 't_opt': '24h', 'modo': SearchMode.ULP,
+                'tipo_texto': 'ULP', 'is_free_search': is_free_search,
+                'chat_id': e.chat_id, 'lang': lang, 'reply_to': e.id
+            })
+            return
+
         state.temp_state[uid] = {
             'kw': kw, 'chat_id': e.chat_id,
-            'is_free_search': is_free_search
+            'is_free_search': is_free_search, 'reply_to': e.id
         }
         await e.reply(
             UI.text("search_step_time", lang, kw),
@@ -741,17 +755,6 @@ def register_handlers(bot_client):
     ))
     async def handle_conversation(e):
         uid = e.sender_id
-
-        # Anti-superposicion: si ya esta buscando, bloquear inmediatamente
-        if uid in state.active_searches:
-            try:
-                user = db.get_user(uid)
-                lang = user.get('language', 'es')
-                await e.reply(UI.text("search_already_running", lang), parse_mode='md')
-            except Exception:
-                pass
-            return
-
         user = db.get_user(uid)
         lang = user.get('language', 'es')
         role = get_user_role(uid)
@@ -767,9 +770,26 @@ def register_handlers(bot_client):
             )
 
         kw = normalizar_url(e.text)
+
+        # Anti-superposicion: encolar con defaults y auto-eliminar aviso
+        if uid in state.active_searches:
+            try:
+                wait_msg = await e.reply(UI.text("search_already_running", lang), parse_mode='md')
+                asyncio.create_task(_auto_delete_msg(wait_msg, 5))
+            except Exception:
+                pass
+            state.search_queue.setdefault(uid, []).append({
+                'kw': kw, 't_opt': '24h', 'modo': SearchMode.ULP,
+                'tipo_texto': 'ULP', 'is_free_search': is_free_search,
+                'chat_id': e.chat_id, 'lang': lang, 'reply_to': e.id
+            })
+            # Limpiar estado de conversacion
+            state.temp_state.pop(uid, None)
+            return
+
         state.temp_state[uid] = {
             'kw': kw, 'chat_id': e.chat_id,
-            'is_free_search': is_free_search
+            'is_free_search': is_free_search, 'reply_to': e.id
         }
         await e.reply(
             UI.text("search_step_time", lang, kw),
@@ -978,7 +998,7 @@ def register_handlers(bot_client):
                         'kw': kw, 't_opt': t_opt, 'modo': modo,
                         'tipo_texto': tipo_texto, 'is_free_search': is_free_search,
                         'chat_id': state.temp_state[uid].get('chat_id', uid),
-                        'lang': lang
+                        'lang': lang, 'reply_to': state.temp_state[uid].get('reply_to')
                     })
                     position = len(queue)
                     await e.answer(
@@ -991,12 +1011,13 @@ def register_handlers(bot_client):
 
                 # Ejecutar busqueda
                 chat_id = state.temp_state[uid].get('chat_id', uid)
+                reply_to = state.temp_state[uid].get('reply_to')
                 state.temp_state.pop(uid, None)
                 await _execute_search(
                     uid=uid, kw=kw, t_opt=t_opt, modo=modo,
                     tipo_texto=tipo_texto, is_free_search=is_free_search,
                     chat_id=chat_id,
-                    lang=lang, callback_event=e
+                    lang=lang, callback_event=e, reply_to=reply_to
                 )
 
             # ─── REPORTAR URL ───

@@ -9,7 +9,7 @@
     "access_denied": "╭───✦ 🚫 ACCESO DENEGADO\n├● Tu busqueda gratis ya fue usada\n├● Necesitas VIP para seguir buscando\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "access_denied_no_free": "╭───✦ 🚫 ACCESO DENEGADO\n├● Solo usuarios VIP pueden realizar busquedas\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "search_in_progress": "⏳ **Espera a que termine tu busqueda anterior.**\n\nTu nueva busqueda se iniciara automaticamente cuando la actual termine.\nPosicion en cola: `{}`",
-    "search_already_running": "⏳ **Tienes una busqueda en curso.**\n\nEspera a que termine para iniciar una nueva.",
+    "search_already_running": "⏳ **Busqueda en curso.**\n\nSe ejecutara automaticamente al terminar la actual.",
     "ask_domain": "╭───✦ 🔍 NUEVA BUSQUEDA\n├● Escribe el dominio a buscar\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "language_selected": "🌐 Idioma actualizado correctamente.",
     "select_language": "🌐 **SELECT LANGUAGE / IDIOMA / IDIOMA**\n\nChoose your preferred language:",
