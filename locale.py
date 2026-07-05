@@ -251,7 +251,7 @@ class LocaleManager:
             ),
             "pay_plans": (
                 "╭───✦ 💳 COMPRAR VIP — PAGO AUTOMATICO\n"
-                "├● Moneda: **USDT (Arbitrum One)**\n"
+                "├● Moneda: **Multi-Cripto (USDT, TRX, etc.)**\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
                 "Selecciona tu plan:"
             ),

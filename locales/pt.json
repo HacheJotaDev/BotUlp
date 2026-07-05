@@ -33,7 +33,7 @@
     "imap_processing": "⚙️ **IMAP Check em andamento...**\n\n📧 Verificando combos\n📊 Progresso: `{}/{}` | Hits: `{}`\n⠋ Processando",
     "imap_completed": "╭───✦ 📧 IMAP CHECK\n├● 📊 Total: `{}`\n├● ✅ Hits: `{}`\n├● ❌ Bads: `{}`\n├● ⏱️ Tempo: `{:.1f}s`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "imap_no_hits": "╭───✦ 📧 IMAP CHECK\n├● 📊 Total: `{}`\n├● ❌ 0 Hits encontrados\n├● ⏱️ Tempo: `{:.1f}s`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
-    "pay_plans": "╭───✦ 💳 COMPRAR VIP — PAGAMENTO AUTOMATICO\n├● Moeda: **USDT (Arbitrum One)**\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\nSelecione seu plano:",
+    "pay_plans": "╭───✦ 💳 COMPRAR VIP — PAGAMENTO AUTOMATICO\n├● Moeda: **Multi-Cripto (USDT, TRX, etc.)**\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\nSelecione seu plano:",
     "pay_invoice": "╭───✦ 💳 PAGAMENTO CRIADO\n├● 📦 Plano: **{}**\n├● 💲 Valor: **${:.2f} USD**\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n🔗 **Pague aqui:**\n{}\n\n⏳ O VIP sera ativado automaticamente ao confirmar o pagamento.\n📋 O pagamento e verificado a cada 30 segundos.",
     "pay_checking": "⏳ Verificando status do pagamento...",
     "pay_pending": "╭───✦ ⏳ PAGAMENTO PENDENTE\n├● Seu pagamento ainda esta sendo processado\n├● O VIP sera ativado automaticamente\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
