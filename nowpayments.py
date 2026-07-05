@@ -120,8 +120,7 @@ async def create_invoice(user_id: int, days: int, lang: str = 'es') -> Optional[
         "price_currency": "usd",
         "order_id": order_id,
         "order_description": f"HJ ULP VIP - {plan['label']}",
-        "ipn_callback_url": "https://google.com",
-        "purchaser_email": "test@test.com"
+        "ipn_callback_url": "https://google.com"
     }
 
     data = await _api_post("/invoice", payload)
