@@ -118,7 +118,6 @@ async def create_invoice(user_id: int, days: int, lang: str = 'es') -> Optional[
     payload = {
         "price_amount": price_usd,
         "price_currency": "usd",
-        "currencies": ["usdterc20arbitrum"],
         "order_id": order_id,
         "order_description": f"HJ ULP VIP - {plan['label']}",
         "ipn_callback_url": "https://google.com",
