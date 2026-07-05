@@ -60,6 +60,18 @@ class Database:
             added_by INTEGER,
             added_at TEXT DEFAULT CURRENT_TIMESTAMP
         )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            invoice_id TEXT NOT NULL,
+            order_id TEXT,
+            days INTEGER,
+            amount_usd REAL,
+            status TEXT DEFAULT 'pending',
+            lang TEXT DEFAULT 'es',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )""")
 
         # Migraciones
         c.execute("PRAGMA table_info(users)")
@@ -267,6 +279,40 @@ class Database:
             (filename, file_size, chat_id)
         )
         self.conn.commit()
+
+    # ── Pagos NOWPayments ──
+
+    def create_payment(self, user_id: int, invoice_id: str, order_id: str,
+                       days: int, amount_usd: float, status: str, lang: str = 'es'):
+        c = self.conn.cursor()
+        c.execute(
+            "INSERT INTO payments (user_id, invoice_id, order_id, days, amount_usd, status, lang) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (user_id, invoice_id, order_id, days, amount_usd, status, lang)
+        )
+        self.conn.commit()
+
+    def get_pending_payments(self) -> List[dict]:
+        c = self.conn.cursor()
+        c.execute("SELECT * FROM payments WHERE status = 'pending'")
+        return [dict(r) for r in c.fetchall()]
+
+    def update_payment_status(self, invoice_id: str, status: str):
+        c = self.conn.cursor()
+        now = datetime.now(timezone.utc).isoformat()
+        c.execute(
+            "UPDATE payments SET status = ?, updated_at = ? WHERE invoice_id = ?",
+            (status, now, invoice_id)
+        )
+        self.conn.commit()
+
+    def get_user_payments(self, user_id: int) -> List[dict]:
+        c = self.conn.cursor()
+        c.execute(
+            "SELECT * FROM payments WHERE user_id = ? ORDER BY created_at DESC LIMIT 5",
+            (user_id,)
+        )
+        return [dict(r) for r in c.fetchall()]
 
 
 db = Database(config.DB_FILE)

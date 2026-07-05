@@ -128,3 +128,20 @@ class Keyboards:
     @staticmethod
     def back(data: str = "back_main"):
         return [[Button.inline("🔙 Volver", data.encode())]]
+
+    @staticmethod
+    def payment_plans():
+        return [
+            [Button.inline("⚡ 1 Dia — $6", b"pay_1"),
+             Button.inline("📊 3 Dias — $10", b"pay_3")],
+            [Button.inline("🔥 7 Dias — $25", b"pay_7"),
+             Button.inline("💎 30 Dias — $100", b"pay_30")],
+            [Button.inline("🔙 Volver", b"back_main")]
+        ]
+
+    @staticmethod
+    def payment_waiting():
+        return [
+            [Button.inline("🔄 Verificar Estado", b"pay_check")],
+            [Button.inline("🔙 Volver", b"back_main")]
+        ]

@@ -95,6 +95,11 @@ async def main():
 
     state.cleanup_task = asyncio.create_task(cleanup_loop())
 
+    # Iniciar polling de pagos NOWPayments
+    from nowpayments import payment_polling_loop
+    state.payment_polling_task = asyncio.create_task(payment_polling_loop())
+    logger.info("NOWPayments payment polling iniciado")
+
     # Info del bot
     me = await bot_client.get_me()
     user_me = await userbot_client.get_me()

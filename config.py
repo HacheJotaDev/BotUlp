@@ -54,6 +54,10 @@ class Config:
     # Git repo para /updateBot
     GIT_REPO_URL: str = "https://github.com/HacheJotaDev/BotUlp.git"
 
+    # NOWPayments
+    NOWPAYMENTS_API_KEY: str = "N9BWS3V-AP94BH7-HA7QH4R-RZ7TKS7"
+    NOWPAYMENTS_IPN_KEY: str = "Q0qTZTAZwPPx9V6IqLT2pMptqRLFbE9P"
+
     def __post_init__(self):
         for d in [self.DIR_DOWNLOADS, self.DIR_ARCHIVE, self.DIR_CACHE,
                   self.DB_FILE.parent, self.DIR_LOCALES, self.DIR_TEMP]:

@@ -249,6 +249,52 @@ class LocaleManager:
                 "├● ⏱️ Tiempo: `{:.1f}s`\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
+            "pay_plans": (
+                "╭───✦ 💳 COMPRAR VIP — PAGO AUTOMATICO\n"
+                "├● Moneda: **USDT (Arbitrum One)**\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
+                "Selecciona tu plan:"
+            ),
+            "pay_invoice": (
+                "╭───✦ 💳 PAGO CREADO\n"
+                "├● 📦 Plan: **{}**\n"
+                "├● 💲 Monto: **${:.2f} USD**\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
+                "🔗 **Paga aqui:**\n{}\n\n"
+                "⏳ El VIP se activara automaticamente al confirmar el pago.\n"
+                "📋 El pago se verifica cada 30 segundos."
+            ),
+            "pay_checking": "⏳ Verificando estado del pago...",
+            "pay_pending": (
+                "╭───✦ ⏳ PAGO PENDIENTE\n"
+                "├● Tu pago aun esta siendo procesado\n"
+                "├● El VIP se activara automaticamente\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
+            "pay_expired": (
+                "╭───✦ ❌ PAGO EXPIRADO\n"
+                "├● La factura de pago expiro\n"
+                "├● Crea una nueva para intentar de nuevo\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
+            "pay_failed": (
+                "╭───✦ ❌ PAGO FALLIDO\n"
+                "├● Hubo un error con el pago\n"
+                "├● Intenta nuevamente o contacta soporte\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
+            "pay_success": (
+                "╭───✦ ✅ PAGO CONFIRMADO\n"
+                "├● 🎉 Tu VIP ha sido activado por **{} dias**\n"
+                "├● Ya puedes usar /url para buscar\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
+            "pay_api_error": (
+                "╭───✦ ❌ ERROR DE PAGO\n"
+                "├● No se pudo crear la factura\n"
+                "├● Intenta de nuevo en unos minutos\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            ),
         }
 
         # Cargar archivos de locale externos

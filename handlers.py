@@ -34,6 +34,7 @@ from locale import locale_manager
 from ui import UI, Keyboards
 from utils import normalizar_url, get_file_counts, format_size, format_time
 from search import search_engine
+from nowpayments import create_invoice, get_invoice_status, VIP_PLANS
 from imap_checker import imap_check_file
 from download import (
     DownloadProgressTracker,
@@ -830,14 +831,95 @@ def register_handlers(bot_client):
                     parse_mode='md'
                 )
 
-            # ─── COMPRAR VIP ───
+            # ─── COMPRAR VIP (menu con pago automatico + contacto) ───
             elif data == "buy_vip_info":
-                contacts = "\n".join(config.SELLER_USERNAMES)
                 await e.edit(
-                    UI.text("buy_vip_info", lang, contacts),
-                    buttons=Keyboards.back(),
+                    UI.text("pay_plans", lang),
+                    buttons=Keyboards.payment_plans(),
                     parse_mode='md'
                 )
+
+            # ─── PAGO: Seleccionar plan ───
+            elif data.startswith("pay_") and data != "pay_check":
+                days = int(data.split("_")[1])
+                plan = VIP_PLANS.get(days)
+                if not plan:
+                    return await e.answer("Plan invalido.", alert=True)
+
+                await e.edit(UI.text("pay_checking", lang), parse_mode='md')
+
+                result = await create_invoice(uid, days, lang)
+                if not result or "invoice_url" not in result:
+                    await e.edit(
+                        UI.text("pay_api_error", lang),
+                        buttons=Keyboards.back(),
+                        parse_mode='md'
+                    )
+                    return
+
+                invoice_url = result["invoice_url"]
+                invoice_id = str(result["id"])
+
+                # Guardar invoice_id en temp_state para el boton de verificar
+                state.temp_state[uid] = {
+                    'step': 'WAITING_PAYMENT',
+                    'invoice_id': invoice_id,
+                    'days': days
+                }
+
+                await e.edit(
+                    UI.text("pay_invoice", lang, plan["label"], plan["price"], invoice_url),
+                    buttons=Keyboards.payment_waiting(),
+                    parse_mode='md'
+                )
+
+            # ─── PAGO: Verificar estado ───
+            elif data == "pay_check":
+                ts = state.temp_state.get(uid, {})
+                invoice_id = ts.get('invoice_id')
+                days = ts.get('days')
+
+                if not invoice_id:
+                    return await e.answer("No hay pago pendiente.", alert=True)
+
+                await e.edit(UI.text("pay_checking", lang), parse_mode='md')
+
+                status = await get_invoice_status(invoice_id)
+                if not status:
+                    await e.edit(
+                        UI.text("pay_pending", lang),
+                        buttons=Keyboards.payment_waiting(),
+                        parse_mode='md'
+                    )
+                    return
+
+                if status in ("paid", "confirmed", "finished"):
+                    # VIP ya fue entregado por el polling, mostrar exito
+                    db.set_role(uid, "VIP", days)
+                    db.update_payment_status(invoice_id, "delivered")
+                    role = get_user_role(uid)
+                    state.temp_state.pop(uid, None)
+                    await e.edit(
+                        UI.text("pay_success", lang, days),
+                        buttons=Keyboards.main(role, lang, False),
+                        parse_mode='md'
+                    )
+                elif status in ("expired", "failed", "refunded"):
+                    db.update_payment_status(invoice_id, status)
+                    state.temp_state.pop(uid, None)
+                    key = f"pay_{status}" if status in ("expired", "failed") else "pay_failed"
+                    await e.edit(
+                        UI.text(key, lang),
+                        buttons=Keyboards.payment_plans(),
+                        parse_mode='md'
+                    )
+                else:
+                    # pending / waiting
+                    await e.edit(
+                        UI.text("pay_pending", lang),
+                        buttons=Keyboards.payment_waiting(),
+                        parse_mode='md'
+                    )
 
             # ─── CANJEAR KEY ───
             elif data == "canjear_key":

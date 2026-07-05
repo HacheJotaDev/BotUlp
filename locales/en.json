@@ -32,5 +32,13 @@
     "imap_no_file": "╭───✦ ❌ IMAP CHECKER\n├● Reply to a .txt file with mail:pass combos\n├● Example: reply to file + /imap\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "imap_processing": "⚙️ **IMAP Check in progress...**\n\n📧 Checking combos\n📊 Progress: `{}/{}` | Hits: `{}`\n⠋ Processing",
     "imap_completed": "╭───✦ 📧 IMAP CHECK\n├● 📊 Total: `{}`\n├● ✅ Hits: `{}`\n├● ❌ Bads: `{}`\n├● ⏱️ Time: `{:.1f}s`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
-    "imap_no_hits": "╭───✦ 📧 IMAP CHECK\n├● 📊 Total: `{}`\n├● ❌ 0 Hits found\n├● ⏱️ Time: `{:.1f}s`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+    "imap_no_hits": "╭───✦ 📧 IMAP CHECK\n├● 📊 Total: `{}`\n├● ❌ 0 Hits found\n├● ⏱️ Time: `{:.1f}s`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "pay_plans": "╭───✦ 💳 BUY VIP — AUTOMATIC PAYMENT\n├● Currency: **USDT (Arbitrum One)**\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\nSelect your plan:",
+    "pay_invoice": "╭───✦ 💳 PAYMENT CREATED\n├● 📦 Plan: **{}**\n├● 💲 Amount: **${:.2f} USD**\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n🔗 **Pay here:**\n{}\n\n⏳ VIP will be activated automatically once payment is confirmed.\n📋 Payment is verified every 30 seconds.",
+    "pay_checking": "⏳ Checking payment status...",
+    "pay_pending": "╭───✦ ⏳ PAYMENT PENDING\n├● Your payment is still being processed\n├● VIP will be activated automatically\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "pay_expired": "╭───✦ ❌ PAYMENT EXPIRED\n├● The payment invoice has expired\n├● Create a new one to try again\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "pay_failed": "╭───✦ ❌ PAYMENT FAILED\n├● There was an error with the payment\n├● Try again or contact support\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "pay_success": "╭───✦ ✅ PAYMENT CONFIRMED\n├● 🎉 Your VIP has been activated for **{} days**\n├● You can now use /url to search\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+    "pay_api_error": "╭───✦ ❌ PAYMENT ERROR\n├● Could not create the invoice\n├● Try again in a few minutes\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
 }
