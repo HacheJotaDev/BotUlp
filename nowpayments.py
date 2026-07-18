@@ -144,10 +144,22 @@ async def create_invoice(user_id: int, days: int, lang: str = 'es') -> Optional[
 
 
 async def get_invoice_status(invoice_id: str) -> Optional[str]:
-    """Obtener estado de una invoice. Retorna el status string o None."""
-    data = await _api_get(f"/invoice/{invoice_id}")
-    if data and "status" in data:
-        return data["status"]
+    """Obtener estado de una invoice. Retorna el status string, 'not_found' si 404, o None."""
+    url = f"{NP_API_BASE}/invoice/{invoice_id}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=NP_HEADERS, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data.get("status")
+                elif resp.status == 404:
+                    logger.warning(f"Invoice {invoice_id} no encontrada (404) — se descarta")
+                    return "not_found"
+                else:
+                    text = await resp.text()
+                    logger.error(f"NOWPayments invoice {invoice_id} error {resp.status}: {text[:200]}")
+    except Exception as e:
+        logger.error(f"NOWPayments invoice {invoice_id} exception: {e}")
     return None
 
 
@@ -169,28 +181,62 @@ async def payment_polling_loop():
         await asyncio.sleep(30)
 
 
+# Tiempo maximo antes de expirar una orden pendiente (30 minutos)
+ORDER_EXPIRY_MINUTES = 30
+
+
 async def _check_pending_payments():
-    """Verificar todos los pagos pendientes y entregar VIP a los confirmados."""
+    """Verificar todos los pagos pendientes y entregar VIP a los confirmados.
+
+    - Si una orden tiene mas de ORDER_EXPIRY_MINUTES, se marca como expired localmente.
+    - Si NOWPayments devuelve 404, se descarta la orden silenciosamente.
+    - Cada consulta es independiente (try/except por pago) para no bloquear las demas.
+    - Las consultas corren en paralelo con asyncio.gather.
+    """
     import state
 
     pending = db.get_pending_payments()
     if not pending:
         return
 
-    for payment in pending:
+    now = datetime.now(timezone.utc)
+
+    async def _process_one(payment: dict):
         invoice_id = payment["invoice_id"]
         user_id = payment["user_id"]
         days = payment["days"]
         lang = payment.get("lang", "es")
-        order_id = payment["order_id"]
 
-        status = await get_invoice_status(invoice_id)
-        if not status:
-            continue
+        # ── 1) Expiracion por tiempo ──
+        try:
+            created_str = payment.get("created_at", "")
+            if created_str:
+                created = datetime.fromisoformat(created_str)
+                if created.tzinfo is None:
+                    created = created.replace(tzinfo=timezone.utc)
+                if (now - created).total_seconds() > ORDER_EXPIRY_MINUTES * 60:
+                    db.update_payment_status(invoice_id, "expired")
+                    logger.info(f"Payment {invoice_id} expirada por tiempo (>{ORDER_EXPIRY_MINUTES}min) user={user_id}")
+                    return
+        except Exception as e:
+            logger.warning(f"Error verificando expiracion de {invoice_id}: {e}")
+
+        # ── 2) Consultar estado a NOWPayments ──
+        try:
+            status = await get_invoice_status(invoice_id)
+        except Exception as e:
+            logger.error(f"Error consultando invoice {invoice_id}: {e}")
+            return
+
+        if not status or status == "not_found":
+            # 404 o sin respuesta: descartar silenciosamente
+            if status == "not_found":
+                db.update_payment_status(invoice_id, "expired")
+            return
 
         logger.info(f"Payment {invoice_id} status: {status} (user={user_id})")
 
-        if status == "paid" or status == "confirmed" or status == "finished":
+        if status in ("paid", "confirmed", "finished"):
             # Entregar VIP
             db.set_role(user_id, "VIP", days)
             db.update_payment_status(invoice_id, "delivered")
@@ -212,6 +258,9 @@ async def _check_pending_payments():
             except Exception as e:
                 logger.error(f"Error notificando pago a {user_id}: {e}")
 
-        elif status == "expired" or status == "failed" or status == "refunded":
+        elif status in ("expired", "failed", "refunded"):
             db.update_payment_status(invoice_id, status)
             logger.info(f"Payment {invoice_id} marcado como {status}")
+
+    # Ejecutar todas las consultas en paralelo (no bloqueante)
+    await asyncio.gather(*[_process_one(p) for p in pending], return_exceptions=True)
