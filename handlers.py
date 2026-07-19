@@ -885,7 +885,17 @@ def register_handlers(bot_client):
                 await e.edit(UI.text("pay_checking", lang), parse_mode='md')
 
                 status = await get_invoice_status(invoice_id)
-                if not status:
+                if not status or status == "not_found":
+                    # FIX: manejar "not_found" (invoice ya no existe en NOWPayments)
+                    if status == "not_found":
+                        db.update_payment_status(invoice_id, "expired")
+                        state.temp_state.pop(uid, None)
+                        await e.edit(
+                            UI.text("pay_expired", lang),
+                            buttons=Keyboards.payment_plans(),
+                            parse_mode='md'
+                        )
+                        return
                     await e.edit(
                         UI.text("pay_pending", lang),
                         buttons=Keyboards.payment_waiting(),

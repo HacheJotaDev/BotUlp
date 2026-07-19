@@ -41,9 +41,13 @@ def progress_bar(pct: float, width: int = 12) -> str:
 
 
 def get_file_counts() -> Dict[str, int]:
-    """Contar archivos en directorios de descarga y archivo."""
-    count_24h = len(list(config.DIR_DOWNLOADS.glob('*.txt')))
-    count_old = len(list(config.DIR_ARCHIVE.glob('*.txt')))
+    """Contar archivos en directorios de descarga y archivo.
+
+    FIX: usa sum() con generador en vez de list() para no cargar
+    todos los Path objects en memoria cuando hay miles de archivos.
+    """
+    count_24h = sum(1 for _ in config.DIR_DOWNLOADS.glob('*.txt'))
+    count_old = sum(1 for _ in config.DIR_ARCHIVE.glob('*.txt'))
     return {'total': count_24h + count_old, '24h': count_24h, 'old': count_old}
 
 

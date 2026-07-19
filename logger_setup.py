@@ -17,13 +17,14 @@ class ColoredFormatter(logging.Formatter):
     RESET = '\033[0m'
 
     def format(self, record):
-        # FIX #11: Restaurar levelname después de formatear para evitar
-        # que los códigos ANSI se filtren al archivo de log
+        # FIX: try/finally para garantizar restauracion del levelname original
         levelname = record.levelname
         color = self.COLORS.get(levelname, self.RESET)
         record.levelname = f"{color}{levelname}{self.RESET}"
-        result = super().format(record)
-        record.levelname = levelname  # Restaurar original
+        try:
+            result = super().format(record)
+        finally:
+            record.levelname = levelname  # Siempre restaurar
         return result
 
 

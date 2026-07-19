@@ -67,15 +67,22 @@ def _check_single(email: str, password: str) -> Tuple[bool, str, str]:
     tipo = _detectar_tipo(email)
     imap_server = _servidor_imap(tipo, dominio)
 
+    imap = None
     try:
         # Timeout por conexión, NO global
         imap = imaplib.IMAP4_SSL(imap_server, 993, timeout=IMAP_TIMEOUT)
         imap.login(email, password)
         imap.select("INBOX")
-        imap.logout()
         return True, tipo, imap_server
     except Exception:
         return False, tipo, imap_server
+    finally:
+        # FIX: siempre cerrar la conexión para evitar leaks
+        if imap is not None:
+            try:
+                imap.logout()
+            except Exception:
+                pass
 
 
 def _worker(combo: str) -> Optional[str]:
