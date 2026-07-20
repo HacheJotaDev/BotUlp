@@ -726,22 +726,22 @@ def register_handlers(bot_client):
             f"🚫 Fallidos: `{errors}`"
         )
 
-    @bot_client.on(events.NewMessage(pattern=r"/bc (.+)"))
+    @bot_client.on(events.NewMessage(pattern=r"/bc ([\s\S]+)"))
     async def cmd_bc(e):
         if get_user_role(e.sender_id) != UserRole.ADMIN:
             return
-        msg_text = e.pattern_match.group(1)
+        msg_text = e.pattern_match.group(1).strip()
         users = db.get_all_users()
         status = await e.reply(
             f"📣 **Broadcast Global Iniciado**\n\n👥 Total: `{len(users)}`\n⚡ Enviando..."
         )
         await _broadcast(e.sender_id, users, msg_text, status, "Broadcast Global")
 
-    @bot_client.on(events.NewMessage(pattern=r"/bcvip (.+)"))
+    @bot_client.on(events.NewMessage(pattern=r"/bcvip ([\s\S]+)"))
     async def cmd_bcvip(e):
         if get_user_role(e.sender_id) != UserRole.ADMIN:
             return
-        msg_text = e.pattern_match.group(1)
+        msg_text = e.pattern_match.group(1).strip()
         vips_data = db.list_vips()
         status = await e.reply(
             f"👑 **Broadcast VIP Iniciado**\n\n👥 Total VIPs: `{len(vips_data)}`\n⚡ Enviando..."
