@@ -236,12 +236,24 @@ async def _check_pending_payments():
 
         logger.info(f"Payment {invoice_id} status: {status} (user={user_id})")
 
-        if status in ("paid", "confirmed", "finished"):
-            # Entregar VIP
+        # Estados intermedios: no hacer nada, esperar siguiente ciclo
+        if status in ("waiting", "confirming", "sending"):
+            logger.debug(f"Payment {invoice_id} en estado intermedio: {status}, esperando...")
+            return
+
+        if status in ("paid", "confirmed", "finished", "partially_paid"):
+            # Entregar VIP (partially_paid se incluye porque NOWPayments lo usa
+            # cuando el monto crypto difiere ligeramente por conversion/tarifas,
+            # pero el equivalente fiat cubre el precio. El cliente ya pago.)
+            if status == "partially_paid":
+                logger.warning(
+                    f"VIP entregado por partially_paid: user={user_id} | {days} dias | "
+                    f"invoice={invoice_id} — revisar si el monto fiat cubre el precio"
+                )
             db.set_role(user_id, "VIP", days)
             db.update_payment_status(invoice_id, "delivered")
 
-            logger.info(f"VIP ENTREGADO: user={user_id} | {days} dias | invoice={invoice_id}")
+            logger.info(f"VIP ENTREGADO: user={user_id} | {days} dias | invoice={invoice_id} | np_status={status}")
 
             # Notificar al usuario
             try:
