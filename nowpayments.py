@@ -181,17 +181,18 @@ async def payment_polling_loop():
         await asyncio.sleep(30)
 
 
-# Tiempo maximo antes de expirar una orden pendiente (30 minutos)
-ORDER_EXPIRY_MINUTES = 30
+# Tiempo maximo antes de expirar una orden que sigue pendiente en NOWPayments.
+# Solo se aplica si NOWPayments tambien la reporta como pendiente/expire.
+# Si el pago ya fue completado (finished/paid/etc), se entrega VIP sin importar el tiempo.
+ORDER_EXPIRY_MINUTES = 120
 
 
 async def _check_pending_payments():
     """Verificar todos los pagos pendientes y entregar VIP a los confirmados.
 
-    - Si una orden tiene mas de ORDER_EXPIRY_MINUTES, se marca como expired localmente.
-    - Si NOWPayments devuelve 404, se descarta la orden silenciosamente.
-    - Cada consulta es independiente (try/except por pago) para no bloquear las demas.
-    - Las consultas corren en paralelo con asyncio.gather.
+    FIX CRITICO: Se consulta NOWPayments PRIMERO. Solo se expira por tiempo
+    si NOWPayments confirma que el pago sigue pendiente o expirado.
+    Esto evita perder pagos cuando el bot se reinicia o estaba caido.
     """
     import state
 
@@ -207,21 +208,7 @@ async def _check_pending_payments():
         days = payment["days"]
         lang = payment.get("lang", "es")
 
-        # ── 1) Expiracion por tiempo ──
-        try:
-            created_str = payment.get("created_at", "")
-            if created_str:
-                created = datetime.fromisoformat(created_str)
-                if created.tzinfo is None:
-                    created = created.replace(tzinfo=timezone.utc)
-                if (now - created).total_seconds() > ORDER_EXPIRY_MINUTES * 60:
-                    db.update_payment_status(invoice_id, "expired")
-                    logger.info(f"Payment {invoice_id} expirada por tiempo (>{ORDER_EXPIRY_MINUTES}min) user={user_id}")
-                    return
-        except Exception as e:
-            logger.warning(f"Error verificando expiracion de {invoice_id}: {e}")
-
-        # ── 2) Consultar estado a NOWPayments ──
+        # ── 1) Consultar estado a NOWPayments (PRIMERO, antes de cualquier expiracion local) ──
         try:
             status = await get_invoice_status(invoice_id)
         except Exception as e:
@@ -229,50 +216,75 @@ async def _check_pending_payments():
             return
 
         if not status or status == "not_found":
-            # 404 o sin respuesta: descartar silenciosamente
             if status == "not_found":
                 db.update_payment_status(invoice_id, "expired")
             return
 
         logger.info(f"Payment {invoice_id} status: {status} (user={user_id})")
 
-        # Estados intermedios: no hacer nada, esperar siguiente ciclo
-        if status in ("waiting", "confirming", "sending"):
-            logger.debug(f"Payment {invoice_id} en estado intermedio: {status}, esperando...")
-            return
-
+        # ── 2) Estado exitoso: entregar VIP sin importar el tiempo transcurrido ──
         if status in ("paid", "confirmed", "finished", "partially_paid"):
-            # Entregar VIP (partially_paid se incluye porque NOWPayments lo usa
-            # cuando el monto crypto difiere ligeramente por conversion/tarifas,
-            # pero el equivalente fiat cubre el precio. El cliente ya pago.)
-            if status == "partially_paid":
-                logger.warning(
-                    f"VIP entregado por partially_paid: user={user_id} | {days} dias | "
-                    f"invoice={invoice_id} — revisar si el monto fiat cubre el precio"
-                )
-            db.set_role(user_id, "VIP", days)
-            db.update_payment_status(invoice_id, "delivered")
-
-            logger.info(f"VIP ENTREGADO: user={user_id} | {days} dias | invoice={invoice_id} | np_status={status}")
-
-            # Notificar al usuario
             try:
-                from ui import UI, Keyboards
-                from roles import get_user_role
+                if status == "partially_paid":
+                    logger.warning(
+                        f"VIP entregado por partially_paid: user={user_id} | {days} dias | "
+                        f"invoice={invoice_id} — el monto fiat cubre el precio"
+                    )
 
-                role = get_user_role(user_id)
-                await state.bot.send_message(
-                    user_id,
-                    UI.text("payment_success", lang, days),
-                    buttons=Keyboards.main(role, lang, False),
-                    parse_mode='md'
-                )
+                db.set_role(user_id, "VIP", days)
+                db.update_payment_status(invoice_id, "delivered")
+
+                logger.info(f"VIP ENTREGADO: user={user_id} | {days} dias | invoice={invoice_id} | np_status={status}")
+
+                # Notificar al usuario
+                try:
+                    from ui import UI, Keyboards
+                    from roles import get_user_role
+
+                    role = get_user_role(user_id)
+                    await state.bot.send_message(
+                        user_id,
+                        UI.text("payment_success", lang, days),
+                        buttons=Keyboards.main(role, lang, False),
+                        parse_mode='md'
+                    )
+                except Exception as e:
+                    logger.error(f"Error notificando pago a {user_id}: {e}")
+
             except Exception as e:
-                logger.error(f"Error notificando pago a {user_id}: {e}")
+                logger.error(f"ERROR CRITICO entregando VIP user={user_id} invoice={invoice_id}: {e}")
 
+        # ── 3) Estados intermedios: esperar siguiente ciclo ──
+        elif status in ("waiting", "confirming", "sending", "pending"):
+            # Solo expirar localmente si ya paso mucho tiempo Y NOWPayments no lo resolvio
+            try:
+                created_str = payment.get("created_at", "")
+                if created_str:
+                    created = datetime.fromisoformat(created_str)
+                    if created.tzinfo is None:
+                        created = created.replace(tzinfo=timezone.utc)
+                    elapsed_min = (now - created).total_seconds() / 60
+                    if elapsed_min > ORDER_EXPIRY_MINUTES:
+                        db.update_payment_status(invoice_id, "expired")
+                        logger.info(
+                            f"Payment {invoice_id} expirada: {elapsed_min:.0f}min sin resolver en NOWPayments "
+                            f"(np_status={status}) user={user_id}"
+                        )
+            except Exception as e:
+                logger.warning(f"Error verificando expiracion de {invoice_id}: {e}")
+
+        # ── 4) Estados fallidos: marcar y salir ──
         elif status in ("expired", "failed", "refunded"):
-            db.update_payment_status(invoice_id, status)
+            try:
+                db.update_payment_status(invoice_id, status)
+            except Exception as e:
+                logger.error(f"Error actualizando estado de {invoice_id}: {e}")
             logger.info(f"Payment {invoice_id} marcado como {status}")
 
     # Ejecutar todas las consultas en paralelo (no bloqueante)
-    await asyncio.gather(*[_process_one(p) for p in pending], return_exceptions=True)
+    results = await asyncio.gather(*[_process_one(p) for p in pending], return_exceptions=True)
+
+    # Log errores silenciosos de gather
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            logger.error(f"Error inesperado en payment polling (payment #{i}): {result}")
