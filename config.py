@@ -9,12 +9,15 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List
 
+from dotenv import load_dotenv
+load_dotenv()
+
 
 @dataclass
 class Config:
     API_ID: int = 33426502
     API_HASH: str = "54a521a10855ddd24314433372190f97"
-    BOT_TOKEN: str = ""
+    BOT_TOKEN: str = field(default_factory=lambda: os.getenv("BOT_TOKEN", ""))
     USER_SESSION: str = "user_session"
     BOT_SESSION: str = "bot_session"
 
@@ -60,9 +63,10 @@ class Config:
 
     def __post_init__(self):
         if not self.BOT_TOKEN:
-            self.BOT_TOKEN = input("🔐 Ingrese el BOT_TOKEN: ").strip()
-            if not self.BOT_TOKEN:
-                raise ValueError("BOT_TOKEN es obligatorio. No se puede iniciar el bot sin un token válido.")
+            raise ValueError(
+                "BOT_TOKEN no está configurado. "
+                "Crea un archivo .env con: BOT_TOKEN=tu_token_aqui"
+            )
 
         for d in [self.DIR_DOWNLOADS, self.DIR_ARCHIVE, self.DIR_CACHE,
                   self.DB_FILE.parent, self.DIR_LOCALES, self.DIR_TEMP]:
