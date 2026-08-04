@@ -14,7 +14,7 @@ from typing import List
 class Config:
     API_ID: int = 33426502
     API_HASH: str = "54a521a10855ddd24314433372190f97"
-    BOT_TOKEN: str = "8994978352:AAFZG5qY47aprhtSdZjugnkX7TKnzZAhj8w"
+    BOT_TOKEN: str = ""
     USER_SESSION: str = "user_session"
     BOT_SESSION: str = "bot_session"
 
@@ -59,6 +59,11 @@ class Config:
     NOWPAYMENTS_IPN_KEY: str = "Q0qTZTAZwPPx9V6IqLT2pMptqRLFbE9P"
 
     def __post_init__(self):
+        if not self.BOT_TOKEN:
+            self.BOT_TOKEN = input("🔐 Ingrese el BOT_TOKEN: ").strip()
+            if not self.BOT_TOKEN:
+                raise ValueError("BOT_TOKEN es obligatorio. No se puede iniciar el bot sin un token válido.")
+
         for d in [self.DIR_DOWNLOADS, self.DIR_ARCHIVE, self.DIR_CACHE,
                   self.DB_FILE.parent, self.DIR_LOCALES, self.DIR_TEMP]:
             d.mkdir(parents=True, exist_ok=True)
