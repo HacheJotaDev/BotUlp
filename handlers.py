@@ -275,8 +275,10 @@ async def _send_search_result(target_chat, result_file, caption, e=None, msg=Non
 # ═════════════════════════════════════════════════════════════
 
 async def _execute_imap_check(event, file_msg, keywords, lang, uid):
-    """Ejecutar IMAP check y opcionalmente filtrar por keywords + generar ZIP."""
+    """Execute IMAP check with optional keyword search in inbox + generate proper ZIP."""
     import zipfile
+    from datetime import datetime
+    from collections import defaultdict
     from utils import progress_bar
 
     status_msg = await event.reply(
@@ -339,49 +341,91 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid):
             None,
             lambda: imap_check_file(
                 Path(input_path), Path(output_path),
+                keywords=keywords,
                 progress_callback=progress_cb
             )
         )
 
-        if stats['hits'] > 0 and os.path.isfile(output_path):
-            # Leer todos los hits
-            with open(output_path, 'r', encoding='utf-8') as f:
-                all_hits = [line.strip() for line in f if line.strip()]
+        hits_data = stats.get('hits_data', [])
+        bads_list = stats.get('bads_list', [])
+
+        if stats['hits'] > 0:
+            now_str = datetime.now().strftime('%m/%d/%Y, %I:%M:%S %p')
+
+            def sanitize_domain(domain):
+                import re
+                d = domain.lower().strip()
+                d = re.sub(r'[^a-z0-9._-]', '_', d)
+                d = re.sub(r'_+', '_', d).strip('_')
+                return d or 'unknown'
 
             if keywords:
-                # Filtrar hits por keywords y generar ZIP
-                keyword_results = {}
+                domains_dir = os.path.join(temp_dir, 'domains')
+                keywords_dir = os.path.join(temp_dir, 'keywords')
+                os.makedirs(domains_dir, exist_ok=True)
+                os.makedirs(keywords_dir, exist_ok=True)
+
+                # 1) all_hits.txt
+                all_hits_path = os.path.join(temp_dir, 'all_hits.txt')
+                with open(all_hits_path, 'w', encoding='utf-8') as f:
+                    f.write('# CHECKER BOT RESULTS - ' + now_str + '\n')
+                    f.write('# User: ' + str(uid) + ' | Type: imap\n\n')
+                    for h in hits_data:
+                        f.write(h['combo'] + '\n')
+
+                # 2) bad_accounts.txt
+                bads_path = os.path.join(temp_dir, 'bad_accounts.txt')
+                with open(bads_path, 'w', encoding='utf-8') as f:
+                    f.write('# BAD ACCOUNTS\n\n')
+                    for bad in bads_list:
+                        f.write(bad + '\n')
+
+                # 3) domains/ - group by domain
+                domain_groups = defaultdict(list)
+                for h in hits_data:
+                    domain_groups[h['domain']].append(h['combo'])
+
+                for domain, combos in domain_groups.items():
+                    safe = sanitize_domain(domain)
+                    fname = str(len(combos)) + '_' + safe + '.txt'
+                    dpath = os.path.join(domains_dir, fname)
+                    with open(dpath, 'w', encoding='utf-8') as f:
+                        f.write('\n'.join(combos) + '\n')
+
+                # 4) keywords/ - real inbox search results
                 for kw in keywords:
-                    keyword_results[kw] = [
-                        hit for hit in all_hits if kw in hit.lower()
-                    ]
+                    kw_path = os.path.join(keywords_dir, kw + '.txt')
+                    with open(kw_path, 'w', encoding='utf-8') as f:
+                        f.write('# ' + kw.upper() + ' HITS\n\n')
+                        for h in hits_data:
+                            kw_res = h.get('keyword_results', {}).get(kw)
+                            if kw_res:
+                                match_count, email_infos = kw_res
+                                if match_count > 0 and email_infos:
+                                    subj, from_addr, date_str = email_infos[0]
+                                    combo = h['combo']
+                                    parts = [
+                                        combo,
+                                        'Matches: ' + str(match_count),
+                                        'Subject: ' + subj,
+                                        'From: ' + from_addr,
+                                        'Date: ' + date_str
+                                    ]
+                                    f.write(' | '.join(parts) + '\n')
 
-                # Escribir keyword_results.txt
-                kw_results_path = os.path.join(temp_dir, "keyword_results.txt")
-                with open(kw_results_path, "w", encoding="utf-8") as f:
-                    f.write("HJ ULP IMAP CHECKER - KEYWORD RESULTS\n")
-                    sep = ', '
-                    f.write(f"Total hits: {len(all_hits)} | Keywords: {sep.join(keywords)}\n")
-                    f.write("=" * 60 + "\n")
-                    for kw in keywords:
-                        results = keyword_results[kw]
-                        f.write("\n" + "-" * 40 + "\n")
-                        f.write(f"  KEYWORD: {kw.upper()}  ({len(results)} resultados)\n")
-                        f.write("-" * 40 + "\n")
-                        if results:
-                            f.write("\n".join(results))
-                        else:
-                            f.write("(sin resultados)")
-                        f.write("\n")
-
-                zip_path = os.path.join(temp_dir, "imap_results.zip")
+                # Build ZIP
+                zip_path = os.path.join(temp_dir, 'imap_results.zip')
                 with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-                    zf.write(output_path, "hits.txt")
-                    zf.write(kw_results_path, "keyword_results.txt")
+                    zf.write(all_hits_path, 'all_hits.txt')
+                    zf.write(bads_path, 'bad_accounts.txt')
+                    for fn in os.listdir(domains_dir):
+                        zf.write(os.path.join(domains_dir, fn), 'domains/' + fn)
+                    for fn in os.listdir(keywords_dir):
+                        zf.write(os.path.join(keywords_dir, fn), 'keywords/' + fn)
 
-                kw_str = ", ".join(keywords)
+                kw_str = ', '.join(keywords)
                 caption = UI.text(
-                    "imap_zip_caption", lang,
+                    'imap_zip_caption', lang,
                     stats['total'], stats['hits'], stats['bads'],
                     stats['elapsed'], kw_str, stats['hits']
                 )
@@ -391,10 +435,17 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid):
                     parse_mode='md'
                 )
             else:
-                # Sin keywords: enviar hits.txt directamente
-                caption = UI.text("imap_completed", lang, stats['total'], stats['hits'], stats['bads'], stats['elapsed'])
+                # No keywords: send all_hits.txt
+                all_hits_path = os.path.join(temp_dir, 'all_hits.txt')
+                with open(all_hits_path, 'w', encoding='utf-8') as f:
+                    f.write('# CHECKER BOT RESULTS - ' + now_str + '\n')
+                    f.write('# User: ' + str(uid) + '\n\n')
+                    for h in hits_data:
+                        f.write(h['combo'] + '\n')
+
+                caption = UI.text('imap_completed', lang, stats['total'], stats['hits'], stats['bads'], stats['elapsed'])
                 await state.bot.send_file(
-                    event.chat_id, output_path,
+                    event.chat_id, all_hits_path,
                     caption=caption,
                     parse_mode='md'
                 )
@@ -405,7 +456,7 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid):
                 pass
         else:
             await status_msg.edit(
-                UI.text("imap_no_hits", lang, stats['total'], stats['elapsed']),
+                UI.text('imap_no_hits', lang, stats['total'], stats['elapsed']),
                 parse_mode='md'
             )
 
@@ -417,7 +468,7 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid):
         traceback.print_exc()
         try:
             await status_msg.edit(
-                f"❌ **Error en IMAP Check**\n\n`{str(exc)[:200]}`",
+                '❌ **Error en IMAP Check**\n\n`' + str(exc)[:200] + '`',
                 parse_mode='md'
             )
         except Exception:
@@ -426,6 +477,7 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid):
             shutil.rmtree(temp_dir, ignore_errors=True)
         except Exception:
             pass
+
 
 
 def register_handlers(bot_client):
