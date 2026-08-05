@@ -274,6 +274,160 @@ async def _send_search_result(target_chat, result_file, caption, e=None, msg=Non
 # HANDLERS DE COMANDOS
 # ═════════════════════════════════════════════════════════════
 
+async def _execute_imap_check(event, file_msg, keywords, lang, uid):
+    """Ejecutar IMAP check y opcionalmente filtrar por keywords + generar ZIP."""
+    import zipfile
+    from utils import progress_bar
+
+    status_msg = await event.reply(
+        UI.text("imap_processing", lang, 0, "?", 0, LOADING_FRAMES[0]),
+        parse_mode='md'
+    )
+
+    try:
+        temp_dir = tempfile.mkdtemp(prefix="imap_")
+        input_path = os.path.join(temp_dir, "combos.txt")
+        output_path = os.path.join(temp_dir, "hits.txt")
+
+        await state.bot.download_media(file_msg, file=input_path)
+
+        if not os.path.isfile(input_path):
+            await status_msg.edit(UI.text("imap_no_file", lang), parse_mode='md')
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            return
+
+        with open(input_path, 'r', encoding='utf-8', errors='ignore') as f:
+            total = sum(1 for line in f if ":" in line.strip())
+
+        if total == 0:
+            await status_msg.edit(UI.text("imap_no_file", lang), parse_mode='md')
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            return
+
+        await status_msg.edit(
+            UI.text("imap_processing", lang, 0, total, 0, LOADING_FRAMES[0]),
+            parse_mode='md'
+        )
+
+        main_loop = asyncio.get_running_loop()
+        progress_data = {'last_edit': 0, 'frame_idx': 0}
+
+        def progress_cb(checked, tot, hits):
+            now = time.time()
+            if now - progress_data['last_edit'] < 3:
+                return
+            progress_data['last_edit'] = now
+            progress_data['frame_idx'] += 1
+            frame = LOADING_FRAMES[progress_data['frame_idx'] % len(LOADING_FRAMES)]
+            pct = (checked / tot * 100) if tot > 0 else 0
+            bar = progress_bar(pct)
+
+            async def _update_msg():
+                try:
+                    await status_msg.edit(
+                        UI.text("imap_processing", lang, checked, tot, hits, f"{bar}  {pct:.1f}%"),
+                        parse_mode='md'
+                    )
+                except Exception:
+                    pass
+
+            main_loop.call_soon_threadsafe(
+                lambda: asyncio.ensure_future(_update_msg(), loop=main_loop)
+            )
+
+        stats = await main_loop.run_in_executor(
+            None,
+            lambda: imap_check_file(
+                Path(input_path), Path(output_path),
+                progress_callback=progress_cb
+            )
+        )
+
+        if stats['hits'] > 0 and os.path.isfile(output_path):
+            # Leer todos los hits
+            with open(output_path, 'r', encoding='utf-8') as f:
+                all_hits = [line.strip() for line in f if line.strip()]
+
+            if keywords:
+                # Filtrar hits por keywords y generar ZIP
+                keyword_results = {}
+                for kw in keywords:
+                    keyword_results[kw] = [
+                        hit for hit in all_hits if kw in hit.lower()
+                    ]
+
+                # Escribir keyword_results.txt
+                kw_results_path = os.path.join(temp_dir, "keyword_results.txt")
+                with open(kw_results_path, "w", encoding="utf-8") as f:
+                    f.write("HJ ULP IMAP CHECKER - KEYWORD RESULTS\n")
+                    sep = ', '
+                    f.write(f"Total hits: {len(all_hits)} | Keywords: {sep.join(keywords)}\n")
+                    f.write("=" * 60 + "\n")
+                    for kw in keywords:
+                        results = keyword_results[kw]
+                        f.write("\n" + "-" * 40 + "\n")
+                        f.write(f"  KEYWORD: {kw.upper()}  ({len(results)} resultados)\n")
+                        f.write("-" * 40 + "\n")
+                        if results:
+                            f.write("\n".join(results))
+                        else:
+                            f.write("(sin resultados)")
+                        f.write("\n")
+
+                zip_path = os.path.join(temp_dir, "imap_results.zip")
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    zf.write(output_path, "hits.txt")
+                    zf.write(kw_results_path, "keyword_results.txt")
+
+                kw_str = ", ".join(keywords)
+                caption = UI.text(
+                    "imap_zip_caption", lang,
+                    stats['total'], stats['hits'], stats['bads'],
+                    stats['elapsed'], kw_str, stats['hits']
+                )
+                await state.bot.send_file(
+                    event.chat_id, zip_path,
+                    caption=caption,
+                    parse_mode='md'
+                )
+            else:
+                # Sin keywords: enviar hits.txt directamente
+                caption = UI.text("imap_completed", lang, stats['total'], stats['hits'], stats['bads'], stats['elapsed'])
+                await state.bot.send_file(
+                    event.chat_id, output_path,
+                    caption=caption,
+                    parse_mode='md'
+                )
+
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass
+        else:
+            await status_msg.edit(
+                UI.text("imap_no_hits", lang, stats['total'], stats['elapsed']),
+                parse_mode='md'
+            )
+
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    except Exception as exc:
+        logger.error(f"Error en /imap: {exc}")
+        import traceback
+        traceback.print_exc()
+        try:
+            await status_msg.edit(
+                f"❌ **Error en IMAP Check**\n\n`{str(exc)[:200]}`",
+                parse_mode='md'
+            )
+        except Exception:
+            pass
+        try:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+
 def register_handlers(bot_client):
     """Registrar todos los handlers en el bot client."""
 
@@ -562,12 +716,19 @@ def register_handlers(bot_client):
         )
 
     # ═════════════════════════════════════════════════════════════
-    # COMANDO /imap — IMAP Checker (responder a archivo mail:pass)
+    # COMANDO /imap v2 — IMAP Checker con keywords + ZIP
     # ═════════════════════════════════════════════════════════════
 
-    @bot_client.on(events.NewMessage(pattern=r"/imap$"))
+    @bot_client.on(events.NewMessage(pattern=r"/imap(.*)"))
     async def cmd_imap(e):
-        """IMAP Checker — responde a un archivo .txt con mail:pass y devuelve hits."""
+        """IMAP Checker v2 — soporta keywords y genera ZIP.
+
+        Uso:
+          /imap                      → sin keywords (modo clasico)
+          /imap kw1, kw2, kw3         → con keywords (genera ZIP)
+        Requiere responder a un archivo .txt con mail:pass.
+        Si se pasan keywords sin archivo, las guarda y espera el archivo.
+        """
         uid = e.sender_id
         user = db.get_user(uid)
         lang = user.get('language', 'es')
@@ -583,103 +744,76 @@ def register_handlers(bot_client):
                 parse_mode='md'
             )
 
+        # Parsear keywords del comando
+        raw_args = (e.pattern_match.group(1) or "").strip()
+        keywords = []
+        if raw_args:
+            keywords = [kw.strip().lower() for kw in raw_args.split(",") if kw.strip()]
+
+        # Validar maximo 10 keywords
+        if len(keywords) > 10:
+            return await e.reply(
+                UI.text("imap_too_many_keywords", lang, len(keywords)),
+                parse_mode='md'
+            )
+
         reply = await e.get_reply_message()
+
+        # Si hay keywords pero no archivo: guardar keywords y esperar archivo
+        if keywords and (not reply or not reply.document):
+            state.temp_state[uid] = {
+                'step': 'WAITING_IMAP_FILE',
+                'imap_keywords': keywords,
+                'chat_id': e.chat_id
+            }
+            return await e.reply(
+                UI.text("imap_keywords_waiting_file", lang, ", ".join(keywords)),
+                parse_mode='md'
+            )
+
+        # Si no hay keywords y no hay archivo: mostrar info
         if not reply or not reply.document:
             return await e.reply(
-                UI.text("imap_no_file", lang),
+                UI.text("imap_info", lang),
+                buttons=Keyboards.imap_info(),
                 parse_mode='md'
             )
 
-        status_msg = await e.reply(
-            UI.text("imap_processing", lang, 0, "?", 0),
-            parse_mode='md'
-        )
+        # Tenemos archivo: ejecutar IMAP check
+        await _execute_imap_check(e, reply, keywords, lang, uid)
 
-        try:
-            temp_dir = tempfile.mkdtemp(prefix="imap_")
-            input_path = os.path.join(temp_dir, "combos.txt")
-            output_path = os.path.join(temp_dir, "hits.txt")
+    # --- Conversación: usuario envía archivo después de poner keywords ---
+    @bot_client.on(events.NewMessage(
+        func=lambda ev: ev.is_private and
+                       ev.sender_id in state.temp_state and
+                       state.temp_state[ev.sender_id].get('step') == 'WAITING_IMAP_FILE' and
+                       ev.document is not None
+    ))
+    async def handle_imap_file(e):
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        ts = state.temp_state.pop(uid, {})
+        keywords = ts.get('imap_keywords', [])
+        await _execute_imap_check(e, e, keywords, lang, uid)
 
-            await state.bot.download_media(reply, file=input_path)
+    # --- Conversación: usuario envía archivo después de poner keywords en grupo ---
+    @bot_client.on(events.NewMessage(
+        func=lambda ev: ev.is_group and
+                       ev.chat_id in state.allowed_groups and
+                       ev.sender_id in state.temp_state and
+                       state.temp_state[ev.sender_id].get('step') == 'WAITING_IMAP_FILE' and
+                       ev.document is not None
+    ))
+    async def handle_imap_file_group(e):
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        ts = state.temp_state.pop(uid, {})
+        keywords = ts.get('imap_keywords', [])
+        await _execute_imap_check(e, e, keywords, lang, uid)
 
-            if not os.path.isfile(input_path):
-                await status_msg.edit(UI.text("imap_no_file", lang), parse_mode='md')
-                return
-
-            with open(input_path, 'r', encoding='utf-8', errors='ignore') as f:
-                total = sum(1 for line in f if ":" in line.strip())
-
-            if total == 0:
-                await status_msg.edit(UI.text("imap_no_file", lang), parse_mode='md')
-                shutil.rmtree(temp_dir, ignore_errors=True)
-                return
-
-            await status_msg.edit(
-                UI.text("imap_processing", lang, 0, total, 0),
-                parse_mode='md'
-            )
-
-            main_loop = asyncio.get_running_loop()
-            progress_data = {'last_edit': 0}
-
-            def progress_cb(checked, tot, hits):
-                now = time.time()
-                if now - progress_data['last_edit'] < 3:
-                    return
-                progress_data['last_edit'] = now
-
-                async def _update_msg():
-                    try:
-                        await status_msg.edit(
-                            UI.text("imap_processing", lang, checked, tot, hits),
-                            parse_mode='md'
-                        )
-                    except Exception:
-                        pass
-
-                main_loop.call_soon_threadsafe(
-                    lambda: asyncio.ensure_future(_update_msg(), loop=main_loop)
-                )
-
-            stats = await main_loop.run_in_executor(
-                None,
-                lambda: imap_check_file(
-                    Path(input_path), Path(output_path),
-                    progress_callback=progress_cb
-                )
-            )
-
-            if stats['hits'] > 0 and os.path.isfile(output_path):
-                caption = UI.text("imap_completed", lang, stats['total'], stats['hits'], stats['bads'], stats['elapsed'])
-                await state.bot.send_file(
-                    e.chat_id, output_path,
-                    caption=caption,
-                    parse_mode='md'
-                )
-                try:
-                    await status_msg.delete()
-                except Exception:
-                    pass
-            else:
-                await status_msg.edit(
-                    UI.text("imap_no_hits", lang, stats['total'], stats['elapsed']),
-                    parse_mode='md'
-                )
-
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-        except Exception as exc:
-            logger.error(f"Error en /imap: {exc}")
-            await status_msg.edit(
-                f"❌ **Error en IMAP Check**\n\n`{str(exc)[:200]}`",
-                parse_mode='md'
-            )
-            try:
-                shutil.rmtree(temp_dir, ignore_errors=True)
-            except Exception:
-                pass
-
-    # --- BROADCAST ---
+    # --- BROADCAST ---    # --- BROADCAST ---
 
     async def _broadcast(sender_id: int, targets: list, msg_text: str, status_msg, label: str):
         total = len(targets)
@@ -818,6 +952,14 @@ def register_handlers(bot_client):
                 await e.edit(
                     UI.text(welcome_key, lang, _get_commands_by_role(role, has_free), role.value, user['search_count']),
                     buttons=Keyboards.main(role, lang, has_free),
+                    parse_mode='md'
+                )
+
+            # ─── IMAP INFO ───
+            elif data == "imap_info":
+                await e.edit(
+                    UI.text("imap_info", lang),
+                    buttons=Keyboards.imap_info(),
                     parse_mode='md'
                 )
 
