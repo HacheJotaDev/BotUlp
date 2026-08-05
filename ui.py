@@ -1,10 +1,11 @@
 """
 ═══════════════════════════════════════════════════════════════
-  HJ ULP EXTRACTOR BOT — UI & Keyboards Module v4.0
+  HJ ULP EXTRACTOR BOT — UI & Keyboards Module v5.0
 ═══════════════════════════════════════════════════════════════
-  • Diseño renovado con mejor jerarquía visual
-  • Botones agrupados por función con separadores
-  • Soporte para IMAP con keywords
+  • Diseno unificado y elegante
+  • Botones agrupados por funcion
+  • SELLER con boton de idioma
+  • Comando /cmd soportado
 ═══════════════════════════════════════════════════════════════
 """
 
@@ -26,42 +27,47 @@ class UI:
 class Keyboards:
     @staticmethod
     def main(role: UserRole, lang: str = 'es', has_free_search: bool = False):
-        # Fila de idioma siempre presente
         lang_btn = [Button.inline("🌐  Idioma / Language", b"ch_lang")]
 
         if role == UserRole.FREE:
             buttons = []
             if has_free_search:
-                buttons.append([Button.inline("🔍  BÚSQUEDA GRATIS  (1/1)", b"search_init")])
-            buttons.append([Button.inline("💎  COMPRAR VIP", b"buy_vip_info")])
-            buttons.append([Button.inline("🔑  CANJEAR KEY", b"canjear_key")])
-            buttons.append([Button.inline("👤  MI CUENTA", b"my_account")])
+                buttons.append([Button.inline("🔍  BUSQUEDA GRATIS  (1/1)", b"search_init")])
+            buttons.append([Button.inline("💎  COMPRAR VIP", b"buy_vip_info"),
+                           Button.inline("🔑  CANJEAR KEY", b"canjear_key")])
+            buttons.append([Button.inline("👤  MI CUENTA", b"my_account"),
+                           Button.inline("📋  COMANDOS", b"cmd_list")])
             buttons.append(lang_btn)
             return buttons
 
         elif role == UserRole.VIP:
             return [
-                [Button.inline("🔍  NUEVA BÚSQUEDA", b"search_init")],
-                [Button.inline("📧  IMAP CHECKER", b"imap_info")],
-                [Button.inline("👤  MI CUENTA", b"my_account")],
+                [Button.inline("🔍  NUEVA BUSQUEDA", b"search_init"),
+                 Button.inline("📧  IMAP CHECKER", b"imap_info")],
+                [Button.inline("👤  MI CUENTA", b"my_account"),
+                 Button.inline("📋  COMANDOS", b"cmd_list")],
                 lang_btn
             ]
 
         elif role == UserRole.SELLER:
             return [
-                [Button.inline("🔍  NUEVA BÚSQUEDA", b"search_init")],
-                [Button.inline("📧  IMAP CHECKER", b"imap_info")],
-                [Button.inline("🔑  GENERAR KEY", b"seller_genkey")],
-                [Button.inline("👤  MI CUENTA", b"my_account")],
+                [Button.inline("🔍  NUEVA BUSQUEDA", b"search_init"),
+                 Button.inline("📧  IMAP CHECKER", b"imap_info")],
+                [Button.inline("🔑  GENERAR KEY", b"seller_genkey"),
+                 Button.inline("👤  MI CUENTA", b"my_account")],
+                [Button.inline("📋  COMANDOS", b"cmd_list")],
+                lang_btn
             ]
 
         elif role == UserRole.ADMIN:
             return [
-                [Button.inline("🔍  NUEVA BÚSQUEDA", b"search_init"),
+                [Button.inline("🔍  NUEVA BUSQUEDA", b"search_init"),
                  Button.inline("📧  IMAP CHECKER", b"imap_info")],
                 [Button.inline("🔐  PANEL ADMIN", b"admin_enter"),
-                 Button.inline("📂  GESTIÓN ARCHIVOS", b"adm_files")],
-                [Button.inline("👤  MI CUENTA", b"my_account")],
+                 Button.inline("📂  GESTION ARCHIVOS", b"adm_files")],
+                [Button.inline("👤  MI CUENTA", b"my_account"),
+                 Button.inline("📋  COMANDOS", b"cmd_list")],
+                lang_btn
             ]
 
         return []
@@ -69,7 +75,7 @@ class Keyboards:
     @staticmethod
     def time():
         return [
-            [Button.inline("⚡  Últimas 24 horas", b"time_24h"),
+            [Button.inline("⚡  Ultimas 24 horas", b"time_24h"),
              Button.inline("🗂  24h + Antiguos", b"time_all")],
             [Button.inline("📅  Solo Antiguos", b"time_old")],
             [Button.inline("✖  Cancelar", b"back_main")]
@@ -98,7 +104,7 @@ class Keyboards:
              Button.inline("💼  Sellers", b"adm_sellers")],
             [Button.inline("🔑  Generar Key", b"adm_genkey"),
              Button.inline("📊  Stats", b"adm_stats")],
-            [Button.inline("📂  Gestión Archivos", b"adm_files"),
+            [Button.inline("📂  Gestion Archivos", b"adm_files"),
              Button.inline("🔄  Actualizar Bot", b"adm_update_bot")],
             [Button.inline("🔙  VOLVER", b"back_main")]
         ]
@@ -106,10 +112,10 @@ class Keyboards:
     @staticmethod
     def gen_key():
         return [
-            [Button.inline("1 Día", b"gen_1"),
-             Button.inline("3 Días", b"gen_3"),
-             Button.inline("7 Días", b"gen_7")],
-            [Button.inline("30 Días", b"gen_30")],
+            [Button.inline("1 Dia", b"gen_1"),
+             Button.inline("3 Dias", b"gen_3"),
+             Button.inline("7 Dias", b"gen_7")],
+            [Button.inline("30 Dias", b"gen_30")],
             [Button.inline("🔙  VOLVER", b"back_main")]
         ]
 
@@ -160,7 +166,6 @@ class Keyboards:
 
     @staticmethod
     def imap_info():
-        """Teclado informativo del IMAP Checker."""
         return [
             [Button.inline("🔙  VOLVER", b"back_main")]
         ]

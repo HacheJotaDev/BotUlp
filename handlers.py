@@ -1,13 +1,13 @@
 """
 ═══════════════════════════════════════════════════════════════
-  HJ ULP EXTRACTOR BOT — Handlers Module v3.5
+  HJ ULP EXTRACTOR BOT — Handlers Module v4.0
 ═══════════════════════════════════════════════════════════════
-  • Comandos: /start, /url, /vip, /seller, /gp, /imap, etc.
+  • Comandos: /start, /cmd, /url, /vip, /seller, /gp, /imap, etc.
   • Callbacks: todos los botones inline
   • /updateBot: actualizacion remota desde Telegram
   • Broadcast: /bc, /bcvip
   • Sistema de busqueda gratis para nuevos usuarios
-  • v3.5: Eliminado /ma, codigo optimizado
+  • v4.0: Agregado /cmd, bugs corregidos, UI mejorada
   • Cola de busquedas por usuario (anti-superposicion)
 ═══════════════════════════════════════════════════════════════
 """
@@ -642,6 +642,23 @@ def register_handlers(bot_client):
     async def update_bot_cmd(e):
         await cmd_update_bot(e)
 
+    @bot_client.on(events.NewMessage(pattern=r"/cmd"))
+    async def cmd_cmd(e):
+        """Mostrar lista de comandos disponibles."""
+        if e.is_group and e.chat_id not in state.allowed_groups:
+            return
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        role = get_user_role(uid)
+        has_free = db.is_new_user(uid) and role == UserRole.FREE
+        cmds = _get_commands_by_role(role, has_free)
+        await e.reply(
+            UI.text("cmd_list", lang, cmds),
+            buttons=Keyboards.back() if e.is_private else None,
+            parse_mode='md'
+        )
+
     @bot_client.on(events.NewMessage(pattern=r"/vip (\d+)"))
     async def cmd_vip_perm(e):
         if get_user_role(e.sender_id) != UserRole.ADMIN:
@@ -849,6 +866,27 @@ def register_handlers(bot_client):
         keywords = ts.get('imap_keywords', [])
         await _execute_imap_check(e, e, keywords, lang, uid)
 
+    # --- Si el usuario envia texto (no archivo) mientras espera IMAP file, cancelar ---
+    @bot_client.on(events.NewMessage(
+        func=lambda ev: ev.is_private and
+                       ev.sender_id in state.temp_state and
+                       state.temp_state[ev.sender_id].get('step') == 'WAITING_IMAP_FILE' and
+                       ev.document is None
+    ))
+    async def handle_imap_cancel(e):
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        state.temp_state.pop(uid, None)
+        role = get_user_role(uid)
+        has_free = db.is_new_user(uid) and role == UserRole.FREE
+        welcome_key = "welcome_new" if has_free else "welcome"
+        await e.reply(
+            UI.text(welcome_key, lang, _get_commands_by_role(role, has_free), role.value, user['search_count']),
+            buttons=Keyboards.main(role, lang, has_free),
+            parse_mode='md'
+        )
+
     # --- Conversación: usuario envía archivo después de poner keywords en grupo ---
     @bot_client.on(events.NewMessage(
         func=lambda ev: ev.is_group and
@@ -865,7 +903,7 @@ def register_handlers(bot_client):
         keywords = ts.get('imap_keywords', [])
         await _execute_imap_check(e, e, keywords, lang, uid)
 
-    # --- BROADCAST ---    # --- BROADCAST ---
+    # --- BROADCAST ---
 
     async def _broadcast(sender_id: int, targets: list, msg_text: str, status_msg, label: str):
         total = len(targets)
@@ -1004,6 +1042,16 @@ def register_handlers(bot_client):
                 await e.edit(
                     UI.text(welcome_key, lang, _get_commands_by_role(role, has_free), role.value, user['search_count']),
                     buttons=Keyboards.main(role, lang, has_free),
+                    parse_mode='md'
+                )
+
+            # ─── LISTA DE COMANDOS ───
+            elif data == "cmd_list":
+                has_free = db.is_new_user(uid) and role == UserRole.FREE
+                cmds = _get_commands_by_role(role, has_free)
+                await e.edit(
+                    UI.text("cmd_list", lang, cmds),
+                    buttons=Keyboards.back(),
                     parse_mode='md'
                 )
 
