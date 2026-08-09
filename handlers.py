@@ -13,6 +13,7 @@
 """
 
 import os
+import sys
 import asyncio
 import subprocess
 import time
@@ -36,6 +37,7 @@ from utils import normalizar_url, get_file_counts, format_size, format_time
 from search import search_engine
 from nowpayments import create_invoice, get_invoice_status, VIP_PLANS
 from imap_checker import imap_check_file
+from geoip_checker import get_country_for_email
 from download import (
     DownloadProgressTracker,
     process_pending_downloads, realtime_listener, mover_y_limpiar_archivos
@@ -121,6 +123,21 @@ async def cmd_update_bot(event):
                 "├● Ya esta en la ultima version\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             )
+            # Instalar/actualizar dependencias
+            try:
+                pip_result = subprocess.run(
+                    [sys.executable, '-m', 'pip', 'install', '-r',
+                     os.path.join(os.path.dirname(os.path.abspath(__file__)), 'requirements.txt'),
+                     '--quiet'],
+                    capture_output=True, text=True, timeout=120
+                )
+                if pip_result.returncode == 0:
+                    logger.info("Dependencias instaladas/actualizadas correctamente")
+                else:
+                    logger.warning(f"pip install: {pip_result.stderr[:200]}")
+            except Exception as pip_err:
+                logger.warning(f"Error instalando dependencias: {pip_err}")
+
             return
 
         await status_msg.edit(
@@ -129,6 +146,22 @@ async def cmd_update_bot(event):
             "├● ⏳ Reiniciando en 3 segundos...\n"
             "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
         )
+
+        # Instalar/actualizar dependencias nuevas
+        try:
+            pip_result = subprocess.run(
+                [sys.executable, '-m', 'pip', 'install', '-r',
+                 os.path.join(os.path.dirname(os.path.abspath(__file__)), 'requirements.txt'),
+                 '--quiet'],
+                capture_output=True, text=True, timeout=120
+            )
+            if pip_result.returncode == 0:
+                logger.info("Dependencias instaladas/actualizadas correctamente")
+            else:
+                logger.warning(f"pip install: {pip_result.stderr[:200]}")
+        except Exception as pip_err:
+            logger.warning(f"Error instalando dependencias: {pip_err}")
+
 
         await asyncio.sleep(3)
 
@@ -142,12 +175,10 @@ async def cmd_update_bot(event):
                     ['pm2', 'restart', 'botulp'],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                 )
-                import sys
                 sys.exit(0)
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
-        import sys
         os.execv(sys.executable, [sys.executable] + sys.argv)
 
     except subprocess.TimeoutExpired:
@@ -274,11 +305,12 @@ async def _send_search_result(target_chat, result_file, caption, e=None, msg=Non
 # HANDLERS DE COMANDOS
 # ═════════════════════════════════════════════════════════════
 
-async def _execute_imap_check(event, file_msg, keywords, lang, uid):
-    """Execute IMAP check with optional keyword search in inbox + generate proper ZIP."""
+async def _execute_imap_check(event, file_msg, keywords, lang, uid, mode_country=False):
+    """Execute IMAP check with optional keyword/country search + generate proper ZIP."""
     import zipfile
     from datetime import datetime
     from collections import defaultdict
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from utils import progress_bar
 
     status_msg = await event.reply(
@@ -359,11 +391,19 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid):
                 d = re.sub(r'_+', '_', d).strip('_')
                 return d or 'unknown'
 
-            if keywords:
+            def sanitize_country(name):
+                import re
+                c = name.strip()
+                c = re.sub(r'[^a-zA-Z0-9 ()-]', '', c)
+                c = c.strip()
+                return c or 'Unknown'
+
+            # Determinar si generamos ZIP (keywords o country)
+            need_zip = keywords or mode_country
+
+            if need_zip:
                 domains_dir = os.path.join(temp_dir, 'domains')
-                keywords_dir = os.path.join(temp_dir, 'keywords')
                 os.makedirs(domains_dir, exist_ok=True)
-                os.makedirs(keywords_dir, exist_ok=True)
 
                 # 1) all_hits.txt
                 all_hits_path = os.path.join(temp_dir, 'all_hits.txt')
@@ -392,26 +432,121 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid):
                     with open(dpath, 'w', encoding='utf-8') as f:
                         f.write('\n'.join(combos) + '\n')
 
-                # 4) keywords/ - real inbox search results
-                for kw in keywords:
-                    kw_path = os.path.join(keywords_dir, kw + '.txt')
-                    with open(kw_path, 'w', encoding='utf-8') as f:
-                        f.write('# ' + kw.upper() + ' HITS\n\n')
-                        for h in hits_data:
-                            kw_res = h.get('keyword_results', {}).get(kw)
-                            if kw_res:
-                                match_count, email_infos = kw_res
-                                if match_count > 0 and email_infos:
-                                    subj, from_addr, date_str = email_infos[0]
-                                    combo = h['combo']
-                                    parts = [
-                                        combo,
-                                        'Matches: ' + str(match_count),
-                                        'Subject: ' + subj,
-                                        'From: ' + from_addr,
-                                        'Date: ' + date_str
-                                    ]
-                                    f.write(' | '.join(parts) + '\n')
+                # 4) keywords/ si hay keywords
+                if keywords:
+                    keywords_dir = os.path.join(temp_dir, 'keywords')
+                    os.makedirs(keywords_dir, exist_ok=True)
+
+                    for kw in keywords:
+                        kw_path = os.path.join(keywords_dir, kw + '.txt')
+                        with open(kw_path, 'w', encoding='utf-8') as f:
+                            f.write('# ' + kw.upper() + ' HITS\n\n')
+                            for h in hits_data:
+                                kw_res = h.get('keyword_results', {}).get(kw)
+                                if kw_res:
+                                    match_count, email_infos = kw_res
+                                    if match_count > 0 and email_infos:
+                                        subj, from_addr, date_str = email_infos[0]
+                                        combo = h['combo']
+                                        parts = [
+                                            combo,
+                                            'Matches: ' + str(match_count),
+                                            'Subject: ' + subj,
+                                            'From: ' + from_addr,
+                                            'Date: ' + date_str
+                                        ]
+                                        f.write(' | '.join(parts) + '\n')
+
+                # 5) countries/ si modo country
+                countries_dir = None
+                if mode_country:
+                    countries_dir = os.path.join(temp_dir, 'countries')
+                    os.makedirs(countries_dir, exist_ok=True)
+
+                    # Progress para geoip
+                    geo_status = await event.reply(
+                        UI.text("imap_country_resolving", lang, len(hits_data)),
+                        parse_mode='md'
+                    )
+
+                    country_groups = defaultdict(list)
+                    country_details = {}
+
+                    loop = asyncio.get_running_loop()
+
+                    def resolve_geo(h):
+                        email_addr = h['combo'].split(':')[0]
+                        info = get_country_for_email(email_addr)
+                        country = info['country']
+                        isp = info['isp']
+                        mx = info['mx_server']
+                        return h, country, isp, mx
+
+                    resolved = 0
+                    with ThreadPoolExecutor(max_workers=10, thread_name_prefix="geoip") as geo_exec:
+                        future_to_hit = {geo_exec.submit(resolve_geo, h): h for h in hits_data}
+                        for future in as_completed(future_to_hit):
+                            try:
+                                h, country, isp, mx = future.result()
+                                country_groups[country].append({
+                                    'combo': h['combo'],
+                                    'isp': isp,
+                                    'mx': mx
+                                })
+                                if country not in country_details:
+                                    country_details[country] = {'count': 0, 'isp': isp}
+                                country_details[country]['count'] += 1
+                            except Exception:
+                                country_groups['Unknown'].append({
+                                    'combo': h['combo'], 'isp': 'N/A', 'mx': 'N/A'
+                                })
+
+                            resolved += 1
+                            if resolved % 5 == 0:
+                                try:
+                                    pct = resolved / len(hits_data) * 100
+                                    bar = progress_bar(pct)
+                                    snap_resolved = resolved
+                                    snap_total = len(hits_data)
+                                    snap_countries = len(country_groups)
+                                    async def _upd(r=snap_resolved, t=snap_total, c=snap_countries, b=bar, p=pct):
+                                        try:
+                                            await geo_status.edit(
+                                                UI.text("imap_country_progress", lang,
+                                                        r, t, c,
+                                                        f"{b}  {p:.1f}%"),
+                                                parse_mode='md'
+                                            )
+                                        except Exception:
+                                            pass
+                                    loop.call_soon_threadsafe(
+                                        lambda: asyncio.ensure_future(_upd(), loop=loop)
+                                    )
+                                except Exception:
+                                    pass
+
+                    # Escribir archivos por pais
+                    for country, hits in sorted(country_groups.items(),
+                                                    key=lambda x: -len(x[1])):
+                        safe_c = sanitize_country(country)
+                        cpath = os.path.join(countries_dir, str(len(hits)) + '_' + safe_c + '.txt')
+                        with open(cpath, 'w', encoding='utf-8') as f:
+                            f.write('# ' + country.upper() + ' — ' + str(len(hits)) + ' hits\n\n')
+                            for hit in hits:
+                                f.write(hit['combo'] + '\n')
+
+                    # country_summary.txt
+                    summary_path = os.path.join(countries_dir, 'country_summary.txt')
+                    with open(summary_path, 'w', encoding='utf-8') as f:
+                        f.write('# COUNTRY SUMMARY - ' + now_str + '\n\n')
+                        for country, details in sorted(country_details.items(),
+                                                        key=lambda x: -x[1]['count']):
+                            f.write(country + ' (' + str(details['count']) + ' hits) — ISP: ' + details['isp'] + '\n')
+
+                    try:
+                        await geo_status.delete()
+                    except Exception:
+                        pass
 
                 # Build ZIP
                 zip_path = os.path.join(temp_dir, 'imap_results.zip')
@@ -420,15 +555,38 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid):
                     zf.write(bads_path, 'bad_accounts.txt')
                     for fn in os.listdir(domains_dir):
                         zf.write(os.path.join(domains_dir, fn), 'domains/' + fn)
-                    for fn in os.listdir(keywords_dir):
-                        zf.write(os.path.join(keywords_dir, fn), 'keywords/' + fn)
+                    if keywords:
+                        kw_dir = os.path.join(temp_dir, 'keywords')
+                        for fn in os.listdir(kw_dir):
+                            zf.write(os.path.join(kw_dir, fn), 'keywords/' + fn)
+                    if countries_dir:
+                        for fn in os.listdir(countries_dir):
+                            zf.write(os.path.join(countries_dir, fn), 'countries/' + fn)
 
-                kw_str = ', '.join(keywords)
-                caption = UI.text(
-                    'imap_zip_caption', lang,
-                    stats['total'], stats['hits'], stats['bads'],
-                    stats['elapsed'], kw_str, stats['hits']
-                )
+                # Caption del ZIP
+                if mode_country and keywords:
+                    kw_str = ', '.join(keywords)
+                    caption = UI.text(
+                        'imap_zip_caption_country_kw', lang,
+                        stats['total'], stats['hits'], stats['bads'],
+                        stats['elapsed'], kw_str, stats['hits'],
+                        len(country_groups) if mode_country else 0
+                    )
+                elif mode_country:
+                    caption = UI.text(
+                        'imap_zip_caption_country', lang,
+                        stats['total'], stats['hits'], stats['bads'],
+                        stats['elapsed'],
+                        len(country_groups) if mode_country else 0
+                    )
+                else:
+                    kw_str = ', '.join(keywords)
+                    caption = UI.text(
+                        'imap_zip_caption', lang,
+                        stats['total'], stats['hits'], stats['bads'],
+                        stats['elapsed'], kw_str, stats['hits']
+                    )
+
                 await state.bot.send_file(
                     event.chat_id, zip_path,
                     caption=caption,
@@ -790,11 +948,12 @@ def register_handlers(bot_client):
 
     @bot_client.on(events.NewMessage(pattern=r"/imap(.*)"))
     async def cmd_imap(e):
-        """IMAP Checker v2 — soporta keywords y genera ZIP.
+        """IMAP Checker v2 — soporta keywords, country y genera ZIP.
 
         Uso:
           /imap                      → sin keywords (modo clasico)
           /imap kw1, kw2, kw3         → con keywords (genera ZIP)
+          /imap country              → agrupa hits por pais (genera ZIP)
         Requiere responder a un archivo .txt con mail:pass.
         Si se pasan keywords sin archivo, las guarda y espera el archivo.
         """
@@ -813,11 +972,15 @@ def register_handlers(bot_client):
                 parse_mode='md'
             )
 
-        # Parsear keywords del comando
+        # Parsear keywords o modo country del comando
         raw_args = (e.pattern_match.group(1) or "").strip()
         keywords = []
+        mode_country = False
         if raw_args:
-            keywords = [kw.strip().lower() for kw in raw_args.split(",") if kw.strip()]
+            if raw_args.lower() == 'country':
+                mode_country = True
+            else:
+                keywords = [kw.strip().lower() for kw in raw_args.split(",") if kw.strip()]
 
         # Validar maximo 10 keywords
         if len(keywords) > 10:
@@ -829,12 +992,18 @@ def register_handlers(bot_client):
         reply = await e.get_reply_message()
 
         # Si hay keywords pero no archivo: guardar keywords y esperar archivo
-        if keywords and (not reply or not reply.document):
+        if (keywords or mode_country) and (not reply or not reply.document):
             state.temp_state[uid] = {
                 'step': 'WAITING_IMAP_FILE',
                 'imap_keywords': keywords,
+                'imap_mode_country': mode_country,
                 'chat_id': e.chat_id
             }
+            if mode_country:
+                return await e.reply(
+                    UI.text("imap_country_waiting_file", lang),
+                    parse_mode='md'
+                )
             return await e.reply(
                 UI.text("imap_keywords_waiting_file", lang, ", ".join(keywords)),
                 parse_mode='md'
@@ -849,7 +1018,7 @@ def register_handlers(bot_client):
             )
 
         # Tenemos archivo: ejecutar IMAP check
-        await _execute_imap_check(e, reply, keywords, lang, uid)
+        await _execute_imap_check(e, reply, keywords, lang, uid, mode_country=mode_country)
 
     # --- Conversación: usuario envía archivo después de poner keywords ---
     @bot_client.on(events.NewMessage(
@@ -864,7 +1033,8 @@ def register_handlers(bot_client):
         lang = user.get('language', 'es')
         ts = state.temp_state.pop(uid, {})
         keywords = ts.get('imap_keywords', [])
-        await _execute_imap_check(e, e, keywords, lang, uid)
+        mode_country = ts.get('imap_mode_country', False)
+        await _execute_imap_check(e, e, keywords, lang, uid, mode_country=mode_country)
 
     # --- Si el usuario envia texto (no archivo) mientras espera IMAP file, cancelar ---
     @bot_client.on(events.NewMessage(
@@ -901,7 +1071,8 @@ def register_handlers(bot_client):
         lang = user.get('language', 'es')
         ts = state.temp_state.pop(uid, {})
         keywords = ts.get('imap_keywords', [])
-        await _execute_imap_check(e, e, keywords, lang, uid)
+        mode_country = ts.get('imap_mode_country', False)
+        await _execute_imap_check(e, e, keywords, lang, uid, mode_country=mode_country)
 
     # --- BROADCAST ---
 

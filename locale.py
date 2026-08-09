@@ -237,14 +237,16 @@ class LocaleManager:
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             ),
             "imap_info": (
-                "╭───✦ 📧 IMAP CHECKER\n"
+                "╝══─✦ 📧 IMAP CHECKER\n"
                 "├● Chequea combos **mail:pass** via IMAP SSL\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
+                "╰══─✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
                 "**Formas de uso:**\n\n"
                 "1️⃣ **Sin keywords** (hits directos):\n"
                 "   Responde a un .txt + `/imap`\n\n"
                 "2️⃣ **Con keywords** (filtro + ZIP):\n"
                 "   Responde a un .txt + `/imap kw1, kw2`\n\n"
+                "3️⃣ **Por pais** (geolocalizacion + ZIP):\n"
+                "   Responde a un .txt + `/imap country`\n\n"
                 "**Ejemplo:**\n"
                 "`/imap netflix, spotify, amazon`\n\n"
                 "📌 **Maximo 10 keywords** separadas por coma\n\n"
@@ -252,7 +254,8 @@ class LocaleManager:
                 "   📄 `all_hits.txt` — todos los hits\n"
                 "   📄 `bad_accounts.txt` — cuentas fallidas\n"
                 "   📁 `domains/` — hits agrupados por dominio\n"
-                "   📁 `keywords/` — resultados por keyword con fecha"
+                "   📁 `keywords/` — resultados por keyword con fecha\n"
+                "   📁 `countries/` — hits agrupados por pais (modo country)"
             ),
             "imap_no_file": (
                 "╭───✦ ❌ IMAP CHECKER\n"
@@ -303,6 +306,47 @@ class LocaleManager:
                 "📁 `bad_accounts.txt` — cuentas fallidas\n"
                 "📁 `domains/` — por dominio\n"
                 "📁 `keywords/` — por keyword con fecha"
+            ),
+            "imap_country_waiting_file": (
+                "\u255d\u2500\u2500\u2500\u2726 \U0001f4e7 IMAP CHECKER\n"
+                "\u251c\u25cf \U0001f30d **Modo:** Geolocalizacion por pais\n"
+                "\u2570\u2500\u2500\u2500\u2726 \u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\n\n"
+                "\u23f3 Ahora envia un .txt con mail:pass para iniciar."
+            ),
+            "imap_country_resolving": (
+                "\u255d\u2500\u2500\u2500\u2726 \U0001f30d GEOLICALIZANDO HITS\n"
+                "\u251c\u25cf \U0001f4e7 {} hits para resolver\n"
+                "\u2570\u2500\u2500\u2500\u2726 \u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508"
+            ),
+            "imap_country_progress": (
+                "\u255d\u2500\u2500\u2500\u2726 \U0001f30d GEOLICALIZANDO HITS\n"
+                "\u251c\u25cf \U0001f4ca Progreso: `{}/{}` \u2502 \U0001f30d Paises: `{}`\n"
+                "\u2570\u2500\u2500\u2500\u2726 \u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\n\n"
+                "{}"
+            ),
+            "imap_zip_caption_country": (
+                "\u255d\u2500\u2500\u2500\u2726 \U0001f4e7 IMAP + COUNTRIES\n"
+                "\u251c\u25cf \U0001f4ca Total: `{}` \u2502 \u2705 Hits: `{}` \u2502 \u274c Bads: `{}`\n"
+                "\u251c\u25cf \u23f1 Tiempo: `{:.1f}s`\n"
+                "\u251c\u25cf \U0001f30d Paises detectados: `{}`\n"
+                "\u2570\u2500\u2500\u2500\u2726 \u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\n\n"
+                "\U0001f4c1 `all_hits.txt` — todos los hits\n"
+                "\U0001f4c1 `bad_accounts.txt` — cuentas fallidas\n"
+                "\U0001f4c1 `domains/` — por dominio\n"
+                "\U0001f4c1 `countries/` — por pais con resumen"
+            ),
+            "imap_zip_caption_country_kw": (
+                "\u255d\u2500\u2500\u2500\u2726 \U0001f4e7 IMAP + KEYWORDS + COUNTRIES\n"
+                "\u251c\u25cf \U0001f4ca Total: `{}` \u2502 \u2705 Hits: `{}` \u2502 \u274c Bads: `{}`\n"
+                "\u251c\u25cf \u23f1 Tiempo: `{:.1f}s`\n"
+                "\u251c\u25cf \U0001f50d Keywords: `{}`\n"
+                "\u251c\u25cf \U0001f30d Paises detectados: `{}`\n"
+                "\u2570\u2500\u2500\u2500\u2726 \u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\n\n"
+                "\U0001f4c1 `all_hits.txt` — `{}` hits totales\n"
+                "\U0001f4c1 `bad_accounts.txt` — cuentas fallidas\n"
+                "\U0001f4c1 `domains/` — por dominio\n"
+                "\U0001f4c1 `keywords/` — por keyword con fecha\n"
+                "\U0001f4c1 `countries/` — por pais con resumen"
             ),
             "pay_plans": (
                 "╭───✦ 💳 COMPRAR VIP — PAGO AUTOMATICO\n"
