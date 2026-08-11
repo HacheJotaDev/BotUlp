@@ -35,7 +35,7 @@ from locale import locale_manager
 from ui import UI, Keyboards
 from utils import normalizar_url, get_file_counts, format_size, format_time
 from search import search_engine
-from nowpayments import create_invoice, get_invoice_status, VIP_PLANS
+from nowpayments import create_invoice, get_invoice_status, manual_check_and_deliver, VIP_PLANS
 from imap_checker import imap_check_file
 from geoip_checker import get_country_for_email
 from download import (
@@ -215,7 +215,7 @@ def _get_commands_by_role(role: UserRole, has_free: bool = False) -> str:
     elif role == UserRole.SELLER:
         return "/start │ /url │ /imap"
     elif role == UserRole.ADMIN:
-        return "/start │ /url │ /imap │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /updateBot"
+        return "/start │ /url │ /imap │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /fixpay │ /updateBot"
     return "/start │ /canjear"
 
 
@@ -1142,6 +1142,55 @@ def register_handlers(bot_client):
             f"👑 **Broadcast VIP Iniciado**\n\n👥 Total VIPs: `{len(vips_data)}`\n⚡ Enviando..."
         )
         await _broadcast(e.sender_id, vips_data, msg_text, status, "Broadcast VIP")
+
+    # --- FIXPAY: Verificar y entregar VIP manualmente ---
+    @bot_client.on(events.NewMessage(pattern=r"/fixpay (.+)"))
+    async def cmd_fixpay(e):
+        """Admin: verificar invoice y entregar VIP si fue pagada."""
+        if get_user_role(e.sender_id) != UserRole.ADMIN:
+            return
+
+        invoice_id = e.pattern_match.group(1).strip()
+        status_msg = await e.reply(
+            "╭───✦ 🔧 FIX PAYMENT\n"
+            f"├● 📄 Invoice: `{invoice_id}`\n"
+            "├● ⏳ Consultando API...\n"
+            "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+            parse_mode='md'
+        )
+
+        result = await manual_check_and_deliver(invoice_id)
+
+        if "success" in result:
+            text = (
+                "╭───✦ ✅ VIP ENTREGADO\n"
+                f"├● 👤 User: `{result['user_id']}`\n"
+                f"├● 📅 Dias: `{result['days']}`\n"
+                f"├● 📄 Status: `{result['np_status']}`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            )
+        elif "error" in result:
+            text = (
+                "╭───✦ ❌ FIX PAYMENT\n"
+                f"├● 📄 Invoice: `{invoice_id}`\n"
+                f"├● ❌ Error: `{result['error']}`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            )
+            if 'api_response' in result:
+                resp_str = str(result['api_response'])[:400]
+                text += f"\n\n`{resp_str}`"
+        else:
+            text = (
+                "╭───✦ ℹ️ FIX PAYMENT\n"
+                f"├● 📄 Invoice: `{invoice_id}`\n"
+                f"├● ℹ️ `{result.get('info', result.get('warning', 'Sin info'))}`\n"
+                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            )
+            if 'api_response' in result:
+                resp_str = str(result['api_response'])[:400]
+                text += f"\n\n`{resp_str}`"
+
+        await status_msg.edit(text, parse_mode='md')
 
     # --- CONVERSATION HANDLER ---
     @bot_client.on(events.NewMessage(
