@@ -215,7 +215,7 @@ def _get_commands_by_role(role: UserRole, has_free: bool = False) -> str:
     elif role == UserRole.SELLER:
         return "/start │ /url │ /imap"
     elif role == UserRole.ADMIN:
-        return "/start │ /url │ /imap │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /fixpay │ /updateBot"
+        return "/start │ /url │ /imap │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /fixpay │ /sizedisp │ /updateBot"
     return "/start │ /canjear"
 
 
@@ -1191,6 +1191,38 @@ def register_handlers(bot_client):
                 text += f"\n\n`{resp_str}`"
 
         await status_msg.edit(text, parse_mode='md')
+
+    # --- SIZEDISP: Disco de la VPS ---
+    @bot_client.on(events.NewMessage(pattern=r"/sizedisp"))
+    async def cmd_sizedisp(e):
+        """Admin: mostrar almacenamiento total y ocupado de la VPS."""
+        if get_user_role(e.sender_id) != UserRole.ADMIN:
+            return
+
+        try:
+            stat = os.statvfs('/')
+            total = stat.f_blocks * stat.f_frsize
+            free = stat.f_bavail * stat.f_frsize
+            used = total - free
+            pct = (used / total * 100) if total > 0 else 0
+
+            total_str = format_size(total)
+            used_str = format_size(used)
+            free_str = format_size(free)
+
+            # Barra visual
+            filled = int(pct / 5)
+            bar = '█' * filled + '░' * (20 - filled)
+
+            user = db.get_user(e.sender_id)
+            lang = user.get('language', 'es')
+            await e.reply(
+                UI.text("sizedisp_info", lang, total_str, used_str, free_str, pct, bar),
+                parse_mode='md'
+            )
+        except Exception as exc:
+            logger.error(f"Error en /sizedisp: {exc}")
+            await e.reply(f"Error obteniendo info del disco: `{str(exc)[:200]}`", parse_mode='md')
 
     # --- CONVERSATION HANDLER ---
     @bot_client.on(events.NewMessage(
