@@ -35,7 +35,7 @@ from locale import locale_manager
 from ui import UI, Keyboards
 from utils import normalizar_url, get_file_counts, format_size, format_time
 from search import search_engine
-from nowpayments import create_payment, get_payment_status, VIP_PLANS, PAY_CURRENCY
+from nowpayments import create_invoice, VIP_PLANS
 from imap_checker import imap_check_file
 from geoip_checker import get_country_for_email
 from download import (
@@ -1293,8 +1293,8 @@ def register_handlers(bot_client):
 
                 await e.edit(UI.text("pay_checking", lang), parse_mode='md')
 
-                result = await create_payment(uid, days, lang)
-                if not result or "pay_address" not in result:
+                result = await create_invoice(uid, days, lang)
+                if not result or "invoice_url" not in result:
                     await e.edit(
                         UI.text("pay_api_error", lang),
                         buttons=Keyboards.back(),
@@ -1302,79 +1302,21 @@ def register_handlers(bot_client):
                     )
                     return
 
-                payment_id = str(result["payment_id"])
-                pay_address = result["pay_address"]
-                pay_amount = result.get("pay_amount", 0)
-
-                # Guardar payment_id en temp_state para el boton de verificar
-                state.temp_state[uid] = {
-                    'step': 'WAITING_PAYMENT',
-                    'payment_id': payment_id,
-                    'days': days
-                }
+                invoice_url = result["invoice_url"]
 
                 await e.edit(
-                    UI.text("pay_deposit", lang, plan["label"], plan["price"],
-                             pay_amount, PAY_CURRENCY, pay_address),
-                    buttons=Keyboards.payment_waiting(),
+                    UI.text("pay_invoice", lang, plan["label"], plan["price"], invoice_url),
+                    buttons=Keyboards.back(),
                     parse_mode='md'
                 )
 
-            # ─── PAGO: Verificar estado ───
+            # ─── PAGO: Verificar estado (legacy, redirige a plans) ───
             elif data == "pay_check":
-                ts = state.temp_state.get(uid, {})
-                payment_id = ts.get('payment_id')
-                days = ts.get('days')
-
-                if not payment_id:
-                    return await e.answer("No hay pago pendiente.", alert=True)
-
-                await e.edit(UI.text("pay_checking", lang), parse_mode='md')
-
-                status = await get_payment_status(payment_id)
-                if not status or status == "not_found":
-                    if status == "not_found":
-                        db.update_payment_status(payment_id, "expired")
-                        state.temp_state.pop(uid, None)
-                        await e.edit(
-                            UI.text("pay_expired", lang),
-                            buttons=Keyboards.payment_plans(),
-                            parse_mode='md'
-                        )
-                        return
-                    await e.edit(
-                        UI.text("pay_pending", lang),
-                        buttons=Keyboards.payment_waiting(),
-                        parse_mode='md'
-                    )
-                    return
-
-                if status in ("paid", "confirmed", "finished"):
-                    db.set_role(uid, "VIP", days)
-                    db.update_payment_status(payment_id, "delivered")
-                    role = get_user_role(uid)
-                    state.temp_state.pop(uid, None)
-                    await e.edit(
-                        UI.text("pay_success", lang, days),
-                        buttons=Keyboards.main(role, lang, False),
-                        parse_mode='md'
-                    )
-                elif status in ("expired", "failed", "refunded"):
-                    db.update_payment_status(payment_id, status)
-                    state.temp_state.pop(uid, None)
-                    key = f"pay_{status}" if status in ("expired", "failed") else "pay_failed"
-                    await e.edit(
-                        UI.text(key, lang),
-                        buttons=Keyboards.payment_plans(),
-                        parse_mode='md'
-                    )
-                else:
-                    # pending / waiting
-                    await e.edit(
-                        UI.text("pay_pending", lang),
-                        buttons=Keyboards.payment_waiting(),
-                        parse_mode='md'
-                    )
+                await e.edit(
+                    UI.text("pay_plans", lang),
+                    buttons=Keyboards.payment_plans(),
+                    parse_mode='md'
+                )
 
             # ─── CANJEAR KEY ───
             elif data == "canjear_key":

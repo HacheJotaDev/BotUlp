@@ -1,12 +1,11 @@
 """
 ═══════════════════════════════════════════════════════════════
-  HJ ULP EXTRACTOR BOT — NOWPayments Integration Module v2
+  HJ ULP EXTRACTOR BOT — NOWPayments Integration Module v3
 ═══════════════════════════════════════════════════════════════
-  • Usa POST /v1/payment (NO /v1/invoice)
-  • El payment_id retornado es el mismo que usa GET /v1/payment/{id}
-  • Polling cada 25s con GET /v1/payment/{payment_id}
-  • Entrega automatica VIP al confirmar pago
-  • Soporte USDT (Arbitrum One / ERC20)
+  • Usa POST /v1/invoice → genera link multi-crypto
+  • IPN webhook para auto-delivery instantaneo
+  • Polling GET /v1/payment/{id} como fallback
+  • Soporte multi-crypto (USDT, BTC, ETH, etc.)
 ═══════════════════════════════════════════════════════════════
 """
 
@@ -33,9 +32,6 @@ NP_HEADERS = {
     "x-api-key": config.NOWPAYMENTS_API_KEY,
     "Content-Type": "application/json",
 }
-
-# Moneda de pago
-PAY_CURRENCY = "USDTERC20"
 
 # Status que indican pago exitoso
 SUCCESS_STATUSES = ("finished", "confirmed", "paid", "partially_paid")
@@ -92,20 +88,21 @@ async def get_np_status() -> bool:
 
 
 # ═════════════════════════════════════════════════════════════
-#  CREAR PAGO (POST /v1/payment)
+#  CREAR INVOICE (POST /v1/invoice) — multi-crypto link
 # ═════════════════════════════════════════════════════════════
 
-async def create_payment(user_id: int, days: int, lang: str = 'es') -> Optional[Dict]:
-    """Crear un pago via POST /v1/payment.
+async def create_invoice(user_id: int, days: int, lang: str = 'es') -> Optional[Dict]:
+    """Crear una invoice via POST /v1/invoice.
 
     Retorna dict con:
-      - id (payment_id)
-      - pay_address (direccion de deposito)
-      - pay_amount (monto en cripto)
-      - price_amount (monto en USD)
+      - invoice_id
+      - invoice_url (link multi-crypto)
       - order_id
+      - price_amount
+      - plan_label
 
-    El payment_id retornado se usa directamente con GET /v1/payment/{id}.
+    El usuario paga a traves del invoice_url y elige su cripto.
+    La confirmacion llega via IPN webhook.
     """
     plan = VIP_PLANS.get(days)
     if not plan:
@@ -118,46 +115,50 @@ async def create_payment(user_id: int, days: int, lang: str = 'es') -> Optional[
     payload = {
         "price_amount": price_usd,
         "price_currency": "usd",
-        "pay_currency": PAY_CURRENCY,
         "order_id": order_id,
         "order_description": f"HJ ULP VIP - {plan['label']}",
-        "ipn_callback_url": "https://google.com"
+        "ipn_callback_url": config.NOWPAYMENTS_IPN_URL,
     }
 
-    data = await _api_post("/payment", payload)
-    if not data or "payment_id" not in data:
-        logger.error(f"Error creando payment para {user_id}: {data}")
+    data = await _api_post("/invoice", payload)
+    if not data or "id" not in data or "invoice_url" not in data:
+        logger.error(f"Error creando invoice para {user_id}: {data}")
         return None
 
-    payment_id = str(data["payment_id"])
-    pay_address = data.get("pay_address", "")
-    pay_amount = data.get("pay_amount", 0)
+    invoice_id = str(data["id"])
+    invoice_url = data["invoice_url"]
 
     logger.info(
-        f"Payment creado: id={payment_id} | user={user_id} | {plan['label']} | "
-        f"${price_usd} -> {pay_amount} {PAY_CURRENCY} | addr={pay_address[:20]}..."
+        f"Invoice creado: id={invoice_id} | user={user_id} | {plan['label']} | "
+        f"${price_usd} | url={invoice_url[:50]}..."
     )
 
-    # Guardar en DB
+    # Guardar en DB (invoice_id en columna invoice_id)
     try:
         db.create_payment(
             user_id=user_id,
-            invoice_id=payment_id,
+            invoice_id=invoice_id,
             order_id=order_id,
             days=days,
             amount_usd=price_usd,
             status="pending",
             lang=lang
         )
-        logger.info(f"Payment {payment_id} guardado en DB")
+        logger.info(f"Invoice {invoice_id} guardado en DB")
     except Exception as db_err:
-        logger.error(f"CRITICO: Payment {payment_id} NO se guardo en DB: {db_err}")
+        logger.error(f"CRITICO: Invoice {invoice_id} NO se guardo en DB: {db_err}")
 
-    return data
+    return {
+        "invoice_id": invoice_id,
+        "invoice_url": invoice_url,
+        "order_id": order_id,
+        "price_amount": price_usd,
+        "plan_label": plan["label"],
+    }
 
 
 # ═════════════════════════════════════════════════════════════
-#  VERIFICAR ESTADO (GET /v1/payment/{id})
+#  VERIFICAR ESTADO (GET /v1/payment/{id}) — fallback polling
 # ═════════════════════════════════════════════════════════════
 
 async def get_payment_status(payment_id: str) -> Optional[str]:
@@ -207,17 +208,43 @@ def _extract_status(data: dict) -> str:
 
 
 # ═════════════════════════════════════════════════════════════
-#  POLLING LOOP — verifica pagos pendientes cada 25s
+#  PARSE ORDER_ID — extrae user_id y dias del order_id
 # ═════════════════════════════════════════════════════════════
 
-POLLING_INTERVAL = 25  # segundos
+def parse_order_id(order_id: str):
+    """Parsear order_id formato: HJ-{user_id}-{days}d-{timestamp}
+
+    Retorna (user_id, days) o (None, None) si no se puede parsear.
+    """
+    if not order_id or not order_id.startswith("HJ-"):
+        return None, None
+    parts = order_id.split("-")
+    if len(parts) >= 3:
+        try:
+            user_id = int(parts[1])
+            days = int(parts[2].replace("d", ""))
+            return user_id, days
+        except (ValueError, IndexError):
+            return None, None
+    return None, None
+
+
+# ═════════════════════════════════════════════════════════════
+#  POLLING LOOP — fallback para pagos legacy cada 30s
+# ═════════════════════════════════════════════════════════════
+
+POLLING_INTERVAL = 30  # segundos
 ORDER_EXPIRY_MINUTES = 120
 
 
 async def payment_polling_loop():
-    """Bucle principal que verifica pagos pendientes."""
-    logger.info(f"NOWPayments polling iniciado (cada {POLLING_INTERVAL}s)")
-    await asyncio.sleep(10)  # Esperar a que el bot este listo
+    """Bucle de verificacion de pagos pendientes (fallback).
+
+    Los invoices nuevos se confirman via IPN webhook.
+    Este polling es fallback para pagos directos o si el webhook falla.
+    """
+    logger.info(f"NOWPayments polling iniciado (cada {POLLING_INTERVAL}s, fallback)")
+    await asyncio.sleep(10)
 
     while True:
         try:
@@ -228,7 +255,7 @@ async def payment_polling_loop():
 
 
 async def _check_pending_payments():
-    """Verificar todos los pagos pendientes y entregar VIP a los confirmados."""
+    """Verificar pagos pendientes via GET /v1/payment/{id}."""
     import state
 
     pending = db.get_pending_payments()
@@ -239,58 +266,31 @@ async def _check_pending_payments():
     now = datetime.now(timezone.utc)
 
     async def _process_one(payment: dict):
-        payment_id = payment["invoice_id"]  # invoice_id columna guarda el payment_id
+        record_id = payment["invoice_id"]
         user_id = payment["user_id"]
         days = payment["days"]
         lang = payment.get("lang", "es")
 
-        # 1) Consultar estado a NOWPayments
+        # Intentar GET /v1/payment/{id} (funciona para pagos directos)
         try:
-            status = await get_payment_status(payment_id)
+            status = await get_payment_status(record_id)
         except Exception as e:
-            logger.error(f"Error consultando payment {payment_id}: {e}")
+            logger.error(f"Error consultando payment {record_id}: {e}")
             return
 
         if not status:
-            return  # Error de red, reintentar en proximo ciclo
-
-        if status == "not_found":
-            logger.warning(f"Payment {payment_id} not found en API")
             return
 
-        logger.info(f"Payment {payment_id} | user={user_id} | status={status}")
+        if status == "not_found":
+            # Es un invoice ID (no payment ID), no se puede consultar por este endpoint
+            # Se confirmara via IPN webhook
+            return
 
-        # 2) Estado exitoso: entregar VIP
+        logger.info(f"Payment {record_id} | user={user_id} | status={status}")
+
         if status in SUCCESS_STATUSES:
-            try:
-                db.set_role(user_id, "VIP", days)
-                db.update_payment_status(payment_id, "delivered")
+            await _deliver_vip(state, user_id, days, record_id, lang, "polling")
 
-                logger.info(
-                    f"VIP ENTREGADO via polling: user={user_id} | {days}d | "
-                    f"payment={payment_id} | status={status}"
-                )
-
-                # Notificar al usuario
-                try:
-                    from ui import UI, Keyboards
-                    from roles import get_user_role
-
-                    role = get_user_role(user_id)
-                    await state.bot.send_message(
-                        user_id,
-                        UI.text("pay_success", lang, days),
-                        buttons=Keyboards.main(role, lang, False),
-                        parse_mode='md'
-                    )
-                    logger.info(f"Notificacion de pago enviada a {user_id}")
-                except Exception as e:
-                    logger.error(f"Error notificando pago a {user_id}: {e}")
-
-            except Exception as e:
-                logger.error(f"ERROR CRITICO entregando VIP user={user_id} payment={payment_id}: {e}")
-
-        # 3) Estados intermedios: verificar expiracion
         elif status in WAITING_STATUSES:
             try:
                 created_str = payment.get("created_at", "")
@@ -300,25 +300,55 @@ async def _check_pending_payments():
                         created = created.replace(tzinfo=timezone.utc)
                     elapsed_min = (now - created).total_seconds() / 60
                     if elapsed_min > ORDER_EXPIRY_MINUTES:
-                        db.update_payment_status(payment_id, "expired")
+                        db.update_payment_status(record_id, "expired")
                         logger.info(
-                            f"Payment {payment_id} expirada: {elapsed_min:.0f}min "
-                            f"(status={status}) user={user_id}"
+                            f"Payment {record_id} expirada: {elapsed_min:.0f}min "
+                            f"user={user_id}"
                         )
             except Exception as e:
-                logger.warning(f"Error verificando expiracion de {payment_id}: {e}")
+                logger.warning(f"Error verificando expiracion de {record_id}: {e}")
 
-        # 4) Estados fallidos
         elif status in FAIL_STATUSES:
-            db.update_payment_status(payment_id, status)
-            logger.info(f"Payment {payment_id} marcada como {status}")
+            db.update_payment_status(record_id, status)
+            logger.info(f"Payment {record_id} marcada como {status}")
 
         else:
-            logger.warning(f"Payment {payment_id}: status desconocido '{status}'")
+            logger.warning(f"Payment {record_id}: status desconocido '{status}'")
 
-    # Ejecutar todas las consultas en paralelo
     results = await asyncio.gather(*[_process_one(p) for p in pending], return_exceptions=True)
-
     for i, result in enumerate(results):
         if isinstance(result, Exception):
             logger.error(f"Error inesperado en polling (payment #{i}): {result}")
+
+
+async def _deliver_vip(state_module, user_id: int, days: int, record_id: str,
+                     lang: str, source: str = "unknown"):
+    """Entregar VIP y notificar al usuario."""
+    try:
+        db.set_role(user_id, "VIP", days)
+        db.update_payment_status(record_id, "delivered")
+
+        logger.info(
+            f"VIP ENTREGADO via {source}: user={user_id} | {days}d | record={record_id}"
+        )
+
+        # Notificar al usuario
+        try:
+            from ui import UI, Keyboards
+            from roles import get_user_role
+
+            role = get_user_role(user_id)
+            await state_module.bot.send_message(
+                user_id,
+                UI.text("pay_success", lang, days),
+                buttons=Keyboards.main(role, lang, False),
+                parse_mode='md'
+            )
+            logger.info(f"Notificacion de pago enviada a {user_id}")
+        except Exception as e:
+            logger.error(f"Error notificando pago a {user_id}: {e}")
+
+    except Exception as e:
+        logger.error(
+            f"ERROR CRITICO entregando VIP user={user_id} record={record_id}: {e}"
+        )

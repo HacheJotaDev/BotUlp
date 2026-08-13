@@ -37,7 +37,7 @@
     "imap_completed": "╭───✦ 📧 IMAP CHECK\n├● 📊 Total: `{}`\n├● ✅ Hits: `{}`\n├● ❌ Bads: `{}`\n├● ⏱️ Tiempo: `{:.1f}s`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "imap_no_hits": "╭───✦ 📧 IMAP CHECK\n├● 📊 Total: `{}`\n├● ❌ 0 Hits encontrados\n├● ⏱️ Tiempo: `{:.1f}s`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
     "imap_zip_caption": "╭───✦ 📧 IMAP + KEYWORDS\n├● 📊 Total: `{}` │ ✅ Hits: `{}` │ ❌ Bads: `{}`\n├● ⏱ Tiempo: `{:.1f}s`\n├● 🔎 Keywords: `{}`\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n📁 `all_hits.txt` — `{}` hits totales\n📁 `bad_accounts.txt` — cuentas fallidas\n📁 `domains/` — por dominio\n📁 `keywords/` — por keyword con fecha",
-    "pay_plans": "╭───✦ 💳 COMPRAR VIP — USDT (Arbitrum)\n├● Moneda: **USDT (ERC20)**\n├● Pago automatico, VIP se activa al instante\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\nSelecciona tu plan:",
+    "pay_plans": "╭───✦ 💳 COMPRAR VIP — MULTI-CRYPTO\n├● Paga con USDT, BTC, ETH, LTC y mas\n├● VIP se activa automaticamente al confirmar\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\nSelecciona tu plan:",
     "pay_invoice": "╭───✦ 💳 PAGO CREADO\n├● 📦 Plan: **{}**\n├● 💲 Monto: **${:.2f} USD**\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n🔗 **Paga aqui:**\n{}\n\n⏳ VIP se activara automaticamente al confirmar el pago.\n📋 El pago se verifica cada 30 segundos.",
     "pay_checking": "⏳ Verificando estado del pago...",
     "pay_pending": "╭───✦ ⏳ PAGO PENDIENTE\n├● Tu pago esta siendo procesado\n├● El VIP se activara automaticamente\n╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",

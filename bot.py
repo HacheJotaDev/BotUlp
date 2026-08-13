@@ -95,10 +95,17 @@ async def main():
 
     state.cleanup_task = asyncio.create_task(cleanup_loop())
 
-    # Iniciar polling de pagos NOWPayments
+    # Iniciar polling de pagos NOWPayments (fallback)
     from nowpayments import payment_polling_loop
     state.payment_polling_task = asyncio.create_task(payment_polling_loop())
-    logger.info("NOWPayments payment polling iniciado")
+    logger.info("NOWPayments payment polling iniciado (fallback)")
+
+    # Iniciar servidor webhook IPN para auto-delivery
+    try:
+        from webhook_server import start_webhook_server
+        state.webhook_runner = await start_webhook_server(config.NOWPAYMENTS_WEBHOOK_PORT)
+    except Exception as e:
+        logger.warning(f"Webhook IPN no pudo iniciar: {e}")
 
     # Info del bot
     me = await bot_client.get_me()

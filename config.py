@@ -60,6 +60,11 @@ class Config:
     # NOWPayments
     NOWPAYMENTS_API_KEY: str = "N9BWS3V-AP94BH7-HA7QH4R-RZ7TKS7"
     NOWPAYMENTS_IPN_KEY: str = "Q0qTZTAZwPPx9V6IqLT2pMptqRLFbE9P"
+    NOWPAYMENTS_IPN_URL: str = os.getenv(
+        "NOWPAYMENTS_IPN_URL",
+        "http://47.57.242.119:9090/ipn"
+    )
+    NOWPAYMENTS_WEBHOOK_PORT: int = int(os.getenv("NOWPAYMENTS_WEBHOOK_PORT", "9090"))
 
     def __post_init__(self):
         if not self.BOT_TOKEN:
