@@ -349,102 +349,168 @@ async def _check_pending_payments():
             logger.error(f"Error inesperado en payment polling (payment #{i}): {result}")
 
 
+def _parse_order_id(order_id: str) -> tuple:
+    """Extraer user_id y dias del order_id formato HJ-{uid}-{days}d-..."""
+    import re
+    m = re.match(r'^HJ-(\d+)-(\d+)d-', order_id or '')
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    return None, None
+
+
 async def manual_check_and_deliver(invoice_id: str) -> dict:
     """Verificar manualmente una invoice y entregar VIP si esta pagada.
 
     Usado por el admin via /fixpay.
+    Soporta:
+      - Buscar por invoice_id en DB
+      - Buscar por order_id en DB
+      - Si no esta en DB, consultar NOWPayments API directamente,
+        extraer user_id del order_id y entregar VIP
     Retorna dict con resultado de la operacion.
     """
-    # Buscar en la DB
-    import sqlite3
+    import re
     from database import db as _db
 
+    # ── 1) Buscar en DB por invoice_id ──
     with _db._lock:
         c = _db.conn.cursor()
         c.execute("SELECT * FROM payments WHERE invoice_id = ?", (invoice_id,))
         row = c.fetchone()
 
+    # ── 2) Si no encontro, buscar por order_id ──
     if not row:
-        return {"error": f"Invoice {invoice_id} no encontrada en la base de datos"}
+        with _db._lock:
+            c = _db.conn.cursor()
+            c.execute("SELECT * FROM payments WHERE order_id = ?", (invoice_id,))
+            row = c.fetchone()
 
-    payment = dict(row)
-    user_id = payment["user_id"]
-    days = payment["days"]
-    current_status = payment["status"]
+    # ── 3) Si esta en DB, procesar normalmente ──
+    if row:
+        payment = dict(row)
+        user_id = payment["user_id"]
+        days = payment["days"]
+        current_status = payment["status"]
+        actual_invoice_id = payment["invoice_id"]
 
-    # Si ya fue entregada, no hacer nada
-    if current_status == "delivered":
-        return {"info": f"Invoice {invoice_id} ya fue entregada a user {user_id}"}
+        # Si ya fue entregada, no hacer nada
+        if current_status == "delivered":
+            return {"info": f"Invoice {actual_invoice_id} ya fue entregada a user {user_id}"}
 
-    # Consultar NOWPayments
+        # Consultar NOWPayments con el invoice_id real
+        np_data = await get_invoice_full(actual_invoice_id)
+        if not np_data:
+            return {"error": f"No se pudo consultar la API de NOWPayments"}
+        if "error" in np_data:
+            return {"error": f"Error de API: {np_data['error']} - {np_data.get('detail', '')}"}
+
+        np_status = _extract_np_status(np_data)
+        if not np_status:
+            return {"error": f"No se pudo determinar el status", "api_response": {k: str(v)[:100] for k, v in np_data.items()}}
+
+        if np_status in SUCCESS_STATUSES:
+            return await _deliver_vip(_db, user_id, days, actual_invoice_id, payment.get("lang", "es"), np_status)
+        elif np_status in WAITING_STATUSES:
+            return {"info": f"Pago pendiente (status: {np_status}). Esperar.", "np_status": np_status}
+        elif np_status in FAIL_STATUSES:
+            _db.update_payment_status(actual_invoice_id, np_status)
+            return {"info": f"Pago fallo (status: {np_status}).", "np_status": np_status}
+        else:
+            return {"warning": f"Status desconocido: {np_status}", "api_response": {k: str(v)[:100] for k, v in np_data.items()}}
+
+    # ── 4) NO esta en DB: consultar NOWPayments directamente ──
+    logger.warning(f"fixpay: {invoice_id} no encontrada en DB, consultando API directamente...")
+
     np_data = await get_invoice_full(invoice_id)
     if not np_data:
-        return {"error": f"No se pudo consultar la API de NOWPayments"}
-
+        return {"error": f"No se pudo consultar NOWPayments para {invoice_id}"}
     if "error" in np_data:
         return {"error": f"Error de API: {np_data['error']} - {np_data.get('detail', '')}"}
 
-    # Extraer status de la misma forma que el polling
-    np_status = None
+    np_status = _extract_np_status(np_data)
+    if not np_status:
+        return {"error": f"No se pudo determinar el status", "api_response": {k: str(v)[:100] for k, v in np_data.items()}}
+
+    # Extraer order_id del response de NOWPayments
+    np_order_id = np_data.get("order_id", "")
+    np_amount = np_data.get("price_amount", 0)
+
+    # Intentar extraer user_id y dias del order_id
+    user_id, days = _parse_order_id(np_order_id)
+
+    # Fallback: buscar user_id en la descripcion si no hay order_id
+    if not user_id:
+        # Tambien buscar en descripcion: "HJ ULP VIP - X Dias"
+        desc = np_data.get("order_description", "")
+        m = re.search(r'(\d+)\s*(?:Dia|Dias|Day|Days)', desc, re.IGNORECASE)
+        if m:
+            days = int(m.group(1))
+
+    if not user_id or not days:
+        return {
+            "error": f"No se pudo extraer user_id/dias del order_id '{np_order_id}'. "
+                   f"Usa /vip <user_id> manualmente.",
+            "api_response": {
+                "order_id": np_order_id,
+                "status": np_status,
+                "price_amount": np_amount
+            }
+        }
+
+    if np_status not in SUCCESS_STATUSES:
+        return {"info": f"Pago NO completado (status: {np_status}). No se entrega VIP.", "np_status": np_status}
+
+    # Registrar en DB y entregar
+    _db.create_payment(
+        user_id=user_id,
+        invoice_id=invoice_id,
+        order_id=np_order_id,
+        days=days,
+        amount_usd=float(np_amount) if np_amount else 0,
+        status="delivered",
+        lang="es"
+    )
+
+    return await _deliver_vip(_db, user_id, days, invoice_id, "es", np_status)
+
+
+def _extract_np_status(np_data: dict) -> str:
+    """Extraer status del response de NOWPayments, revisando multiples campos."""
     for field in ("status", "payment_status", "invoice_status", "state"):
         val = np_data.get(field)
         if val and isinstance(val, str) and val.strip():
-            np_status = val.strip().lower()
-            break
+            return val.strip().lower()
+    return ""
 
-    if not np_status:
-        return {
-            "error": f"No se pudo determinar el status. Keys disponibles: {list(np_data.keys())}",
-            "api_response": {k: str(v)[:100] for k, v in np_data.items()}
-        }
 
-    if np_status in SUCCESS_STATUSES:
-        # Entregar VIP
+async def _deliver_vip(_db, user_id: int, days: int, invoice_id: str, lang: str, np_status: str) -> dict:
+    """Entregar VIP, actualizar DB y notificar al usuario."""
+    try:
+        _db.set_role(user_id, "VIP", days)
+        _db.update_payment_status(invoice_id, "delivered")
+
+        import state
+        from ui import UI, Keyboards
+        from roles import get_user_role
+
+        role = get_user_role(user_id)
         try:
-            _db.set_role(user_id, "VIP", days)
-            _db.update_payment_status(invoice_id, "delivered")
-
-            import state
-            from ui import UI, Keyboards
-            from roles import get_user_role
-
-            role = get_user_role(user_id)
-            lang = payment.get("lang", "es")
-            try:
-                await state.bot.send_message(
-                    user_id,
-                    UI.text("pay_success", lang, days),
-                    buttons=Keyboards.main(role, lang, False),
-                    parse_mode='md'
-                )
-            except Exception:
-                pass
-
-            return {
-                "success": True,
-                "user_id": user_id,
-                "days": days,
-                "np_status": np_status,
-                "message": f"VIP ({days}d) entregado a user {user_id} | invoice {invoice_id} | status: {np_status}"
-            }
+            await state.bot.send_message(
+                user_id,
+                UI.text("pay_success", lang, days),
+                buttons=Keyboards.main(role, lang, False),
+                parse_mode='md'
+            )
+            logger.info(f"Notificacion de pago enviada a {user_id}")
         except Exception as e:
-            return {"error": f"Error entregando VIP: {e}"}
+            logger.error(f"Error notificando pago a {user_id}: {e}")
 
-    elif np_status in WAITING_STATUSES:
         return {
-            "info": f"Pago aun pendiente en NOWPayments (status: {np_status}). Esperar.",
-            "np_status": np_status
+            "success": True,
+            "user_id": user_id,
+            "days": days,
+            "np_status": np_status,
+            "message": f"VIP ({days}d) entregado a user {user_id} | invoice {invoice_id} | status: {np_status}"
         }
-
-    elif np_status in FAIL_STATUSES:
-        _db.update_payment_status(invoice_id, np_status)
-        return {
-            "info": f"Pago fallo (status: {np_status}). No se entrega VIP.",
-            "np_status": np_status
-        }
-
-    else:
-        return {
-            "warning": f"Status desconocido: {np_status}",
-            "api_response": {k: str(v)[:100] for k, v in np_data.items()}
-        }
+    except Exception as e:
+        return {"error": f"Error entregando VIP: {e}"}
