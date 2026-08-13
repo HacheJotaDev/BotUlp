@@ -1149,9 +1149,10 @@ def register_handlers(bot_client):
         """Admin: verificar invoice y entregar VIP si fue pagada.
 
         Uso:
-          /fixpay <invoice_id>          — busca en DB y NP API
-          /fixpay <order_id>             — busca por order_id en DB y NP API
-          /fixpay <user_id> <dias>       — entrega VIP manualmente (fijo)
+          /fixpay <user_id> <dias>       — entrega VIP manualmente (sin API)
+          /fixpay force <user_id> <dias>  — igual que arriba, explicito
+          /fixpay <invoice_id>           — busca en DB y NP API
+          /fixpay <order_id>              — busca por order_id en DB y NP API
         """
         if get_user_role(e.sender_id) != UserRole.ADMIN:
             return
@@ -1159,10 +1160,20 @@ def register_handlers(bot_client):
         raw = e.pattern_match.group(1).strip()
         parts = raw.split()
 
+        # Modo force: /fixpay force <user_id> <dias>
+        if len(parts) == 3 and parts[0].lower() == 'force' and parts[1].isdigit() and parts[2].isdigit():
+            uid = int(parts[1])
+            days = int(parts[2])
         # Modo manual: /fixpay <user_id> <dias>
-        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+        elif len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
             uid = int(parts[0])
             days = int(parts[1])
+        else:
+            uid = None
+            days = None
+
+        # Entrega manual directa (sin consultar API)
+        if uid is not None:
             if days <= 0 or days > 36500:
                 return await e.reply("Dias invalidos. Rango: 1-36500", parse_mode='md')
             db.set_role(uid, 'VIP', days)
@@ -1180,9 +1191,9 @@ def register_handlers(bot_client):
                     buttons=Keyboards.main(role, ulang, False),
                     parse_mode='md'
                 )
-                notify = "Notificacion enviada."
-            except Exception:
-                notify = "No se pudo notificar al usuario."
+                notify = "✅ Notificacion enviada al usuario."
+            except Exception as notify_err:
+                notify = f"⚠️ No se pudo notificar: {str(notify_err)[:80]}"
             await e.reply(
                 f"╭───✦ ✅ VIP ENTREGADO MANUALMENTE\n"
                 f"├● 👤 User: `{uid}`\n"
@@ -1193,7 +1204,7 @@ def register_handlers(bot_client):
             )
             return
 
-        # Modo normal: buscar invoice/order_id
+        # Modo normal: buscar invoice/order_id en DB o API
         identifier = raw
         status_msg = await e.reply(
             "╭───✦ 🔧 FIX PAYMENT\n"

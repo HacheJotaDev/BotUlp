@@ -83,10 +83,11 @@ class Database:
         try:
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)")
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_invoice_id ON payments(invoice_id)")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id)")
         except Exception as e:
             logger.warning(f"Error creando indices: {e}")
 
-        # Migraciones
+        # Migraciones - users
         c.execute("PRAGMA table_info(users)")
         columns = [info[1] for info in c.fetchall()]
 
@@ -105,6 +106,18 @@ class Database:
                     logger.info(f"Columna '{col_name}' agregada correctamente.")
                 except Exception as e:
                     logger.error(f"Error migrando DB: {e}")
+
+        # Migraciones - payments
+        c.execute("PRAGMA table_info(payments)")
+        pay_columns = [info[1] for info in c.fetchall()]
+        if 'api_404_count' not in pay_columns:
+            logger.info("Migrando DB: agregando columna 'api_404_count' a payments...")
+            try:
+                c.execute("ALTER TABLE payments ADD COLUMN api_404_count INTEGER DEFAULT 0")
+                self.conn.commit()
+                logger.info("Columna 'api_404_count' agregada correctamente.")
+            except Exception as e:
+                logger.error(f"Error migrando payments: {e}")
 
         self.conn.commit()
 
@@ -310,9 +323,14 @@ class Database:
                        days: int, amount_usd: float, status: str, lang: str = 'es'):
         with self._lock:
             c = self.conn.cursor()
+            # Evitar duplicados: si ya existe el invoice_id, no insertar de nuevo
+            c.execute("SELECT id FROM payments WHERE invoice_id = ?", (invoice_id,))
+            if c.fetchone():
+                logger.warning(f"create_payment: invoice_id {invoice_id} ya existe en DB, saltando")
+                return
             c.execute(
-                "INSERT INTO payments (user_id, invoice_id, order_id, days, amount_usd, status, lang) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO payments (user_id, invoice_id, order_id, days, amount_usd, status, lang, api_404_count) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
                 (user_id, invoice_id, order_id, days, amount_usd, status, lang)
             )
             self.conn.commit()
@@ -331,6 +349,35 @@ class Database:
                 (status, now, invoice_id)
             )
             self.conn.commit()
+
+    def increment_payment_404(self, invoice_id: str) -> int:
+        """Incrementar contador de 404s consecutivos. Retorna el nuevo valor."""
+        with self._lock:
+            c = self.conn.cursor()
+            c.execute(
+                "UPDATE payments SET api_404_count = COALESCE(api_404_count, 0) + 1 WHERE invoice_id = ?",
+                (invoice_id,)
+            )
+            c.execute("SELECT COALESCE(api_404_count, 0) FROM payments WHERE invoice_id = ?", (invoice_id,))
+            row = c.fetchone()
+            self.conn.commit()
+            return row[0] if row else 0
+
+    def reset_payment_404(self, invoice_id: str):
+        """Resetear contador de 404s (cuando API responde OK)."""
+        with self._lock:
+            self.conn.cursor().execute(
+                "UPDATE payments SET api_404_count = 0 WHERE invoice_id = ?",
+                (invoice_id,)
+            )
+            self.conn.commit()
+
+    def get_payment_by_order_id(self, order_id: str) -> dict:
+        """Buscar pago por order_id."""
+        c = self.conn.cursor()
+        c.execute("SELECT * FROM payments WHERE order_id = ?", (order_id,))
+        row = c.fetchone()
+        return dict(row) if row else None
 
     def get_user_payments(self, user_id: int) -> List[dict]:
         c = self.conn.cursor()

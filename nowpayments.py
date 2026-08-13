@@ -154,20 +154,6 @@ async def create_invoice(user_id: int, days: int, lang: str = 'es') -> Optional[
         logger.info(f"Invoice creada y guardada en DB: id={invoice_id} | user={user_id} | {plan['label']} | ${price_usd}")
     except Exception as db_err:
         logger.error(f"CRITICO: Invoice {invoice_id} creada en NP pero NO se guardo en DB: {db_err}")
-        # Intentar guardar de nuevo
-        try:
-            db.create_payment(
-                user_id=user_id,
-                invoice_id=invoice_id,
-                order_id=order_id,
-                days=days,
-                amount_usd=price_usd,
-                status="pending",
-                lang=lang
-            )
-            logger.info(f"Reintento DB exitoso para invoice {invoice_id}")
-        except Exception as db_err2:
-            logger.error(f"CRITICO: Reintento DB tambien fallo para invoice {invoice_id}: {db_err2}")
 
     return data
 
@@ -271,6 +257,11 @@ async def payment_polling_loop():
 # Tiempo maximo antes de expirar una orden que sigue pendiente en NOWPayments.
 ORDER_EXPIRY_MINUTES = 120
 
+# Maximos 404s consecutivos antes de marcar como expired.
+# 404s pueden ser glitches temporales de la API.
+# 5 * 30s polling = 2.5 minutos de tolerancia a errores.
+MAX_404_BEFORE_EXPIRE = 5
+
 
 async def _check_pending_payments():
     """Verificar todos los pagos pendientes y entregar VIP a los confirmados."""
@@ -298,9 +289,15 @@ async def _check_pending_payments():
 
         if not status or status == "not_found":
             if status == "not_found":
-                db.update_payment_status(invoice_id, "expired")
-                logger.info(f"Payment {invoice_id} marcada expired (404 not found)")
+                count_404 = db.increment_payment_404(invoice_id)
+                logger.warning(f"Payment {invoice_id}: API 404 #{count_404}/{MAX_404_BEFORE_EXPIRE}")
+                if count_404 >= MAX_404_BEFORE_EXPIRE:
+                    db.update_payment_status(invoice_id, "expired")
+                    logger.info(f"Payment {invoice_id} marcada expired tras {count_404} 404s consecutivos")
             return
+
+        # API respondio OK, resetear contador de 404s
+        db.reset_payment_404(invoice_id)
 
         logger.info(f"Payment {invoice_id} | user={user_id} | np_status={status}")
 
@@ -490,15 +487,18 @@ async def manual_check_and_deliver(invoice_id: str) -> dict:
         return {"info": f"Pago NO completado (status: {np_status}). No se entrega VIP.", "np_status": np_status}
 
     # Registrar en DB y entregar
-    _db.create_payment(
-        user_id=user_id,
-        invoice_id=invoice_id,
-        order_id=np_order_id,
-        days=days,
-        amount_usd=float(np_amount) if np_amount else 0,
-        status="delivered",
-        lang="es"
-    )
+    try:
+        _db.create_payment(
+            user_id=user_id,
+            invoice_id=invoice_id,
+            order_id=np_order_id,
+            days=days,
+            amount_usd=float(np_amount) if np_amount else 0,
+            status="delivered",
+            lang="es"
+        )
+    except Exception as db_err:
+        logger.warning(f"fixpay: error guardando en DB (no bloquea entrega): {db_err}")
 
     return await _deliver_vip(_db, user_id, days, invoice_id, "es", np_status)
 
