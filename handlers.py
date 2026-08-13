@@ -1217,7 +1217,7 @@ def register_handlers(bot_client):
             user = db.get_user(e.sender_id)
             lang = user.get('language', 'es')
             await e.reply(
-                UI.text("sizedisp_info", lang, total_str, used_str, free_str, pct, bar),
+                UI.text("sizedisp_info", lang, total_str, used_str, pct, free_str, bar),
                 parse_mode='md'
             )
         except Exception as exc:
