@@ -1146,20 +1146,64 @@ def register_handlers(bot_client):
     # --- FIXPAY: Verificar y entregar VIP manualmente ---
     @bot_client.on(events.NewMessage(pattern=r"/fixpay (.+)"))
     async def cmd_fixpay(e):
-        """Admin: verificar invoice y entregar VIP si fue pagada."""
+        """Admin: verificar invoice y entregar VIP si fue pagada.
+
+        Uso:
+          /fixpay <invoice_id>          — busca en DB y NP API
+          /fixpay <order_id>             — busca por order_id en DB y NP API
+          /fixpay <user_id> <dias>       — entrega VIP manualmente (fijo)
+        """
         if get_user_role(e.sender_id) != UserRole.ADMIN:
             return
 
-        invoice_id = e.pattern_match.group(1).strip()
+        raw = e.pattern_match.group(1).strip()
+        parts = raw.split()
+
+        # Modo manual: /fixpay <user_id> <dias>
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            uid = int(parts[0])
+            days = int(parts[1])
+            if days <= 0 or days > 36500:
+                return await e.reply("Dias invalidos. Rango: 1-36500", parse_mode='md')
+            db.set_role(uid, 'VIP', days)
+            # Notificar al usuario
+            import state
+            try:
+                user_obj = db.get_user(uid)
+                ulang = user_obj.get('language', 'es')
+                from ui import UI, Keyboards
+                from roles import get_user_role
+                role = get_user_role(uid)
+                await state.bot.send_message(
+                    uid,
+                    UI.text("pay_success", ulang, days),
+                    buttons=Keyboards.main(role, ulang, False),
+                    parse_mode='md'
+                )
+                notify = "Notificacion enviada."
+            except Exception:
+                notify = "No se pudo notificar al usuario."
+            await e.reply(
+                f"╭───✦ ✅ VIP ENTREGADO MANUALMENTE\n"
+                f"├● 👤 User: `{uid}`\n"
+                f"├● 📅 Dias: `{days}`\n"
+                f"├● 📄 {notify}\n"
+                f"╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+                parse_mode='md'
+            )
+            return
+
+        # Modo normal: buscar invoice/order_id
+        identifier = raw
         status_msg = await e.reply(
             "╭───✦ 🔧 FIX PAYMENT\n"
-            f"├● 📄 Invoice: `{invoice_id}`\n"
+            f"├● 📄 Buscando: `{identifier}`\n"
             "├● ⏳ Consultando API...\n"
             "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
             parse_mode='md'
         )
 
-        result = await manual_check_and_deliver(invoice_id)
+        result = await manual_check_and_deliver(identifier)
 
         if "success" in result:
             text = (
@@ -1172,7 +1216,7 @@ def register_handlers(bot_client):
         elif "error" in result:
             text = (
                 "╭───✦ ❌ FIX PAYMENT\n"
-                f"├● 📄 Invoice: `{invoice_id}`\n"
+                f"├● 📄 Query: `{identifier}`\n"
                 f"├● ❌ Error: `{result['error']}`\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             )
@@ -1182,7 +1226,7 @@ def register_handlers(bot_client):
         else:
             text = (
                 "╭───✦ ℹ️ FIX PAYMENT\n"
-                f"├● 📄 Invoice: `{invoice_id}`\n"
+                f"├● 📄 Query: `{identifier}`\n"
                 f"├● ℹ️ `{result.get('info', result.get('warning', 'Sin info'))}`\n"
                 "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
             )

@@ -140,85 +140,114 @@ async def create_invoice(user_id: int, days: int, lang: str = 'es') -> Optional[
 
     invoice_id = str(data["id"])
 
-    # Guardar en DB
-    db.create_payment(
-        user_id=user_id,
-        invoice_id=invoice_id,
-        order_id=order_id,
-        days=days,
-        amount_usd=price_usd,
-        status="pending",
-        lang=lang
-    )
+    # Guardar en DB con verificacion
+    try:
+        db.create_payment(
+            user_id=user_id,
+            invoice_id=invoice_id,
+            order_id=order_id,
+            days=days,
+            amount_usd=price_usd,
+            status="pending",
+            lang=lang
+        )
+        logger.info(f"Invoice creada y guardada en DB: id={invoice_id} | user={user_id} | {plan['label']} | ${price_usd}")
+    except Exception as db_err:
+        logger.error(f"CRITICO: Invoice {invoice_id} creada en NP pero NO se guardo en DB: {db_err}")
+        # Intentar guardar de nuevo
+        try:
+            db.create_payment(
+                user_id=user_id,
+                invoice_id=invoice_id,
+                order_id=order_id,
+                days=days,
+                amount_usd=price_usd,
+                status="pending",
+                lang=lang
+            )
+            logger.info(f"Reintento DB exitoso para invoice {invoice_id}")
+        except Exception as db_err2:
+            logger.error(f"CRITICO: Reintento DB tambien fallo para invoice {invoice_id}: {db_err2}")
 
-    logger.info(f"Invoice creada: id={invoice_id} | user={user_id} | {plan['label']} | ${price_usd}")
     return data
+
+
+async def _np_get_status_from_data(data: dict) -> Optional[str]:
+    """Extraer status de cualquier response de NOWPayments."""
+    for field in ("status", "payment_status", "invoice_status", "state"):
+        val = data.get(field)
+        if val and isinstance(val, str) and val.strip():
+            return val.strip().lower()
+    return None
 
 
 async def get_invoice_status(invoice_id: str) -> Optional[str]:
     """Obtener estado de una invoice.
 
-    Retorna el status string, 'not_found' si 404, o None si error de red.
+    Retorna el status string, 'not_found' si 404 en ambos endpoints, o None si error de red.
 
-    FIX: Ahora revisa multiples campos posibles del response
-    (status, payment_status, invoice_status) porque NOWPayments
-    cambia el formato segun el tipo de pago (crypto2crypto, etc.)
+    FIX: Prueba /invoice/{id} primero, si 404 prueba /payment/{id}.
+    Revisa multiples campos de status (crypto2crypto usa campos diferentes).
     """
-    url = f"{NP_API_BASE}/invoice/{invoice_id}"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=NP_HEADERS, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
+    # Probar ambos endpoints
+    for endpoint_path in (f"/invoice/{invoice_id}", f"/payment/{invoice_id}"):
+        url = f"{NP_API_BASE}{endpoint_path}"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=NP_HEADERS, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        logger.debug(f"NOWPayments {endpoint_path} response: {str(data)[:500]}")
 
-                    # Log completo para debuggear
-                    logger.debug(f"NOWPayments invoice {invoice_id} response: {str(data)[:500]}")
-
-                    # Intentar multiples campos donde puede estar el status
-                    status = None
-                    for field in ("status", "payment_status", "invoice_status", "state"):
-                        val = data.get(field)
-                        if val and isinstance(val, str) and val.strip():
-                            status = val.strip().lower()
-                            break
-
-                    if status:
-                        logger.info(f"Invoice {invoice_id}: status='{status}' (field used: {field})")
-                        return status
+                        status = await _np_get_status_from_data(data)
+                        if status:
+                            logger.info(f"{endpoint_path}: status='{status}'")
+                            return status
+                        else:
+                            logger.error(
+                                f"{endpoint_path}: NO status field! "
+                                f"Keys: {list(data.keys())} | Full: {str(data)[:500]}"
+                            )
+                            return None
+                    elif resp.status == 404:
+                        logger.warning(f"NOWPayments {endpoint_path} -> 404, trying next...")
+                        continue
                     else:
-                        # No se encontro ningun campo de status conocido
-                        logger.error(
-                            f"Invoice {invoice_id}: NO status field found in response! "
-                            f"Keys: {list(data.keys())} | Full: {str(data)[:500]}"
-                        )
+                        text = await resp.text()
+                        logger.error(f"NOWPayments {endpoint_path} error {resp.status}: {text[:300]}")
                         return None
+        except Exception as e:
+            logger.error(f"NOWPayments {endpoint_path} exception: {e}")
+            return None
 
-                elif resp.status == 404:
-                    logger.warning(f"Invoice {invoice_id} no encontrada (404)")
-                    return "not_found"
-                else:
-                    text = await resp.text()
-                    logger.error(f"NOWPayments invoice {invoice_id} error {resp.status}: {text[:300]}")
-    except Exception as e:
-        logger.error(f"NOWPayments invoice {invoice_id} exception: {e}")
-    return None
+    logger.warning(f"Invoice/Payment {invoice_id} no encontrada en ningun endpoint (404)")
+    return "not_found"
 
 
 async def get_invoice_full(invoice_id: str) -> Optional[Dict]:
-    """Obtener todos los datos de una invoice (para admin/debug)."""
-    url = f"{NP_API_BASE}/invoice/{invoice_id}"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=NP_HEADERS, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status == 200:
-                    return await resp.json()
-                elif resp.status == 404:
-                    return {"error": "not_found"}
-                else:
-                    text = await resp.text()
-                    return {"error": f"http_{resp.status}", "detail": text[:200]}
-    except Exception as e:
-        return {"error": "exception", "detail": str(e)[:200]}
+    """Obtener todos los datos de una invoice/payment (para admin/debug).
+
+    Prueba /invoice/{id} primero, si 404 prueba /payment/{id}.
+    """
+    for endpoint_path in (f"/invoice/{invoice_id}", f"/payment/{invoice_id}"):
+        url = f"{NP_API_BASE}{endpoint_path}"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=NP_HEADERS, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        data["_endpoint_used"] = endpoint_path
+                        return data
+                    elif resp.status == 404:
+                        logger.debug(f"NOWPayments {endpoint_path} -> 404")
+                        continue
+                    else:
+                        text = await resp.text()
+                        return {"error": f"http_{resp.status}", "detail": text[:200]}
+        except Exception as e:
+            return {"error": "exception", "detail": str(e)[:200]}
+
+    return {"error": "not_found"}
 
 
 # ═════════════════════════════════════════════════════════════
