@@ -1,19 +1,19 @@
 """
 ═══════════════════════════════════════════════════════════════
-  HJ ULP EXTRACTOR BOT — NOWPayments Integration Module
+  HJ ULP EXTRACTOR BOT — NOWPayments Integration Module v2
 ═══════════════════════════════════════════════════════════════
-  • Creacion de pagos via API REST
-  • Polling de estado (sin webhooks)
+  • Usa POST /v1/payment (NO /v1/invoice)
+  • El payment_id retornado es el mismo que usa GET /v1/payment/{id}
+  • Polling cada 25s con GET /v1/payment/{payment_id}
   • Entrega automatica VIP al confirmar pago
-  • Soporte USDT (Arbitrum One)
-  • FIX: multiples campos de status + logging completo
+  • Soporte USDT (Arbitrum One / ERC20)
 ═══════════════════════════════════════════════════════════════
 """
 
 import asyncio
 import aiohttp
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 
 from config import config
 from logger_setup import logger
@@ -34,8 +34,11 @@ NP_HEADERS = {
     "Content-Type": "application/json",
 }
 
+# Moneda de pago
+PAY_CURRENCY = "USDTERC20"
+
 # Status que indican pago exitoso
-SUCCESS_STATUSES = ("paid", "confirmed", "finished", "partially_paid")
+SUCCESS_STATUSES = ("finished", "confirmed", "paid", "partially_paid")
 
 # Status que indican que hay que esperar
 WAITING_STATUSES = ("waiting", "confirming", "sending", "pending")
@@ -45,7 +48,7 @@ FAIL_STATUSES = ("expired", "failed", "refunded", "reverted")
 
 
 # ═════════════════════════════════════════════════════════════
-#  FUNCIONES API
+#  FUNCIONES API BASE
 # ═════════════════════════════════════════════════════════════
 
 async def _api_get(endpoint: str, params: dict = None) -> Optional[Dict]:
@@ -53,14 +56,15 @@ async def _api_get(endpoint: str, params: dict = None) -> Optional[Dict]:
     url = f"{NP_API_BASE}{endpoint}"
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=NP_HEADERS, params=params, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            async with session.get(url, headers=NP_HEADERS, params=params,
+                                  timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 if resp.status == 200:
                     return await resp.json()
                 else:
                     text = await resp.text()
-                    logger.error(f"NOWPayments GET {endpoint} error {resp.status}: {text[:300]}")
+                    logger.error(f"NP GET {endpoint} error {resp.status}: {text[:300]}")
     except Exception as e:
-        logger.error(f"NOWPayments GET {endpoint} exception: {e}")
+        logger.error(f"NP GET {endpoint} exception: {e}")
     return None
 
 
@@ -69,53 +73,39 @@ async def _api_post(endpoint: str, payload: dict) -> Optional[Dict]:
     url = f"{NP_API_BASE}{endpoint}"
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=NP_HEADERS, json=payload, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            async with session.post(url, headers=NP_HEADERS, json=payload,
+                                   timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 if resp.status in (200, 201):
                     return await resp.json()
                 else:
                     text = await resp.text()
-                    logger.error(f"NOWPayments POST {endpoint} error {resp.status}: {text[:300]}")
+                    logger.error(f"NP POST {endpoint} error {resp.status}: {text[:300]}")
     except Exception as e:
-        logger.error(f"NOWPayments POST {endpoint} exception: {e}")
+        logger.error(f"NP POST {endpoint} exception: {e}")
     return None
 
 
 async def get_np_status() -> bool:
-    """Verificar que la API key es valida y la API esta operativa."""
+    """Verificar que la API key es valida."""
     data = await _api_get("/status")
     return data is not None
 
 
-async def get_minimum_price() -> float:
-    """Obtener el monto minimo para USDT en Arbitrum."""
-    data = await _api_get("/min-amount", {"currency_from": "USD", "currency_to": "USDTERC20"})
-    if data and "minimum_amount" in data:
-        try:
-            return float(data["minimum_amount"])
-        except (ValueError, TypeError):
-            pass
-    return 5.0  # fallback
+# ═════════════════════════════════════════════════════════════
+#  CREAR PAGO (POST /v1/payment)
+# ═════════════════════════════════════════════════════════════
 
+async def create_payment(user_id: int, days: int, lang: str = 'es') -> Optional[Dict]:
+    """Crear un pago via POST /v1/payment.
 
-async def get_estimated_price(usd_amount: float) -> float:
-    """Estimar cuantos USDT se necesitan por el monto USD."""
-    data = await _api_get("/estimate", {
-        "amount": usd_amount,
-        "currency_from": "USD",
-        "currency_to": "USDTERC20"
-    })
-    if data and "estimated_amount" in data:
-        try:
-            return float(data["estimated_amount"])
-        except (ValueError, TypeError):
-            pass
-    return usd_amount  # fallback 1:1
+    Retorna dict con:
+      - id (payment_id)
+      - pay_address (direccion de deposito)
+      - pay_amount (monto en cripto)
+      - price_amount (monto en USD)
+      - order_id
 
-
-async def create_invoice(user_id: int, days: int, lang: str = 'es') -> Optional[Dict]:
-    """Crear una factura de pago NOWPayments.
-
-    Retorna dict con invoice info o None si falla.
+    El payment_id retornado se usa directamente con GET /v1/payment/{id}.
     """
     plan = VIP_PLANS.get(days)
     if not plan:
@@ -128,122 +118,105 @@ async def create_invoice(user_id: int, days: int, lang: str = 'es') -> Optional[
     payload = {
         "price_amount": price_usd,
         "price_currency": "usd",
+        "pay_currency": PAY_CURRENCY,
         "order_id": order_id,
         "order_description": f"HJ ULP VIP - {plan['label']}",
         "ipn_callback_url": "https://google.com"
     }
 
-    data = await _api_post("/invoice", payload)
+    data = await _api_post("/payment", payload)
     if not data or "id" not in data:
-        logger.error(f"Error creando invoice para {user_id}: {data}")
+        logger.error(f"Error creando payment para {user_id}: {data}")
         return None
 
-    invoice_id = str(data["id"])
+    payment_id = str(data["id"])
+    pay_address = data.get("pay_address", "")
+    pay_amount = data.get("pay_amount", 0)
 
-    # Guardar en DB con verificacion
+    logger.info(
+        f"Payment creado: id={payment_id} | user={user_id} | {plan['label']} | "
+        f"${price_usd} -> {pay_amount} {PAY_CURRENCY} | addr={pay_address[:20]}..."
+    )
+
+    # Guardar en DB
     try:
         db.create_payment(
             user_id=user_id,
-            invoice_id=invoice_id,
+            invoice_id=payment_id,
             order_id=order_id,
             days=days,
             amount_usd=price_usd,
             status="pending",
             lang=lang
         )
-        logger.info(f"Invoice creada y guardada en DB: id={invoice_id} | user={user_id} | {plan['label']} | ${price_usd}")
+        logger.info(f"Payment {payment_id} guardado en DB")
     except Exception as db_err:
-        logger.error(f"CRITICO: Invoice {invoice_id} creada en NP pero NO se guardo en DB: {db_err}")
+        logger.error(f"CRITICO: Payment {payment_id} NO se guardo en DB: {db_err}")
 
     return data
 
 
-async def _np_get_status_from_data(data: dict) -> Optional[str]:
-    """Extraer status de cualquier response de NOWPayments."""
-    for field in ("status", "payment_status", "invoice_status", "state"):
+# ═════════════════════════════════════════════════════════════
+#  VERIFICAR ESTADO (GET /v1/payment/{id})
+# ═════════════════════════════════════════════════════════════
+
+async def get_payment_status(payment_id: str) -> Optional[str]:
+    """Obtener estado de un pago via GET /v1/payment/{id}.
+
+    Retorna:
+      - status string (lowercase)
+      - 'not_found' si 404
+      - None si error de red
+    """
+    url = f"{NP_API_BASE}/payment/{payment_id}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=NP_HEADERS,
+                                  timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    status = _extract_status(data)
+                    if status:
+                        logger.debug(f"Payment {payment_id}: status='{status}'")
+                        return status
+                    else:
+                        logger.error(
+                            f"Payment {payment_id}: sin campo status! "
+                            f"Keys: {list(data.keys())}"
+                        )
+                        return None
+                elif resp.status == 404:
+                    logger.warning(f"Payment {payment_id}: 404 not found")
+                    return "not_found"
+                else:
+                    text = await resp.text()
+                    logger.error(f"Payment {payment_id}: error {resp.status}: {text[:200]}")
+                    return None
+    except Exception as e:
+        logger.error(f"Payment {payment_id}: exception: {e}")
+        return None
+
+
+def _extract_status(data: dict) -> str:
+    """Extraer status del response de NOWPayments."""
+    for field in ("status", "payment_status"):
         val = data.get(field)
         if val and isinstance(val, str) and val.strip():
             return val.strip().lower()
-    return None
-
-
-async def get_invoice_status(invoice_id: str) -> Optional[str]:
-    """Obtener estado de una invoice.
-
-    Retorna el status string, 'not_found' si 404 en ambos endpoints, o None si error de red.
-
-    FIX: Prueba /invoice/{id} primero, si 404 prueba /payment/{id}.
-    Revisa multiples campos de status (crypto2crypto usa campos diferentes).
-    """
-    # Probar ambos endpoints
-    for endpoint_path in (f"/invoice/{invoice_id}", f"/payment/{invoice_id}"):
-        url = f"{NP_API_BASE}{endpoint_path}"
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=NP_HEADERS, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        logger.debug(f"NOWPayments {endpoint_path} response: {str(data)[:500]}")
-
-                        status = await _np_get_status_from_data(data)
-                        if status:
-                            logger.info(f"{endpoint_path}: status='{status}'")
-                            return status
-                        else:
-                            logger.error(
-                                f"{endpoint_path}: NO status field! "
-                                f"Keys: {list(data.keys())} | Full: {str(data)[:500]}"
-                            )
-                            return None
-                    elif resp.status == 404:
-                        logger.warning(f"NOWPayments {endpoint_path} -> 404, trying next...")
-                        continue
-                    else:
-                        text = await resp.text()
-                        logger.error(f"NOWPayments {endpoint_path} error {resp.status}: {text[:300]}")
-                        return None
-        except Exception as e:
-            logger.error(f"NOWPayments {endpoint_path} exception: {e}")
-            return None
-
-    logger.warning(f"Invoice/Payment {invoice_id} no encontrada en ningun endpoint (404)")
-    return "not_found"
-
-
-async def get_invoice_full(invoice_id: str) -> Optional[Dict]:
-    """Obtener todos los datos de una invoice/payment (para admin/debug).
-
-    Prueba /invoice/{id} primero, si 404 prueba /payment/{id}.
-    """
-    for endpoint_path in (f"/invoice/{invoice_id}", f"/payment/{invoice_id}"):
-        url = f"{NP_API_BASE}{endpoint_path}"
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=NP_HEADERS, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        data["_endpoint_used"] = endpoint_path
-                        return data
-                    elif resp.status == 404:
-                        logger.debug(f"NOWPayments {endpoint_path} -> 404")
-                        continue
-                    else:
-                        text = await resp.text()
-                        return {"error": f"http_{resp.status}", "detail": text[:200]}
-        except Exception as e:
-            return {"error": "exception", "detail": str(e)[:200]}
-
-    return {"error": "not_found"}
+    return ""
 
 
 # ═════════════════════════════════════════════════════════════
-#  POLLING LOOP
+#  POLLING LOOP — verifica pagos pendientes cada 25s
 # ═════════════════════════════════════════════════════════════
+
+POLLING_INTERVAL = 25  # segundos
+ORDER_EXPIRY_MINUTES = 120
+
 
 async def payment_polling_loop():
-    """Bucle principal que verifica pagos pendientes cada 30 segundos."""
-    logger.info("NOWPayments polling iniciado (cada 30s)")
-
+    """Bucle principal que verifica pagos pendientes."""
+    logger.info(f"NOWPayments polling iniciado (cada {POLLING_INTERVAL}s)")
     await asyncio.sleep(10)  # Esperar a que el bot este listo
 
     while True:
@@ -251,16 +224,7 @@ async def payment_polling_loop():
             await _check_pending_payments()
         except Exception as e:
             logger.error(f"Error en payment polling: {e}")
-        await asyncio.sleep(30)
-
-
-# Tiempo maximo antes de expirar una orden que sigue pendiente en NOWPayments.
-ORDER_EXPIRY_MINUTES = 120
-
-# Maximos 404s consecutivos antes de marcar como expired.
-# 404s pueden ser glitches temporales de la API.
-# 5 * 30s polling = 2.5 minutos de tolerancia a errores.
-MAX_404_BEFORE_EXPIRE = 5
+        await asyncio.sleep(POLLING_INTERVAL)
 
 
 async def _check_pending_payments():
@@ -275,47 +239,36 @@ async def _check_pending_payments():
     now = datetime.now(timezone.utc)
 
     async def _process_one(payment: dict):
-        invoice_id = payment["invoice_id"]
+        payment_id = payment["invoice_id"]  # invoice_id columna guarda el payment_id
         user_id = payment["user_id"]
         days = payment["days"]
         lang = payment.get("lang", "es")
 
-        # ── 1) Consultar estado a NOWPayments ──
+        # 1) Consultar estado a NOWPayments
         try:
-            status = await get_invoice_status(invoice_id)
+            status = await get_payment_status(payment_id)
         except Exception as e:
-            logger.error(f"Error consultando invoice {invoice_id}: {e}")
+            logger.error(f"Error consultando payment {payment_id}: {e}")
             return
 
-        if not status or status == "not_found":
-            if status == "not_found":
-                count_404 = db.increment_payment_404(invoice_id)
-                logger.warning(f"Payment {invoice_id}: API 404 #{count_404}/{MAX_404_BEFORE_EXPIRE}")
-                if count_404 >= MAX_404_BEFORE_EXPIRE:
-                    db.update_payment_status(invoice_id, "expired")
-                    logger.info(f"Payment {invoice_id} marcada expired tras {count_404} 404s consecutivos")
+        if not status:
+            return  # Error de red, reintentar en proximo ciclo
+
+        if status == "not_found":
+            logger.warning(f"Payment {payment_id} not found en API")
             return
 
-        # API respondio OK, resetear contador de 404s
-        db.reset_payment_404(invoice_id)
+        logger.info(f"Payment {payment_id} | user={user_id} | status={status}")
 
-        logger.info(f"Payment {invoice_id} | user={user_id} | np_status={status}")
-
-        # ── 2) Estado exitoso: entregar VIP sin importar el tiempo ──
+        # 2) Estado exitoso: entregar VIP
         if status in SUCCESS_STATUSES:
             try:
-                if status == "partially_paid":
-                    logger.warning(
-                        f"VIP entregado por partially_paid: user={user_id} | {days}d | "
-                        f"invoice={invoice_id}"
-                    )
-
                 db.set_role(user_id, "VIP", days)
-                db.update_payment_status(invoice_id, "delivered")
+                db.update_payment_status(payment_id, "delivered")
 
                 logger.info(
-                    f"VIP ENTREGADO: user={user_id} | {days}d | "
-                    f"invoice={invoice_id} | np_status={status}"
+                    f"VIP ENTREGADO via polling: user={user_id} | {days}d | "
+                    f"payment={payment_id} | status={status}"
                 )
 
                 # Notificar al usuario
@@ -335,9 +288,9 @@ async def _check_pending_payments():
                     logger.error(f"Error notificando pago a {user_id}: {e}")
 
             except Exception as e:
-                logger.error(f"ERROR CRITICO entregando VIP user={user_id} invoice={invoice_id}: {e}")
+                logger.error(f"ERROR CRITICO entregando VIP user={user_id} payment={payment_id}: {e}")
 
-        # ── 3) Estados intermedios: esperar siguiente ciclo ──
+        # 3) Estados intermedios: verificar expiracion
         elif status in WAITING_STATUSES:
             try:
                 created_str = payment.get("created_at", "")
@@ -347,199 +300,25 @@ async def _check_pending_payments():
                         created = created.replace(tzinfo=timezone.utc)
                     elapsed_min = (now - created).total_seconds() / 60
                     if elapsed_min > ORDER_EXPIRY_MINUTES:
-                        db.update_payment_status(invoice_id, "expired")
+                        db.update_payment_status(payment_id, "expired")
                         logger.info(
-                            f"Payment {invoice_id} expirada: {elapsed_min:.0f}min sin resolver "
-                            f"(np_status={status}) user={user_id}"
+                            f"Payment {payment_id} expirada: {elapsed_min:.0f}min "
+                            f"(status={status}) user={user_id}"
                         )
             except Exception as e:
-                logger.warning(f"Error verificando expiracion de {invoice_id}: {e}")
+                logger.warning(f"Error verificando expiracion de {payment_id}: {e}")
 
-        # ── 4) Estados fallidos: marcar y salir ──
+        # 4) Estados fallidos
         elif status in FAIL_STATUSES:
-            try:
-                db.update_payment_status(invoice_id, status)
-                logger.info(f"Payment {invoice_id} marcada como {status}")
-            except Exception as e:
-                logger.error(f"Error actualizando estado de {invoice_id}: {e}")
+            db.update_payment_status(payment_id, status)
+            logger.info(f"Payment {payment_id} marcada como {status}")
 
         else:
-            # Status desconocido - logear para debug
-            logger.warning(f"Payment {invoice_id}: status desconocido '{status}' para user={user_id}")
+            logger.warning(f"Payment {payment_id}: status desconocido '{status}'")
 
     # Ejecutar todas las consultas en paralelo
     results = await asyncio.gather(*[_process_one(p) for p in pending], return_exceptions=True)
 
     for i, result in enumerate(results):
         if isinstance(result, Exception):
-            logger.error(f"Error inesperado en payment polling (payment #{i}): {result}")
-
-
-def _parse_order_id(order_id: str) -> tuple:
-    """Extraer user_id y dias del order_id formato HJ-{uid}-{days}d-..."""
-    import re
-    m = re.match(r'^HJ-(\d+)-(\d+)d-', order_id or '')
-    if m:
-        return int(m.group(1)), int(m.group(2))
-    return None, None
-
-
-async def manual_check_and_deliver(invoice_id: str) -> dict:
-    """Verificar manualmente una invoice y entregar VIP si esta pagada.
-
-    Usado por el admin via /fixpay.
-    Soporta:
-      - Buscar por invoice_id en DB
-      - Buscar por order_id en DB
-      - Si no esta en DB, consultar NOWPayments API directamente,
-        extraer user_id del order_id y entregar VIP
-    Retorna dict con resultado de la operacion.
-    """
-    import re
-    from database import db as _db
-
-    # ── 1) Buscar en DB por invoice_id ──
-    with _db._lock:
-        c = _db.conn.cursor()
-        c.execute("SELECT * FROM payments WHERE invoice_id = ?", (invoice_id,))
-        row = c.fetchone()
-
-    # ── 2) Si no encontro, buscar por order_id ──
-    if not row:
-        with _db._lock:
-            c = _db.conn.cursor()
-            c.execute("SELECT * FROM payments WHERE order_id = ?", (invoice_id,))
-            row = c.fetchone()
-
-    # ── 3) Si esta en DB, procesar normalmente ──
-    if row:
-        payment = dict(row)
-        user_id = payment["user_id"]
-        days = payment["days"]
-        current_status = payment["status"]
-        actual_invoice_id = payment["invoice_id"]
-
-        # Si ya fue entregada, no hacer nada
-        if current_status == "delivered":
-            return {"info": f"Invoice {actual_invoice_id} ya fue entregada a user {user_id}"}
-
-        # Consultar NOWPayments con el invoice_id real
-        np_data = await get_invoice_full(actual_invoice_id)
-        if not np_data:
-            return {"error": f"No se pudo consultar la API de NOWPayments"}
-        if "error" in np_data:
-            return {"error": f"Error de API: {np_data['error']} - {np_data.get('detail', '')}"}
-
-        np_status = _extract_np_status(np_data)
-        if not np_status:
-            return {"error": f"No se pudo determinar el status", "api_response": {k: str(v)[:100] for k, v in np_data.items()}}
-
-        if np_status in SUCCESS_STATUSES:
-            return await _deliver_vip(_db, user_id, days, actual_invoice_id, payment.get("lang", "es"), np_status)
-        elif np_status in WAITING_STATUSES:
-            return {"info": f"Pago pendiente (status: {np_status}). Esperar.", "np_status": np_status}
-        elif np_status in FAIL_STATUSES:
-            _db.update_payment_status(actual_invoice_id, np_status)
-            return {"info": f"Pago fallo (status: {np_status}).", "np_status": np_status}
-        else:
-            return {"warning": f"Status desconocido: {np_status}", "api_response": {k: str(v)[:100] for k, v in np_data.items()}}
-
-    # ── 4) NO esta en DB: consultar NOWPayments directamente ──
-    logger.warning(f"fixpay: {invoice_id} no encontrada en DB, consultando API directamente...")
-
-    np_data = await get_invoice_full(invoice_id)
-    if not np_data:
-        return {"error": f"No se pudo consultar NOWPayments para {invoice_id}"}
-    if "error" in np_data:
-        return {"error": f"Error de API: {np_data['error']} - {np_data.get('detail', '')}"}
-
-    np_status = _extract_np_status(np_data)
-    if not np_status:
-        return {"error": f"No se pudo determinar el status", "api_response": {k: str(v)[:100] for k, v in np_data.items()}}
-
-    # Extraer order_id del response de NOWPayments
-    np_order_id = np_data.get("order_id", "")
-    np_amount = np_data.get("price_amount", 0)
-
-    # Intentar extraer user_id y dias del order_id
-    user_id, days = _parse_order_id(np_order_id)
-
-    # Fallback: buscar user_id en la descripcion si no hay order_id
-    if not user_id:
-        # Tambien buscar en descripcion: "HJ ULP VIP - X Dias"
-        desc = np_data.get("order_description", "")
-        m = re.search(r'(\d+)\s*(?:Dia|Dias|Day|Days)', desc, re.IGNORECASE)
-        if m:
-            days = int(m.group(1))
-
-    if not user_id or not days:
-        return {
-            "error": f"No se pudo extraer user_id/dias del order_id '{np_order_id}'. "
-                   f"Usa /vip <user_id> manualmente.",
-            "api_response": {
-                "order_id": np_order_id,
-                "status": np_status,
-                "price_amount": np_amount
-            }
-        }
-
-    if np_status not in SUCCESS_STATUSES:
-        return {"info": f"Pago NO completado (status: {np_status}). No se entrega VIP.", "np_status": np_status}
-
-    # Registrar en DB y entregar
-    try:
-        _db.create_payment(
-            user_id=user_id,
-            invoice_id=invoice_id,
-            order_id=np_order_id,
-            days=days,
-            amount_usd=float(np_amount) if np_amount else 0,
-            status="delivered",
-            lang="es"
-        )
-    except Exception as db_err:
-        logger.warning(f"fixpay: error guardando en DB (no bloquea entrega): {db_err}")
-
-    return await _deliver_vip(_db, user_id, days, invoice_id, "es", np_status)
-
-
-def _extract_np_status(np_data: dict) -> str:
-    """Extraer status del response de NOWPayments, revisando multiples campos."""
-    for field in ("status", "payment_status", "invoice_status", "state"):
-        val = np_data.get(field)
-        if val and isinstance(val, str) and val.strip():
-            return val.strip().lower()
-    return ""
-
-
-async def _deliver_vip(_db, user_id: int, days: int, invoice_id: str, lang: str, np_status: str) -> dict:
-    """Entregar VIP, actualizar DB y notificar al usuario."""
-    try:
-        _db.set_role(user_id, "VIP", days)
-        _db.update_payment_status(invoice_id, "delivered")
-
-        import state
-        from ui import UI, Keyboards
-        from roles import get_user_role
-
-        role = get_user_role(user_id)
-        try:
-            await state.bot.send_message(
-                user_id,
-                UI.text("pay_success", lang, days),
-                buttons=Keyboards.main(role, lang, False),
-                parse_mode='md'
-            )
-            logger.info(f"Notificacion de pago enviada a {user_id}")
-        except Exception as e:
-            logger.error(f"Error notificando pago a {user_id}: {e}")
-
-        return {
-            "success": True,
-            "user_id": user_id,
-            "days": days,
-            "np_status": np_status,
-            "message": f"VIP ({days}d) entregado a user {user_id} | invoice {invoice_id} | status: {np_status}"
-        }
-    except Exception as e:
-        return {"error": f"Error entregando VIP: {e}"}
+            logger.error(f"Error inesperado en polling (payment #{i}): {result}")

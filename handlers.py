@@ -35,7 +35,7 @@ from locale import locale_manager
 from ui import UI, Keyboards
 from utils import normalizar_url, get_file_counts, format_size, format_time
 from search import search_engine
-from nowpayments import create_invoice, get_invoice_status, manual_check_and_deliver, VIP_PLANS
+from nowpayments import create_payment, get_payment_status, VIP_PLANS, PAY_CURRENCY
 from imap_checker import imap_check_file
 from geoip_checker import get_country_for_email
 from download import (
@@ -215,7 +215,7 @@ def _get_commands_by_role(role: UserRole, has_free: bool = False) -> str:
     elif role == UserRole.SELLER:
         return "/start │ /url │ /imap"
     elif role == UserRole.ADMIN:
-        return "/start │ /url │ /imap │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /fixpay │ /sizedisp │ /updateBot"
+        return "/start │ /url │ /imap │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /sizedisp │ /updateBot"
     return "/start │ /canjear"
 
 
@@ -1143,110 +1143,6 @@ def register_handlers(bot_client):
         )
         await _broadcast(e.sender_id, vips_data, msg_text, status, "Broadcast VIP")
 
-    # --- FIXPAY: Verificar y entregar VIP manualmente ---
-    @bot_client.on(events.NewMessage(pattern=r"/fixpay (.+)"))
-    async def cmd_fixpay(e):
-        """Admin: verificar invoice y entregar VIP si fue pagada.
-
-        Uso:
-          /fixpay <user_id> <dias>       — entrega VIP manualmente (sin API)
-          /fixpay force <user_id> <dias>  — igual que arriba, explicito
-          /fixpay <invoice_id>           — busca en DB y NP API
-          /fixpay <order_id>              — busca por order_id en DB y NP API
-        """
-        if get_user_role(e.sender_id) != UserRole.ADMIN:
-            return
-
-        raw = e.pattern_match.group(1).strip()
-        parts = raw.split()
-
-        # Modo force: /fixpay force <user_id> <dias>
-        if len(parts) == 3 and parts[0].lower() == 'force' and parts[1].isdigit() and parts[2].isdigit():
-            uid = int(parts[1])
-            days = int(parts[2])
-        # Modo manual: /fixpay <user_id> <dias>
-        elif len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-            uid = int(parts[0])
-            days = int(parts[1])
-        else:
-            uid = None
-            days = None
-
-        # Entrega manual directa (sin consultar API)
-        if uid is not None:
-            if days <= 0 or days > 36500:
-                return await e.reply("Dias invalidos. Rango: 1-36500", parse_mode='md')
-            db.set_role(uid, 'VIP', days)
-            # Notificar al usuario
-            import state
-            try:
-                user_obj = db.get_user(uid)
-                ulang = user_obj.get('language', 'es')
-                from ui import UI, Keyboards
-                from roles import get_user_role
-                role = get_user_role(uid)
-                await state.bot.send_message(
-                    uid,
-                    UI.text("pay_success", ulang, days),
-                    buttons=Keyboards.main(role, ulang, False),
-                    parse_mode='md'
-                )
-                notify = "✅ Notificacion enviada al usuario."
-            except Exception as notify_err:
-                notify = f"⚠️ No se pudo notificar: {str(notify_err)[:80]}"
-            await e.reply(
-                f"╭───✦ ✅ VIP ENTREGADO MANUALMENTE\n"
-                f"├● 👤 User: `{uid}`\n"
-                f"├● 📅 Dias: `{days}`\n"
-                f"├● 📄 {notify}\n"
-                f"╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
-                parse_mode='md'
-            )
-            return
-
-        # Modo normal: buscar invoice/order_id en DB o API
-        identifier = raw
-        status_msg = await e.reply(
-            "╭───✦ 🔧 FIX PAYMENT\n"
-            f"├● 📄 Buscando: `{identifier}`\n"
-            "├● ⏳ Consultando API...\n"
-            "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
-            parse_mode='md'
-        )
-
-        result = await manual_check_and_deliver(identifier)
-
-        if "success" in result:
-            text = (
-                "╭───✦ ✅ VIP ENTREGADO\n"
-                f"├● 👤 User: `{result['user_id']}`\n"
-                f"├● 📅 Dias: `{result['days']}`\n"
-                f"├● 📄 Status: `{result['np_status']}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            )
-        elif "error" in result:
-            text = (
-                "╭───✦ ❌ FIX PAYMENT\n"
-                f"├● 📄 Query: `{identifier}`\n"
-                f"├● ❌ Error: `{result['error']}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            )
-            if 'api_response' in result:
-                resp_str = str(result['api_response'])[:400]
-                text += f"\n\n`{resp_str}`"
-        else:
-            text = (
-                "╭───✦ ℹ️ FIX PAYMENT\n"
-                f"├● 📄 Query: `{identifier}`\n"
-                f"├● ℹ️ `{result.get('info', result.get('warning', 'Sin info'))}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            )
-            if 'api_response' in result:
-                resp_str = str(result['api_response'])[:400]
-                text += f"\n\n`{resp_str}`"
-
-        await status_msg.edit(text, parse_mode='md')
-
     # --- SIZEDISP: Disco de la VPS ---
     @bot_client.on(events.NewMessage(pattern=r"/sizedisp"))
     async def cmd_sizedisp(e):
@@ -1397,8 +1293,8 @@ def register_handlers(bot_client):
 
                 await e.edit(UI.text("pay_checking", lang), parse_mode='md')
 
-                result = await create_invoice(uid, days, lang)
-                if not result or "invoice_url" not in result:
+                result = await create_payment(uid, days, lang)
+                if not result or "pay_address" not in result:
                     await e.edit(
                         UI.text("pay_api_error", lang),
                         buttons=Keyboards.back(),
@@ -1406,18 +1302,20 @@ def register_handlers(bot_client):
                     )
                     return
 
-                invoice_url = result["invoice_url"]
-                invoice_id = str(result["id"])
+                payment_id = str(result["id"])
+                pay_address = result["pay_address"]
+                pay_amount = result.get("pay_amount", 0)
 
-                # Guardar invoice_id en temp_state para el boton de verificar
+                # Guardar payment_id en temp_state para el boton de verificar
                 state.temp_state[uid] = {
                     'step': 'WAITING_PAYMENT',
-                    'invoice_id': invoice_id,
+                    'payment_id': payment_id,
                     'days': days
                 }
 
                 await e.edit(
-                    UI.text("pay_invoice", lang, plan["label"], plan["price"], invoice_url),
+                    UI.text("pay_deposit", lang, plan["label"], plan["price"],
+                             pay_amount, PAY_CURRENCY, pay_address),
                     buttons=Keyboards.payment_waiting(),
                     parse_mode='md'
                 )
@@ -1425,19 +1323,18 @@ def register_handlers(bot_client):
             # ─── PAGO: Verificar estado ───
             elif data == "pay_check":
                 ts = state.temp_state.get(uid, {})
-                invoice_id = ts.get('invoice_id')
+                payment_id = ts.get('payment_id')
                 days = ts.get('days')
 
-                if not invoice_id:
+                if not payment_id:
                     return await e.answer("No hay pago pendiente.", alert=True)
 
                 await e.edit(UI.text("pay_checking", lang), parse_mode='md')
 
-                status = await get_invoice_status(invoice_id)
+                status = await get_payment_status(payment_id)
                 if not status or status == "not_found":
-                    # FIX: manejar "not_found" (invoice ya no existe en NOWPayments)
                     if status == "not_found":
-                        db.update_payment_status(invoice_id, "expired")
+                        db.update_payment_status(payment_id, "expired")
                         state.temp_state.pop(uid, None)
                         await e.edit(
                             UI.text("pay_expired", lang),
@@ -1453,9 +1350,8 @@ def register_handlers(bot_client):
                     return
 
                 if status in ("paid", "confirmed", "finished"):
-                    # VIP ya fue entregado por el polling, mostrar exito
                     db.set_role(uid, "VIP", days)
-                    db.update_payment_status(invoice_id, "delivered")
+                    db.update_payment_status(payment_id, "delivered")
                     role = get_user_role(uid)
                     state.temp_state.pop(uid, None)
                     await e.edit(
@@ -1464,7 +1360,7 @@ def register_handlers(bot_client):
                         parse_mode='md'
                     )
                 elif status in ("expired", "failed", "refunded"):
-                    db.update_payment_status(invoice_id, status)
+                    db.update_payment_status(payment_id, status)
                     state.temp_state.pop(uid, None)
                     key = f"pay_{status}" if status in ("expired", "failed") else "pay_failed"
                     await e.edit(
