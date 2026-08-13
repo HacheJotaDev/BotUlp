@@ -125,11 +125,11 @@ async def create_payment(user_id: int, days: int, lang: str = 'es') -> Optional[
     }
 
     data = await _api_post("/payment", payload)
-    if not data or "id" not in data:
+    if not data or "payment_id" not in data:
         logger.error(f"Error creando payment para {user_id}: {data}")
         return None
 
-    payment_id = str(data["id"])
+    payment_id = str(data["payment_id"])
     pay_address = data.get("pay_address", "")
     pay_amount = data.get("pay_amount", 0)
 

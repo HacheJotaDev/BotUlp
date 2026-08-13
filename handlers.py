@@ -1302,7 +1302,7 @@ def register_handlers(bot_client):
                     )
                     return
 
-                payment_id = str(result["id"])
+                payment_id = str(result["payment_id"])
                 pay_address = result["pay_address"]
                 pay_amount = result.get("pay_amount", 0)
 
