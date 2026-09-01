@@ -280,22 +280,44 @@ def _get_access_denied_text(lang: str) -> str:
 
 
 async def _check_search_access(uid: int, lang: str, is_group_allowed: bool, is_private: bool):
-    """Verificar si un usuario puede buscar. Retorna (allowed: bool, is_free_search: bool)."""
+    """Verificar si un usuario puede buscar.
+
+    Retorna (allowed: bool, free_type: str|None) donde free_type es:
+      • 'initial' → usa su búsqueda gratis inicial (regalo de bienvenida)
+      • 'bonus'   → usa una búsqueda de bono ganada con el sistema de referidos
+      • None      → búsqueda normal (VIP/SELLER/OWNER o grupo permitido)
+    """
     role = get_user_role(uid)
 
     # VIP, SELLER, ADMIN siempre pueden (en privado o grupo permitido)
     if role in (UserRole.VIP, UserRole.SELLER, UserRole.ADMIN):
-        return True, False
+        return True, None
 
-    # FREE en grupo permitido
-    if role == UserRole.FREE and is_group_allowed and not is_private:
-        return True, False
+    if role == UserRole.FREE:
+        user = db.get_user(uid)
 
-    # FREE con busqueda gratis disponible
-    if role == UserRole.FREE and db.is_new_user(uid):
-        return True, True
+        # FREE en grupo permitido (no consume gratis ni bono)
+        if is_group_allowed and not is_private:
+            return True, None
 
-    return False, False
+        # 1) Búsqueda inicial gratis
+        if db.is_new_user(uid):
+            return True, 'initial'
+
+        # 2) Bonos ganados con referidos
+        if (user.get('bonus_searches') or 0) > 0:
+            return True, 'bonus'
+
+    return False, None
+
+
+def _free_search_count(user: dict) -> int:
+    """Total de búsquedas gratis disponibles para un usuario FREE.
+
+    1 inicial (si no la usó) + bonos ganados vía referidos.
+    """
+    n = 0 if user.get('free_search_used', 0) else 1
+    return n + (user.get('bonus_searches') or 0)
 
 
 def _get_file_counts_display() -> tuple:
@@ -336,18 +358,26 @@ def _vip_days_left(user: dict):
 def _welcome_extra(user: dict, role: UserRole, lang: str) -> str:
     """Línea opcional que se añade al final de la bienvenida.
 
-    Hoy: aviso de renovación para VIPs a punto de expirar (≤ 3 días).
+    • VIP  → aviso de renovación si está a punto de expirar (≤ 3 días).
+    • FREE → tarjeta de bono de referidos si tiene búsquedas de bonus.
     Para el resto retorna cadena vacía (no rompe el layout).
     """
-    if role != UserRole.VIP:
+    if role == UserRole.VIP:
+        days = _vip_days_left(user)
+        if days is None:
+            return ""
+        if days <= 1:
+            return UI.text("vip_expiring_today", lang) + "\n\n"
+        if days <= 3:
+            return UI.text("vip_expiring", lang, days) + "\n\n"
         return ""
-    days = _vip_days_left(user)
-    if days is None:
-        return ""
-    if days <= 1:
-        return UI.text("vip_expiring_today", lang) + "\n\n"
-    if days <= 3:
-        return UI.text("vip_expiring", lang, days) + "\n\n"
+
+    if role == UserRole.FREE:
+        bonus = user.get('bonus_searches') or 0
+        if bonus > 0:
+            total = _free_search_count(user)
+            return UI.text("welcome_ref_bonus", lang, total) + "\n\n"
+
     return ""
 
 
@@ -381,8 +411,14 @@ def _account_block(user: dict, role: UserRole, lang: str) -> str:
 
     if role == UserRole.FREE:
         if db.is_new_user(user['user_id']):
-            return UI.text("acct_free_available", lang)
-        return UI.text("acct_free_used", lang)
+            line = UI.text("acct_free_available", lang)
+        else:
+            line = UI.text("acct_free_used", lang)
+        # Estadísticas de referidos
+        bonus = user.get('bonus_searches') or 0
+        refs = db.get_referral_count(user['user_id'])
+        line += UI.text("acct_ref_line", lang, refs, bonus)
+        return line
 
     return ""
 
@@ -786,6 +822,21 @@ def register_handlers(bot_client):
         """Ejecutar una busqueda completa con animacion, resultado y procesamiento de cola."""
         state.active_searches.add(uid)
 
+        # Normalizar tipo de búsqueda gratis (bool legacy → 'initial')
+        if is_free_search is True:
+            is_free_search = 'initial'
+
+        # Re-validar el acceso gratis al momento de ejecutar: la búsqueda pudo
+        # encolarse y el estado de gratis/bono pudo cambiar desde entonces.
+        if is_free_search:
+            u_now = db.get_user(uid)
+            if get_user_role(uid) != UserRole.FREE:
+                is_free_search = None
+            elif is_free_search == 'initial' and u_now.get('free_search_used'):
+                is_free_search = 'bonus' if (u_now.get('bonus_searches') or 0) > 0 else None
+            elif is_free_search == 'bonus' and not (u_now.get('bonus_searches') or 0):
+                is_free_search = None
+
         loading_text = UI.text(
             "search_loading", lang, kw,
             LOADING_FRAMES[0], UI.text("phase_scanning", lang), 0
@@ -826,7 +877,9 @@ def register_handlers(bot_client):
             elapsed = time.time() - start_time
 
             if result_file:
-                if is_free_search:
+                if is_free_search == 'bonus':
+                    db.consume_bonus_search(uid)
+                elif is_free_search == 'initial':
                     db.mark_free_search_used(uid)
                 else:
                     db.add_search(uid)
@@ -838,6 +891,14 @@ def register_handlers(bot_client):
 
                 if is_free_search:
                     caption = UI.text("search_completed_free", lang, kw, tipo_texto, count, elapsed)
+                    u_now = db.get_user(uid)
+                    remaining = _free_search_count(u_now)
+                    if is_free_search == 'bonus':
+                        caption += "\n\n" + UI.text("bonus_consumed", lang)
+                    if remaining > 0:
+                        caption += "\n" + UI.text("free_remaining", lang, remaining)
+                    else:
+                        caption += "\n" + UI.text("free_exhausted", lang)
                 else:
                     caption = UI.text("search_completed", lang, kw, tipo_texto, count, elapsed)
 
@@ -913,22 +974,50 @@ def register_handlers(bot_client):
             return
 
         uid = e.sender_id
+
+        # Deep link: /start <param>   (ref_<uid> = referidos · HJ-xxx = keys)
+        args = e.message.message.split()
+        param = args[1] if len(args) > 1 else None
+
+        # Referido: evaluar ANTES de crear el registro (solo usuarios nuevos)
+        is_brand_new = not db.user_exists(uid)
+
         user = db.get_user(uid)
         lang = user.get('language', 'es')
         role = get_user_role(uid)
         has_free = db.is_new_user(uid) and role == UserRole.FREE
         name = await _display_name(e, uid)
 
-        # Si viene con parametro (deep link para canjear key)
-        args = e.message.message.split()
-        if len(args) > 1:
-            code = args[1]
-            if db.redeem(uid, code):
+        referral_applied = False
+        if param and param.startswith("ref_"):
+            try:
+                referrer_id = int(param[4:])
+            except ValueError:
+                referrer_id = None
+            if referrer_id and is_brand_new:
+                referral_applied = db.apply_referral(uid, referrer_id)
+                if referral_applied:
+                    # Refrescar datos del invitado (ahora tiene +1 bono)
+                    user = db.get_user(uid)
+                    # Notificar al referidor en SU idioma
+                    referrer_user = db.get_user(referrer_id)
+                    try:
+                        await state.bot.send_message(
+                            referrer_id,
+                            UI.text("ref_notify_referrer",
+                                    referrer_user.get('language', 'es'),
+                                    name, db.get_referral_count(referrer_id)),
+                            parse_mode='md'
+                        )
+                    except Exception:
+                        pass
+        elif param:
+            # Deep link para canjear key VIP
+            if db.redeem(uid, param):
                 role = get_user_role(uid)
-                has_free = False  # Si ya es VIP, no necesita gratis
                 await e.reply(
                     locale_manager.get("redeem_success", lang),
-                    buttons=Keyboards.main(role, lang, has_free),
+                    buttons=Keyboards.main(role, lang, 0),
                     parse_mode='md'
                 )
                 return
@@ -939,11 +1028,13 @@ def register_handlers(bot_client):
         else:
             welcome_key = "welcome"
 
+        free_n = _free_search_count(user) if role == UserRole.FREE else 0
+
         welcome_text = UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user['search_count'], _welcome_extra(user, role, lang))
 
         await e.reply(
             welcome_text,
-            buttons=Keyboards.main(role, lang, has_free) if e.is_private else None,
+            buttons=Keyboards.main(role, lang, free_n) if e.is_private else None,
             parse_mode='md'
         )
 
@@ -1234,11 +1325,12 @@ def register_handlers(bot_client):
         state.temp_state.pop(uid, None)
         role = get_user_role(uid)
         has_free = db.is_new_user(uid) and role == UserRole.FREE
+        free_n = _free_search_count(user) if role == UserRole.FREE else 0
         name = await _display_name(e, uid)
         welcome_key = "welcome_new" if has_free else "welcome"
         await e.reply(
             UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user['search_count'], _welcome_extra(user, role, lang)),
-            buttons=Keyboards.main(role, lang, has_free),
+            buttons=Keyboards.main(role, lang, free_n),
             parse_mode='md'
         )
 
@@ -1427,11 +1519,12 @@ def register_handlers(bot_client):
             # ─── VOLVER AL MENU PRINCIPAL ───
             if data == "back_main":
                 has_free = db.is_new_user(uid) and role == UserRole.FREE
+                free_n = _free_search_count(user) if role == UserRole.FREE else 0
                 name = await _display_name(e, uid)
                 welcome_key = "welcome_new" if has_free else "welcome"
                 await e.edit(
                     UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user['search_count'], _welcome_extra(user, role, lang)),
-                    buttons=Keyboards.main(role, lang, has_free),
+                    buttons=Keyboards.main(role, lang, free_n),
                     parse_mode='md'
                 )
 
@@ -1460,6 +1553,18 @@ def register_handlers(bot_client):
                             _fmt_member_since(user), user['search_count'],
                             _account_block(user, role, lang)),
                     buttons=Keyboards.back(),
+                    parse_mode='md'
+                )
+
+            # ─── REFERIDOS ───
+            elif data == "ref_info":
+                link = f"https://t.me/{config.BOT_USERNAME}?start=ref_{uid}"
+                refs = db.get_referral_count(uid)
+                u_now = db.get_user(uid)
+                free_n = _free_search_count(u_now) if role == UserRole.FREE else (u_now.get('bonus_searches') or 0)
+                await e.edit(
+                    UI.text("ref_info", lang, link, refs, free_n),
+                    buttons=Keyboards.ref_panel(link, lang),
                     parse_mode='md'
                 )
 
@@ -1571,11 +1676,12 @@ def register_handlers(bot_client):
                 await e.answer(UI.text("language_selected", new_lang), alert=True)
                 user = db.get_user(uid)
                 has_free = db.is_new_user(uid) and role == UserRole.FREE
+                free_n = _free_search_count(user) if role == UserRole.FREE else 0
                 name = await _display_name(e, uid)
                 welcome_key = "welcome_new" if has_free else "welcome"
                 await e.edit(
                     UI.text(welcome_key, new_lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user['search_count'], _welcome_extra(user, role, new_lang)),
-                    buttons=Keyboards.main(role, new_lang, has_free),
+                    buttons=Keyboards.main(role, new_lang, free_n),
                     parse_mode='md'
                 )
 

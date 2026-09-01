@@ -65,7 +65,9 @@ class Database:
             language TEXT DEFAULT 'es',
             first_seen TEXT DEFAULT CURRENT_TIMESTAMP,
             last_active TEXT DEFAULT CURRENT_TIMESTAMP,
-            free_search_used INTEGER DEFAULT 0
+            free_search_used INTEGER DEFAULT 0,
+            bonus_searches INTEGER DEFAULT 0,
+            referrer_id INTEGER
         )""")
         c.execute("""CREATE TABLE IF NOT EXISTS keys (
             key_code TEXT PRIMARY KEY,
@@ -108,6 +110,11 @@ class Database:
         except Exception as e:
             logger.warning(f"Error creando indices: {e}")
 
+        try:
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_users_referrer ON users(referrer_id)")
+        except Exception as e:
+            logger.warning(f"Error creando indice de referidos: {e}")
+
         # Migraciones - users
         c.execute("PRAGMA table_info(users)")
         columns = [info[1] for info in c.fetchall()]
@@ -117,6 +124,8 @@ class Database:
             ('first_seen', "ALTER TABLE users ADD COLUMN first_seen TEXT DEFAULT CURRENT_TIMESTAMP"),
             ('last_active', "ALTER TABLE users ADD COLUMN last_active TEXT DEFAULT CURRENT_TIMESTAMP"),
             ('free_search_used', "ALTER TABLE users ADD COLUMN free_search_used INTEGER DEFAULT 0"),
+            ('bonus_searches', "ALTER TABLE users ADD COLUMN bonus_searches INTEGER DEFAULT 0"),
+            ('referrer_id', "ALTER TABLE users ADD COLUMN referrer_id INTEGER"),
         ]
         for col_name, alter_sql in migrations:
             if col_name not in columns:
@@ -150,7 +159,8 @@ class Database:
                 'user_id': uid, 'role': 'FREE', 'vip_expiry': None,
                 'search_count': 0, 'language': 'es',
                 'first_seen': now, 'last_active': now,
-                'free_search_used': 0
+                'free_search_used': 0,
+                'bonus_searches': 0, 'referrer_id': None
             }
             self._cache_set(user)
             return user
@@ -178,6 +188,16 @@ class Database:
         """Verificar si el usuario es nuevo (nunca ha usado su busqueda gratis)."""
         user = self.get_user(uid)
         return user.get('free_search_used', 0) == 0
+
+    def user_exists(self, uid: int) -> bool:
+        """Comprobar si el usuario ya existe SIN crear registro (lectura pura).
+
+        Esencial para el sistema de referidos: permite saber si un /start
+        proviene de un usuario genuinamente nuevo antes de crear su fila.
+        """
+        c = self.conn.cursor()
+        c.execute("SELECT 1 FROM users WHERE user_id = ?", (uid,))
+        return c.fetchone() is not None
 
     def mark_free_search_used(self, uid: int):
         """Marcar que el usuario ya uso su busqueda gratis."""
@@ -269,6 +289,71 @@ class Database:
             self.conn.commit()
         self._cache_invalidate(uid)
 
+    # ── Sistema de referidos ────────────────────────────────
+
+    def apply_referral(self, new_uid: int, referrer_id: int) -> bool:
+        """Aplicar un referido: +1 busqueda gratis para el invitado Y el referidor.
+
+        Reglas anti-abuso (atomicas bajo lock):
+          • El invitado debe ser nuevo y NO tener ya un referidor
+          • El referidor debe existir en la base de datos (usuario real)
+          • Nadie puede referirse a si mismo
+        Retorna True si el bono se otorgo a ambos.
+        """
+        if new_uid == referrer_id:
+            return False
+        with self._lock:
+            c = self.conn.cursor()
+            # El referidor debe ser un usuario real del bot
+            c.execute("SELECT 1 FROM users WHERE user_id = ?", (referrer_id,))
+            if not c.fetchone():
+                return False
+            # Garantizar la fila del invitado (autosuficiente: no depende de get_user previo)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            c.execute(
+                "INSERT OR IGNORE INTO users (user_id, first_seen, last_active) VALUES (?, ?, ?)",
+                (new_uid, now_iso, now_iso)
+            )
+            # El invitado solo puede ser referido una vez (guard atomico)
+            c.execute(
+                "UPDATE users SET referrer_id = ?, bonus_searches = bonus_searches + 1 "
+                "WHERE user_id = ? AND referrer_id IS NULL",
+                (referrer_id, new_uid)
+            )
+            if c.rowcount == 0:
+                return False
+            # Recompensa al referidor: +1 busqueda gratis
+            c.execute(
+                "UPDATE users SET bonus_searches = bonus_searches + 1 WHERE user_id = ?",
+                (referrer_id,)
+            )
+            self.conn.commit()
+        self._cache_invalidate(new_uid)
+        self._cache_invalidate(referrer_id)
+        logger.info(f"Referido aplicado: {new_uid} invitado por {referrer_id} (+1 bonus a cada uno)")
+        return True
+
+    def get_referral_count(self, uid: int) -> int:
+        """Cantidad de usuarios que este usuario ha referido con exito."""
+        c = self.conn.cursor()
+        c.execute("SELECT COUNT(*) FROM users WHERE referrer_id = ?", (uid,))
+        return c.fetchone()[0]
+
+    def consume_bonus_search(self, uid: int) -> bool:
+        """Consumir 1 busqueda de bono (referidos). Retorna False si no tiene."""
+        with self._lock:
+            c = self.conn.cursor()
+            c.execute(
+                "UPDATE users SET bonus_searches = bonus_searches - 1, search_count = search_count + 1 "
+                "WHERE user_id = ? AND bonus_searches > 0",
+                (uid,)
+            )
+            ok = c.rowcount > 0
+            if ok:
+                self.conn.commit()
+        self._cache_invalidate(uid)
+        return ok
+
     def get_stats(self) -> dict:
         self.cleanup_expired_vips()
         c = self.conn.cursor()
@@ -282,10 +367,12 @@ class Database:
         total_users = c.fetchone()[0]
         c.execute("SELECT COUNT(*) FROM users WHERE free_search_used = 0")
         new_users = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM users WHERE referrer_id IS NOT NULL")
+        referred_users = c.fetchone()[0]
         return {
             'vips': vips, 'sellers': sellers,
             'searches': total_searches, 'total_users': total_users,
-            'new_users': new_users
+            'new_users': new_users, 'referred_users': referred_users
         }
 
     def cleanup_expired_vips(self) -> int:

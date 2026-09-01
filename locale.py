@@ -38,7 +38,7 @@ class LocaleManager:
             "welcome": (
                 "╭━━━━━━━━━━━━━━━━━━━━╮\n"
                 "┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n"
-                "┃ ⚡ v4.1 · Professional\n"
+                "┃ ⚡ v4.2 · Professional\n"
                 "╰━━━━━━━━━━━━━━━━━━━━╯\n"
                 "\n"
                 "👋 Hola, **{0}**\n"
@@ -67,7 +67,7 @@ class LocaleManager:
             "welcome_new": (
                 "╭━━━━━━━━━━━━━━━━━━━━╮\n"
                 "┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n"
-                "┃ ⚡ v4.1 · Professional\n"
+                "┃ ⚡ v4.2 · Professional\n"
                 "╰━━━━━━━━━━━━━━━━━━━━╯\n"
                 "\n"
                 "👋 Hola, **{0}**\n"
@@ -208,7 +208,8 @@ class LocaleManager:
             "access_denied": (
                 "╭───✦ 🚫 **ACCESO DENEGADO**\n"
                 "├─ Tu búsqueda gratis ya fue utilizada\n"
-                "├─ 💎 Necesitas VIP para seguir buscando\n"
+                "├─ 💎 Hazte VIP para buscar sin límites\n"
+                "├─ 👥 O invita amigos y gana búsquedas gratis\n"
                 "╰───✦"
             ),
             "access_denied_no_free": (
@@ -595,6 +596,47 @@ class LocaleManager:
                 "├─ 🔍 URL: `{1}`\n"
                 "╰───✦"
             ),
+
+            # ── Sistema de referidos ────────────────────────
+            "ref_info": (
+                "╭───✦ 👥 **PROGRAMA DE REFERIDOS**\n"
+                "├─ 🔗 Tu enlace personal:\n"
+                "├─ ➡️ `{0}`\n"
+                "╰───✦\n"
+                "\n"
+                "╭───✦ 📊 **TUS NÚMEROS**\n"
+                "├─ 👥 Amigos invitados: `{1}`\n"
+                "├─ 🎁 Búsquedas gratis disponibles: `{2}`\n"
+                "╰───✦\n"
+                "\n"
+                "💰 **¿Cómo funciona?**\n"
+                "├─ 🎁 Tu amigo se une → él recibe **+1 búsqueda**\n"
+                "├─ 🎁 Y tú también ganas **+1 búsqueda gratis**\n"
+                "╰─ ♾️ ¡Sin límite! Invita a todos los que quieras"
+            ),
+            "ref_share_text": (
+                "🔥 Descubre HJ ULP PRO — el extractor más rápido\n"
+                "🎁 Únete con mi enlace y llévate búsquedas gratis extra 🚀"
+            ),
+            "ref_notify_referrer": (
+                "╭───✦ 🎉 **¡NUEVO REFERIDO!**\n"
+                "├─ 👥 **{0}** se unió con tu enlace\n"
+                "├─ 🎁 Recompensa: **+1 búsqueda gratis**\n"
+                "├─ 📊 Total invitados: `{1}`\n"
+                "╰───✦\n"
+                "\n"
+                "👥 Sigue invitando y gana búsquedas ilimitadas"
+            ),
+            "welcome_ref_bonus": (
+                "╭───✦ 🎁 **BONO DE INVITACIÓN**\n"
+                "├─ Entraste con un enlace de referido\n"
+                "├─ 🎁 Búsquedas gratis totales: **{0}**\n"
+                "╰───✦"
+            ),
+            "acct_ref_line": "├─ 👥 Referidos: `{0}` · 🎁 Bonos: `{1}`\n",
+            "bonus_consumed": "🎁 Usaste una búsqueda de tu **bono de referidos**.",
+            "free_remaining": "🎁 Te quedan **{0}** búsqueda(s) gratis.",
+            "free_exhausted": "💎 Consigue VIP o invita amigos con «👥 Referidos» para seguir buscando.",
         }
 
         # Los archivos locales/*.json sobrescriben el diccionario base

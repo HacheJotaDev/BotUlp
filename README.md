@@ -22,11 +22,24 @@
 
 ---
 
+## ✨ Novedades v4.2 · Referidos
+
+| Área | Mejora |
+|------|--------|
+| 👥 **Programa de Referidos** | Enlace único por usuario (`?start=ref_<id>`): al unirse un amigo, **ambos reciben +1 búsqueda gratis** — sin límite de invitaciones |
+| 🎁 **Bono doble** | El invitado arranca con 2 búsquedas gratis (regalo + bono) y ve una tarjeta «BONO DE INVITACIÓN» en su bienvenida |
+| 📢 **Compartir** | Panel «👥 Referidos» con enlace personal, estadísticas y botón nativo «Compartir mi link» de Telegram |
+| 🔔 **Notificación en vivo** | El referidor recibe «🎉 ¡NUEVO REFERIDO!» al instante, en su idioma |
+| 🛡️ **Anti-abuso** | Solo usuarios nuevos referibles (una sola vez), auto-referido bloqueado, re-validación en búsquedas encoladas |
+
+---
+
 ## 📋 Características
 
 - 🔎 **Motor de búsqueda paralelo** con `mmap` y límites anti-cuelgue (resultados, matches y tiempo)
 - 📥 **Descargas hasta 4GB** con streaming, progreso en vivo y cola secuencial anti-FloodWait
-- 👥 **Roles**: FREE (1 búsqueda gratis) · VIP · SELLER · OWNER
+- 👥 **Roles**: FREE (búsquedas gratis + referidos) · VIP · SELLER · OWNER
+- 🎁 **Sistema de referidos**: +1 búsqueda gratis para el invitado y el referidor por cada amigo que se una
 - 🌐 **Multi-idioma**: Español, English, Português (configurable por usuario)
 - 💳 **Pagos automáticos** con NOWPayments (USDT, BTC, ETH, LTC…) + canje de keys
 - 📧 **IMAP Checker** con keywords, agrupación por dominio y geolocalización por país (ZIP)

@@ -2,6 +2,35 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.0] — Sistema de Referidos
+
+### 👥 Nuevo: Programa de Referidos
+- **Gana búsquedas gratis invitando amigos**: cada usuario tiene un enlace único `https://t.me/UlpHJBot?start=ref_<su_id>`.
+- **Bono doble**: cuando alguien se une con tu enlace, **tú recibes +1 búsqueda gratis** y **tu amigo recibe +1 búsqueda extra** (además de su regalo de bienvenida) — 2 búsquedas gratis en total para el invitado.
+- **Sin límite**: por cada amigo que se una, +1 búsqueda. Invita a todos los que quieras.
+- **Panel «👥 Referidos»**: nuevo botón en el menú de los 4 rangos (FREE · VIP · SELLER · OWNER) con tu enlace personal, amigos invitados, búsquedas gratis disponibles y explicación del programa.
+- **Botón «📢 Compartir mi link»**: abre el diálogo nativo de Telegram para reenviar tu enlace con un mensaje promocional pre-escrito.
+- **Notificación instantánea al referidor**: «🎉 ¡NUEVO REFERIDO! {nombre} se unió con tu enlace — Recompensa: +1 búsqueda gratis» en el idioma del referidor.
+- **Tarjeta «BONO DE INVITACIÓN»** en la bienvenida del usuario invitado con el total de búsquedas gratis acumuladas.
+
+### 🎫 Búsquedas gratis inteligentes
+- El botón de búsqueda muestra el total disponible: «🎁 Búsqueda gratis (1/1)» o «🎁 Búsquedas gratis (3)» cuando hay bonos acumulados.
+- Las búsquedas de bono se consumen automáticamente tras la inicial, con confirmación en el resultado («🎁 Usaste una búsqueda de tu bono — Te quedan N»).
+- Sin búsquedas restantes: upsell que sugiere VIP **o invitar amigos** para conseguir más gratis.
+- «Mi cuenta» ahora muestra estadísticas de referidos: `👥 Referidos · 🎁 Bonos`.
+
+### 🛡️ Anti-abuso
+- Solo usuarios **genuinamente nuevos** pueden ser referidos (se comprueba antes de crear su registro).
+- Un usuario solo puede ser referido **una vez** (guard atómico `referrer_id IS NULL` en SQLite).
+- **Auto-referido bloqueado** y el referidor debe ser un usuario real registrado del bot.
+- Re-validación del acceso gratis al momento de ejecutar búsquedas encoladas (evita consumo fantasma).
+
+### 🔧 Interno
+- DB: columnas `bonus_searches` y `referrer_id` en `users` + índice `idx_users_referrer` (migración automática).
+- `can_search()` reconoce los bonos de referidos; `_check_search_access` distingue `initial` / `bonus`.
+- Mensaje de acceso denegado actualizado con el nuevo camino gratis («O invita amigos y gana búsquedas gratis»).
+- 9 claves nuevas de localización en ES/EN/PT (89 claves sincronizadas) y banners actualizados a v4.2.
+
 ## [4.1.0] — Professional Polish
 
 ### 🎨 Diseño

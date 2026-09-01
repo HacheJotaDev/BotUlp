@@ -9,6 +9,8 @@
 ═══════════════════════════════════════════════════════════════
 """
 
+from urllib.parse import quote
+
 from telethon import Button
 
 from locale import locale_manager
@@ -46,16 +48,22 @@ class Keyboards:
 
     @staticmethod
     def main(role: UserRole, lang: str = 'es', has_free_search: bool = False):
+        # has_free_search acepta int (cantidad de búsquedas gratis) o bool.
+        free_n = int(has_free_search or 0)
+
         if role == UserRole.FREE:
             buttons = []
-            if has_free_search:
+            if free_n == 1:
                 buttons.append([Button.inline("🎁  Búsqueda gratis  (1/1)", b"search_init")])
+            elif free_n > 1:
+                buttons.append([Button.inline(f"🎁  Búsquedas gratis  ({free_n})", b"search_init")])
             # Comprar VIP SIEMPRE visible para usuarios FREE
             buttons.append([Button.inline("💎  Comprar VIP", b"buy_vip_info"),
                             Button.inline("🔑  Canjear key", b"canjear_key")])
-            buttons.append([Button.inline("👤  Mi cuenta", b"my_account"),
-                            Button.inline("📋  Comandos", b"cmd_list")])
-            buttons.append(Keyboards.LANG_BTN)
+            buttons.append([Button.inline("👥  Referidos", b"ref_info"),
+                            Button.inline("👤  Mi cuenta", b"my_account")])
+            buttons.append([Button.inline("📋  Comandos", b"cmd_list"),
+                            Keyboards.LANG_BTN])
             return buttons
 
         elif role == UserRole.VIP:
@@ -64,7 +72,8 @@ class Keyboards:
                  Button.inline("📧  IMAP Checker", b"imap_info")],
                 [Button.inline("💎  Renovar VIP", b"buy_vip_info"),
                  Button.inline("👤  Mi cuenta", b"my_account")],
-                [Button.inline("📋  Comandos", b"cmd_list")],
+                [Button.inline("👥  Referidos", b"ref_info"),
+                 Button.inline("📋  Comandos", b"cmd_list")],
                 Keyboards.LANG_BTN,
             ]
 
@@ -74,7 +83,8 @@ class Keyboards:
                  Button.inline("📧  IMAP Checker", b"imap_info")],
                 [Button.inline("🔑  Generar key", b"seller_genkey"),
                  Button.inline("👤  Mi cuenta", b"my_account")],
-                [Button.inline("📋  Comandos", b"cmd_list")],
+                [Button.inline("👥  Referidos", b"ref_info"),
+                 Button.inline("📋  Comandos", b"cmd_list")],
                 Keyboards.LANG_BTN,
             ]
 
@@ -84,9 +94,10 @@ class Keyboards:
                  Button.inline("📧  IMAP Checker", b"imap_info")],
                 [Button.inline("🔐  Panel admin", b"admin_enter"),
                  Button.inline("📂  Gestión archivos", b"adm_files")],
-                [Button.inline("👤  Mi cuenta", b"my_account"),
-                 Button.inline("📋  Comandos", b"cmd_list")],
-                Keyboards.LANG_BTN,
+                [Button.inline("👥  Referidos", b"ref_info"),
+                 Button.inline("👤  Mi cuenta", b"my_account")],
+                [Button.inline("📋  Comandos", b"cmd_list"),
+                 Keyboards.LANG_BTN],
             ]
 
         return []
@@ -210,4 +221,16 @@ class Keyboards:
     def imap_info():
         return [
             [Button.inline("«  Volver", b"back_main")]
+        ]
+
+    @staticmethod
+    def ref_panel(link: str, lang: str = 'es'):
+        """Panel de referidos: compartir link (diálogo nativo de Telegram) + volver."""
+        share_text = quote(UI.text("ref_share_text", lang))
+        share_url = (f"https://t.me/share/url?url={quote(link)}"
+                     f"&text={share_text}")
+        return [
+            [Button.url("📢  Compartir mi link", share_url)],
+            [Button.inline("👤  Mi cuenta", b"my_account")],
+            Keyboards.BACK,
         ]

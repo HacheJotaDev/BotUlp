@@ -1,5 +1,5 @@
 {
-  "access_denied": "╭───✦ 🚫 **ACCESO DENEGADO**\n├─ Tu búsqueda gratis ya fue utilizada\n├─ 💎 Necesitas VIP para seguir buscando\n╰───✦",
+  "access_denied": "╭───✦ 🚫 **ACCESO DENEGADO**\n├─ Tu búsqueda gratis ya fue utilizada\n├─ 💎 Hazte VIP para buscar sin límites\n├─ 👥 O invita amigos y gana búsquedas gratis\n╰───✦",
   "access_denied_no_free": "╭───✦ 🚫 **ACCESO DENEGADO**\n├─ Esta función es exclusiva para usuarios **VIP**\n├─ 💎 Consigue tu VIP desde «Comprar VIP»\n╰───✦",
   "admin_panel": "╭───✦ 🔐 **PANEL DE ADMINISTRACIÓN**\n├─ 👑 VIPs activos: `{0}`\n├─ 💼 Sellers: `{1}`\n├─ 🔍 Búsquedas totales: `{2}`\n├─ 👥 Usuarios registrados: `{3}`\n├─ 🆕 Nuevos (sin buscar): `{4}`\n╰───✦",
   "ask_domain": "╭───✦ 🔍 **NUEVA BÚSQUEDA**\n├─ ✍️ Escribe el dominio que deseas buscar\n├─ 💡 Ejemplo: `ejemplo.com`\n╰───✦",
@@ -71,13 +71,21 @@
   "update_bot_uptodate": "╭───✦ ✅ **BOT ACTUALIZADO**\n├─ Ya estás en la última versión\n╰───✦",
   "vip_list_empty": "╭───✦ 👑 **USUARIOS VIP**\n├─ No hay usuarios VIP activos\n╰───✦",
   "vip_list_header": "╭───✦ 👑 **USUARIOS VIP** · {0}",
-  "welcome": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.1 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hola, **{0}**\n\n╭───✦ ⚡ **VENTAJAS**\n├─ 🔎 Búsqueda paralela ultra-rápida\n├─ 🗄️ Bases de datos actualizadas 24/7\n├─ 🛡️ Privacidad y anonimato total\n├─ 📦 Data lista para usar\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMANDOS**\n├─ {1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **TU CUENTA**\n├─ 🎖️ Rango: **{2}**\n├─ 📊 Búsquedas: `{3}`\n╰───✦\n\n{4}🌟 Soporte: @hjofc20",
-  "welcome_new": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.1 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hola, **{0}**\n\n╭───✦ ⚡ **VENTAJAS**\n├─ 🔎 Búsqueda paralela ultra-rápida\n├─ 🗄️ Bases de datos actualizadas 24/7\n├─ 🛡️ Privacidad y anonimato total\n├─ 📦 Data lista para usar\n╰───✦\n\n╭───✦ 🎁 **REGALO DE BIENVENIDA**\n├─ Tienes **1 búsqueda gratis** para probar\n├─ Luego necesitarás VIP para seguir buscando\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMANDOS**\n├─ {1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **TU CUENTA**\n├─ 🎖️ Rango: **{2}**\n├─ 📊 Búsquedas: `{3}`\n╰───✦\n\n{4}🌟 Soporte: @hjofc20",
+  "welcome": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.2 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hola, **{0}**\n\n╭───✦ ⚡ **VENTAJAS**\n├─ 🔎 Búsqueda paralela ultra-rápida\n├─ 🗄️ Bases de datos actualizadas 24/7\n├─ 🛡️ Privacidad y anonimato total\n├─ 📦 Data lista para usar\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMANDOS**\n├─ {1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **TU CUENTA**\n├─ 🎖️ Rango: **{2}**\n├─ 📊 Búsquedas: `{3}`\n╰───✦\n\n{4}🌟 Soporte: @hjofc20",
+  "welcome_new": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.2 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hola, **{0}**\n\n╭───✦ ⚡ **VENTAJAS**\n├─ 🔎 Búsqueda paralela ultra-rápida\n├─ 🗄️ Bases de datos actualizadas 24/7\n├─ 🛡️ Privacidad y anonimato total\n├─ 📦 Data lista para usar\n╰───✦\n\n╭───✦ 🎁 **REGALO DE BIENVENIDA**\n├─ Tienes **1 búsqueda gratis** para probar\n├─ Luego necesitarás VIP para seguir buscando\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMANDOS**\n├─ {1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **TU CUENTA**\n├─ 🎖️ Rango: **{2}**\n├─ 📊 Búsquedas: `{3}`\n╰───✦\n\n{4}🌟 Soporte: @hjofc20",
   "vip_expiring": "⚠️ **Tu VIP expira en {0} día(s)** — renuévalo desde «💎 Renovar VIP» para no perder acceso",
   "vip_expiring_today": "⚠️ **Tu VIP expira HOY** — renuévalo ahora desde «💎 Renovar VIP»",
   "acct_vip_line": "├─ ⏳ VIP activo hasta: `{0}` · {1}\n├─ {2}\n",
   "acct_free_available": "├─ 🎁 Búsqueda gratis: **Disponible**\n",
   "acct_free_used": "├─ 🎁 Búsqueda gratis: **Usada** — hazte 💎 **VIP** para seguir buscando\n",
   "acct_vip_days_many": "restan **{0} días**",
-  "acct_vip_days_one": "resta **1 día**"
+  "acct_vip_days_one": "resta **1 día**",
+  "ref_info": "╭───✦ 👥 **PROGRAMA DE REFERIDOS**\n├─ 🔗 Tu enlace personal:\n├─ ➡️ `{0}`\n╰───✦\n\n╭───✦ 📊 **TUS NÚMEROS**\n├─ 👥 Amigos invitados: `{1}`\n├─ 🎁 Búsquedas gratis disponibles: `{2}`\n╰───✦\n\n💰 **¿Cómo funciona?**\n├─ 🎁 Tu amigo se une → él recibe **+1 búsqueda**\n├─ 🎁 Y tú también ganas **+1 búsqueda gratis**\n╰─ ♾️ ¡Sin límite! Invita a todos los que quieras",
+  "ref_share_text": "🔥 Descubre HJ ULP PRO — el extractor más rápido\n🎁 Únete con mi enlace y llévate búsquedas gratis extra 🚀",
+  "ref_notify_referrer": "╭───✦ 🎉 **¡NUEVO REFERIDO!**\n├─ 👥 **{0}** se unió con tu enlace\n├─ 🎁 Recompensa: **+1 búsqueda gratis**\n├─ 📊 Total invitados: `{1}`\n╰───✦\n\n👥 Sigue invitando y gana búsquedas ilimitadas",
+  "welcome_ref_bonus": "╭───✦ 🎁 **BONO DE INVITACIÓN**\n├─ Entraste con un enlace de referido\n├─ 🎁 Búsquedas gratis totales: **{0}**\n╰───✦",
+  "acct_ref_line": "├─ 👥 Referidos: `{0}` · 🎁 Bonos: `{1}`\n",
+  "bonus_consumed": "🎁 Usaste una búsqueda de tu **bono de referidos**.",
+  "free_remaining": "🎁 Te quedan **{0}** búsqueda(s) gratis.",
+  "free_exhausted": "💎 Consigue VIP o invita amigos con «👥 Referidos» para seguir buscando."
 }

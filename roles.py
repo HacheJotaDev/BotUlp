@@ -51,13 +51,15 @@ def get_user_role(uid: int) -> UserRole:
 
 def can_search(uid: int) -> bool:
     """Verificar si un usuario puede realizar busquedas.
-    
+
     Usuarios VIP, SELLER y ADMIN siempre pueden.
-    Usuarios FREE pueden si aun no usaron su busqueda gratis.
+    Usuarios FREE pueden si aun tienen su busqueda gratis inicial
+    o si tienen busquedas de bono ganadas via referidos.
     """
     role = get_user_role(uid)
     if role in (UserRole.VIP, UserRole.SELLER, UserRole.ADMIN):
         return True
     if role == UserRole.FREE:
-        return db.is_new_user(uid)
+        user = db.get_user(uid)
+        return db.is_new_user(uid) or (user.get('bonus_searches') or 0) > 0
     return False
