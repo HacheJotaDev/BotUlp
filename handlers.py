@@ -19,6 +19,7 @@ import subprocess
 import time
 import tempfile
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 from telethon import events
@@ -33,9 +34,15 @@ from database import db
 from roles import UserRole, SearchMode, get_user_role, can_search
 from locale import locale_manager
 from ui import UI, Keyboards
-from utils import normalizar_url, get_file_counts, format_size, format_time
+from utils import (
+    normalizar_url, get_file_counts, format_size, format_time,
+    format_uptime, sanitize_md, progress_bar
+)
 from search import search_engine
-from nowpayments import create_invoice, VIP_PLANS
+from nowpayments import (
+    create_invoice, VIP_PLANS, get_payment_status,
+    SUCCESS_STATUSES, WAITING_STATUSES, FAIL_STATUSES, _deliver_vip
+)
 from imap_checker import imap_check_file
 from geoip_checker import get_country_for_email
 from download import (
@@ -53,16 +60,33 @@ LOADING_FRAMES = [
     "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"
 ]
 
-async def animate_loading(msg, search_task: asyncio.Task, kw: str):
-    """Animacion de carga elegante durante la busqueda."""
+# Umbrales (segundos) de cada fase de la búsqueda
+PHASE_SCANNING_UNTIL = 8
+PHASE_PROCESSING_UNTIL = 25
+
+# Caché de @usernames para listas admin (uid -> (valor, timestamp))
+_USERNAME_CACHE = {}
+
+
+async def animate_loading(msg, search_task: asyncio.Task, kw: str, lang: str = 'es'):
+    """Animación de carga elegante por fases durante la búsqueda.
+
+    v4.0: fases dinámicas localizadas + intervalo suave (anti-FloodWait).
+    """
     i = 0
+    start = time.time()
     while not search_task.done():
         frame = LOADING_FRAMES[i % len(LOADING_FRAMES)]
+        elapsed = int(time.time() - start)
+        if elapsed < PHASE_SCANNING_UNTIL:
+            phase = UI.text("phase_scanning", lang)
+        elif elapsed < PHASE_PROCESSING_UNTIL:
+            phase = UI.text("phase_processing", lang)
+        else:
+            phase = UI.text("phase_filtering", lang)
         try:
             await msg.edit(
-                f"⚙️ **Buscando** `{kw}`...\n\n"
-                f"{frame} Procesando bases de datos\n"
-                f"⏱️ Transcurrido: `{i * 0.6:.0f}s`",
+                UI.text("search_loading", lang, kw, frame, phase, elapsed),
                 parse_mode='md'
             )
         except MessageNotModifiedError:
@@ -70,7 +94,41 @@ async def animate_loading(msg, search_task: asyncio.Task, kw: str):
         except Exception:
             pass
         i += 1
-        await asyncio.sleep(0.6)
+        await asyncio.sleep(config.SEARCH_ANIM_INTERVAL)
+
+
+async def _display_name(e, uid: int) -> str:
+    """Nombre amigable del usuario (con caché) para los saludos."""
+    cached = state.USER_NAMES.get(uid)
+    if cached:
+        return cached
+    name = None
+    try:
+        sender = await e.get_sender()
+        name = getattr(sender, 'first_name', None) or getattr(sender, 'title', None)
+    except Exception:
+        name = None
+    if not name:
+        name = "Usuario"
+    name = sanitize_md(str(name))[:24]
+    state.USER_NAMES[uid] = name
+    return name
+
+
+async def _lookup_username(uid: int) -> str:
+    """@username con caché y timeout — listas admin instantáneas y sin FloodWait."""
+    cached = _USERNAME_CACHE.get(uid)
+    if cached and (time.time() - cached[1]) < 900:
+        return f" · {cached[0]}" if cached[0] else ""
+    val = ""
+    try:
+        entity = await asyncio.wait_for(state.bot.get_entity(uid), timeout=4)
+        if entity and getattr(entity, 'username', None):
+            val = f"@{entity.username}"
+    except Exception:
+        val = ""
+    _USERNAME_CACHE[uid] = (val, time.time())
+    return f" · {val}" if val else ""
 
 # ═════════════════════════════════════════════════════════════
 # COMANDO /updateBot
@@ -91,11 +149,10 @@ async def cmd_update_bot(event):
     if uid not in config.ADMIN_IDS:
         return
 
-    status_msg = await event.reply(
-        "╭───✦ 🔄 ACTUALIZANDO BOT\n"
-        "├● ⏳ Descargando cambios...\n"
-        "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-    )
+    user = db.get_user(uid)
+    lang = user.get('language', 'es')
+
+    status_msg = await event.reply(UI.text("update_bot_start", lang), parse_mode='md')
 
     try:
         result = subprocess.run(
@@ -110,18 +167,15 @@ async def cmd_update_bot(event):
         if result.returncode != 0:
             error_msg = result.stderr.strip()[:200] or "Error desconocido"
             await status_msg.edit(
-                "╭───✦ ❌ ERROR AL ACTUALIZAR\n"
-                f"├● 📄 `{error_msg}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+                UI.text("update_bot_fail", lang, error_msg),
                 parse_mode='md'
             )
             return
 
         if "Already up to date" in output or "Already up-to-date" in output:
             await status_msg.edit(
-                "╭───✦ ✅ BOT ACTUALIZADO\n"
-                "├● Ya esta en la ultima version\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                UI.text("update_bot_uptodate", lang),
+                parse_mode='md'
             )
             # Instalar/actualizar dependencias
             try:
@@ -141,10 +195,8 @@ async def cmd_update_bot(event):
             return
 
         await status_msg.edit(
-            "╭───✦ ✅ BOT ACTUALIZADO\n"
-            "├● 🔄 Cambios descargados\n"
-            "├● ⏳ Reiniciando en 3 segundos...\n"
-            "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            UI.text("update_bot_success", lang),
+            parse_mode='md'
         )
 
         # Instalar/actualizar dependencias nuevas
@@ -171,10 +223,11 @@ async def cmd_update_bot(event):
             )
             if pm2_check.returncode == 0:
                 logger.info("Reiniciando via pm2...")
-                subprocess.Popen(
-                    ['pm2', 'restart', 'botulp'],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-                )
+                for pm2_name in config.PM2_NAMES:
+                    subprocess.Popen(
+                        ['pm2', 'restart', pm2_name],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                    )
                 sys.exit(0)
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
@@ -183,9 +236,7 @@ async def cmd_update_bot(event):
 
     except subprocess.TimeoutExpired:
         await status_msg.edit(
-            "╭───✦ ❌ ERROR AL ACTUALIZAR\n"
-            "├● 📄 `Timeout: git pull tardo demasiado`\n"
-            "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+            UI.text("update_bot_fail", lang, "Timeout: git pull tardó demasiado"),
             parse_mode='md'
         )
     except SystemExit:
@@ -193,9 +244,7 @@ async def cmd_update_bot(event):
     except Exception as e:
         logger.error(f"Error en /updateBot: {e}")
         await status_msg.edit(
-            "╭───✦ ❌ ERROR AL ACTUALIZAR\n"
-            f"├● 📄 `{str(e)[:100]}`\n"
-            "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+            UI.text("update_bot_fail", lang, str(e)[:100]),
             parse_mode='md'
         )
 
@@ -206,17 +255,18 @@ async def cmd_update_bot(event):
 def _get_commands_by_role(role: UserRole, has_free: bool = False) -> str:
     """Construir la lista de comandos disponibles segun el rol del usuario."""
     if role == UserRole.FREE:
-        cmds = "/start │ /canjear"
+        cmds = "/start • /canjear"
         if has_free:
-            cmds += " │ /url"
+            cmds += " • /url"
         return cmds
     elif role == UserRole.VIP:
-        return "/start │ /url │ /imap │ /canjear"
+        return "/start • /url • /imap • /ping • /canjear"
     elif role == UserRole.SELLER:
-        return "/start │ /url │ /imap"
+        return "/start • /url • /imap • /ping"
     elif role == UserRole.ADMIN:
-        return "/start │ /url │ /imap │ /vip │ /unvip │ /seller │ /unseller │ /gp │ /ungp │ /bc │ /bcvip │ /sizedisp │ /updateBot"
-    return "/start │ /canjear"
+        return ("/start • /url • /imap • /vip • /unvip • /seller • /unseller"
+                " • /gp • /ungp • /bc • /bcvip • /sizedisp • /ping • /updateBot")
+    return "/start • /canjear"
 
 
 def _get_access_denied_text(lang: str) -> str:
@@ -646,24 +696,33 @@ def register_handlers(bot_client):
         """Ejecutar una busqueda completa con animacion, resultado y procesamiento de cola."""
         state.active_searches.add(uid)
 
-        # Mensaje de carga
+        loading_text = UI.text(
+            "search_loading", lang, kw,
+            LOADING_FRAMES[0], UI.text("phase_scanning", lang), 0
+        )
+
+        # Respuesta instantánea del botón (fluidez) + mensaje de carga
         if callback_event:
             try:
+                await callback_event.answer()
+            except Exception:
+                pass
+            try:
                 loading_msg = await callback_event.edit(
-                    f"⚙️ **Buscando** `{kw}`...\n\n⠋ Procesando",
+                    loading_text,
                     buttons=None,
                     parse_mode='md'
                 )
             except Exception:
                 loading_msg = await state.bot.send_message(
                     chat_id,
-                    f"⚙️ **Buscando** `{kw}`...\n\n⠋ Procesando",
+                    loading_text,
                     parse_mode='md'
                 )
         else:
             loading_msg = await state.bot.send_message(
                 chat_id,
-                f"⚙️ **Buscando** `{kw}`...\n\n⠋ Procesando",
+                loading_text,
                 parse_mode='md'
             )
 
@@ -671,7 +730,7 @@ def register_handlers(bot_client):
             start_time = time.time()
             search_task = asyncio.create_task(search_engine(kw, t_opt, modo))
 
-            await animate_loading(loading_msg, search_task, kw)
+            await animate_loading(loading_msg, search_task, kw, lang)
 
             result_file = await search_task
             elapsed = time.time() - start_time
@@ -712,7 +771,7 @@ def register_handlers(bot_client):
             logger.error(f"Error en busqueda de {uid}: {exc}")
             try:
                 await loading_msg.edit(
-                    f"❌ **Error en busqueda**\n\n`{str(exc)[:200]}`",
+                    UI.text("error_generic", lang, str(exc)[:120]),
                     parse_mode='md'
                 )
             except Exception:
@@ -751,7 +810,7 @@ def register_handlers(bot_client):
             try:
                 await state.bot.send_message(
                     next_search['chat_id'],
-                    f"❌ **Error en busqueda encolada**\n\n`{str(exc)[:200]}`",
+                    UI.text("error_generic", next_search.get('lang', 'es'), str(exc)[:120]),
                     parse_mode='md'
                 )
             except Exception:
@@ -767,6 +826,7 @@ def register_handlers(bot_client):
         lang = user.get('language', 'es')
         role = get_user_role(uid)
         has_free = db.is_new_user(uid) and role == UserRole.FREE
+        name = await _display_name(e, uid)
 
         # Si viene con parametro (deep link para canjear key)
         args = e.message.message.split()
@@ -788,7 +848,7 @@ def register_handlers(bot_client):
         else:
             welcome_key = "welcome"
 
-        welcome_text = UI.text(welcome_key, lang, _get_commands_by_role(role, has_free), role.value, user['search_count'])
+        welcome_text = UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), role.value, user['search_count'])
 
         await e.reply(
             welcome_text,
@@ -800,7 +860,7 @@ def register_handlers(bot_client):
     async def update_bot_cmd(e):
         await cmd_update_bot(e)
 
-    @bot_client.on(events.NewMessage(pattern=r"/cmd"))
+    @bot_client.on(events.NewMessage(pattern=r"/(cmd|help)(\s|$)"))
     async def cmd_cmd(e):
         """Mostrar lista de comandos disponibles."""
         if e.is_group and e.chat_id not in state.allowed_groups:
@@ -814,6 +874,39 @@ def register_handlers(bot_client):
         await e.reply(
             UI.text("cmd_list", lang, cmds),
             buttons=Keyboards.back() if e.is_private else None,
+            parse_mode='md'
+        )
+
+    # ═════════════════════════════════════════════════════════════
+    # UTILIDADES: /ping · /id · /help
+    # ═════════════════════════════════════════════════════════════
+
+    @bot_client.on(events.NewMessage(pattern=r"/ping"))
+    async def cmd_ping(e):
+        """Latencia, uptime y versión del bot."""
+        if e.is_group and e.chat_id not in state.allowed_groups:
+            return
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        latency_ms = max(0.0, (datetime.now(timezone.utc) - e.message.date).total_seconds() * 1000)
+        uptime = format_uptime(time.time() - state.START_TIME) if state.START_TIME else "—"
+        await e.reply(
+            UI.text("ping_info", lang, latency_ms, uptime, config.VERSION),
+            parse_mode='md'
+        )
+
+    @bot_client.on(events.NewMessage(pattern=r"^/id$"))
+    async def cmd_id(e):
+        """Mostrar IDs del usuario y del chat actual."""
+        if e.is_group and e.chat_id not in state.allowed_groups:
+            return
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        chat_type = "Privado" if e.is_private else ("Grupo" if e.is_group else "Canal")
+        await e.reply(
+            UI.text("id_info", lang, uid, e.chat_id, chat_type),
             parse_mode='md'
         )
 
@@ -1050,9 +1143,10 @@ def register_handlers(bot_client):
         state.temp_state.pop(uid, None)
         role = get_user_role(uid)
         has_free = db.is_new_user(uid) and role == UserRole.FREE
+        name = await _display_name(e, uid)
         welcome_key = "welcome_new" if has_free else "welcome"
         await e.reply(
-            UI.text(welcome_key, lang, _get_commands_by_role(role, has_free), role.value, user['search_count']),
+            UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), role.value, user['search_count']),
             buttons=Keyboards.main(role, lang, has_free),
             parse_mode='md'
         )
@@ -1076,10 +1170,10 @@ def register_handlers(bot_client):
 
     # --- BROADCAST ---
 
-    async def _broadcast(sender_id: int, targets: list, msg_text: str, status_msg, label: str):
+    async def _broadcast(sender_id: int, targets: list, msg_text: str, status_msg, label: str, lang: str = 'es'):
         total = len(targets)
         if total == 0:
-            await status_msg.edit("No hay usuarios para broadcast.")
+            await status_msg.edit(UI.text("broadcast_done", lang, 0, 0), parse_mode='md')
             return
 
         sent = 0
@@ -1095,9 +1189,8 @@ def register_handlers(bot_client):
                 if sent % 50 == 0:
                     try:
                         await status_msg.edit(
-                            f"📣 **{label}**\n\n"
-                            f"✅ Enviados: `{sent}/{total}`\n"
-                            f"❌ Errores: `{errors}`"
+                            UI.text("broadcast_progress", lang, label, sent, total, errors),
+                            parse_mode='md'
                         )
                     except Exception:
                         pass
@@ -1116,9 +1209,8 @@ def register_handlers(bot_client):
                 await asyncio.sleep(0.5)
 
         await status_msg.edit(
-            f"✅ **{label} Finalizado**\n\n"
-            f"📬 Enviados: `{sent}`\n"
-            f"🚫 Fallidos: `{errors}`"
+            UI.text("broadcast_done", lang, sent, errors),
+            parse_mode='md'
         )
 
     @bot_client.on(events.NewMessage(pattern=r"/bc ([\s\S]+)"))
@@ -1127,10 +1219,12 @@ def register_handlers(bot_client):
             return
         msg_text = e.pattern_match.group(1).strip()
         users = db.get_all_users()
+        lang = db.get_user(e.sender_id).get('language', 'es')
         status = await e.reply(
-            f"📣 **Broadcast Global Iniciado**\n\n👥 Total: `{len(users)}`\n⚡ Enviando..."
+            UI.text("broadcast_started", lang, "Broadcast Global", len(users)),
+            parse_mode='md'
         )
-        await _broadcast(e.sender_id, users, msg_text, status, "Broadcast Global")
+        await _broadcast(e.sender_id, users, msg_text, status, "Broadcast Global", lang)
 
     @bot_client.on(events.NewMessage(pattern=r"/bcvip ([\s\S]+)"))
     async def cmd_bcvip(e):
@@ -1138,10 +1232,12 @@ def register_handlers(bot_client):
             return
         msg_text = e.pattern_match.group(1).strip()
         vips_data = db.list_vips()
+        lang = db.get_user(e.sender_id).get('language', 'es')
         status = await e.reply(
-            f"👑 **Broadcast VIP Iniciado**\n\n👥 Total VIPs: `{len(vips_data)}`\n⚡ Enviando..."
+            UI.text("broadcast_started", lang, "Broadcast VIP", len(vips_data)),
+            parse_mode='md'
         )
-        await _broadcast(e.sender_id, vips_data, msg_text, status, "Broadcast VIP")
+        await _broadcast(e.sender_id, vips_data, msg_text, status, "Broadcast VIP", lang)
 
     # --- SIZEDISP: Disco de la VPS ---
     @bot_client.on(events.NewMessage(pattern=r"/sizedisp"))
@@ -1161,9 +1257,8 @@ def register_handlers(bot_client):
             used_str = format_size(used)
             free_str = format_size(free)
 
-            # Barra visual
-            filled = int(pct / 5)
-            bar = '█' * filled + '░' * (20 - filled)
+            # Barra visual premium
+            bar = progress_bar(pct, width=20)
 
             user = db.get_user(e.sender_id)
             lang = user.get('language', 'es')
@@ -1241,9 +1336,10 @@ def register_handlers(bot_client):
             # ─── VOLVER AL MENU PRINCIPAL ───
             if data == "back_main":
                 has_free = db.is_new_user(uid) and role == UserRole.FREE
+                name = await _display_name(e, uid)
                 welcome_key = "welcome_new" if has_free else "welcome"
                 await e.edit(
-                    UI.text(welcome_key, lang, _get_commands_by_role(role, has_free), role.value, user['search_count']),
+                    UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), role.value, user['search_count']),
                     buttons=Keyboards.main(role, lang, has_free),
                     parse_mode='md'
                 )
@@ -1269,7 +1365,7 @@ def register_handlers(bot_client):
             # ─── MI CUENTA ───
             elif data == "my_account":
                 exp = (user['vip_expiry'] or 'N/A')[:10] if user['vip_expiry'] else "N/A"
-                free_status = "Disponible" if db.is_new_user(uid) else "Usada"
+                free_status = UI.text("free_available" if db.is_new_user(uid) else "free_used", lang)
                 await e.edit(
                     UI.text("my_account", lang, uid, role.value, exp, user['search_count'], free_status),
                     buttons=Keyboards.back(),
@@ -1306,17 +1402,60 @@ def register_handlers(bot_client):
 
                 await e.edit(
                     UI.text("pay_invoice", lang, plan["label"], plan["price"], invoice_url),
-                    buttons=Keyboards.back(),
+                    buttons=Keyboards.payment_invoice(invoice_url),
                     parse_mode='md'
                 )
 
-            # ─── PAGO: Verificar estado (legacy, redirige a plans) ───
+            # ─── PAGO: Verificar estado (verificación real vía API) ───
             elif data == "pay_check":
                 await e.edit(
-                    UI.text("pay_plans", lang),
-                    buttons=Keyboards.payment_plans(),
+                    UI.text("pay_checking", lang),
+                    buttons=Keyboards.payment_checking(),
                     parse_mode='md'
                 )
+
+                pending = [p for p in db.get_user_payments(uid) if p.get('status') == 'pending']
+                if not pending:
+                    await e.edit(
+                        UI.text("pay_no_pending", lang),
+                        buttons=Keyboards.payment_plans(),
+                        parse_mode='md'
+                    )
+                    return
+
+                payment = pending[0]
+                invoice_id = str(payment['invoice_id'])
+                days = payment.get('days') or 0
+                plan = VIP_PLANS.get(days, {
+                    "price": float(payment.get('amount_usd') or 0.0),
+                    "label": f"{days} días"
+                })
+
+                status = await get_payment_status(invoice_id)
+
+                if status in SUCCESS_STATUSES:
+                    await _deliver_vip(state, uid, days, invoice_id, lang, "manual-check")
+                    new_role = get_user_role(uid)
+                    await e.edit(
+                        UI.text("pay_success", lang, days),
+                        buttons=Keyboards.main(new_role, lang, False),
+                        parse_mode='md'
+                    )
+                elif status in FAIL_STATUSES:
+                    db.update_payment_status(invoice_id, status)
+                    fail_key = "pay_expired" if status == "expired" else "pay_failed"
+                    await e.edit(
+                        UI.text(fail_key, lang),
+                        buttons=Keyboards.payment_plans(),
+                        parse_mode='md'
+                    )
+                else:
+                    # waiting / confirming / sending / not_found / error de red
+                    await e.edit(
+                        UI.text("pay_status_pending", lang, plan["label"], float(plan["price"])),
+                        buttons=Keyboards.payment_checking(),
+                        parse_mode='md'
+                    )
 
             # ─── CANJEAR KEY ───
             elif data == "canjear_key":
@@ -1341,9 +1480,10 @@ def register_handlers(bot_client):
                 await e.answer(UI.text("language_selected", new_lang), alert=True)
                 user = db.get_user(uid)
                 has_free = db.is_new_user(uid) and role == UserRole.FREE
+                name = await _display_name(e, uid)
                 welcome_key = "welcome_new" if has_free else "welcome"
                 await e.edit(
-                    UI.text(welcome_key, new_lang, _get_commands_by_role(role, has_free), role.value, user['search_count']),
+                    UI.text(welcome_key, new_lang, name, _get_commands_by_role(role, has_free), role.value, user['search_count']),
                     buttons=Keyboards.main(role, new_lang, has_free),
                     parse_mode='md'
                 )
@@ -1446,11 +1586,11 @@ def register_handlers(bot_client):
                 if uid in state.temp_state and state.temp_state[uid].get('kw'):
                     state.temp_state[uid]['time'] = t_opt
                     await e.edit(
-                        "📄 **Formato de salida:**",
+                        UI.text("search_step_format", lang),
                         buttons=Keyboards.formats()
                     )
                 else:
-                    await e.answer("Usa 'Nueva Busqueda' primero.", alert=True)
+                    await e.answer("Usa 'Nueva búsqueda' primero.", alert=True)
 
             # ─── EJECUTAR BUSQUEDA (con cola anti-superposicion) ───
             elif data.startswith("fmt_"):
@@ -1498,6 +1638,7 @@ def register_handlers(bot_client):
                     chat_id=chat_id,
                     lang=lang, callback_event=e, reply_to=reply_to
                 )
+                return
 
             # ─── REPORTAR URL ───
             elif data == "report_url":
@@ -1506,11 +1647,12 @@ def register_handlers(bot_client):
                     try:
                         await state.bot.send_message(
                             admin_id,
-                            f"⚠️ **REPORTE DE URL**\n\n👤 Usuario: `{uid}`\n🔍 URL: `{kw}`"
+                            UI.text("report_received", 'es', uid, kw)
                         )
                     except Exception:
                         pass
                 await e.answer("Reporte enviado correctamente.", alert=True)
+                return
 
             # ─── PANEL ADMIN ───
             elif data == "admin_enter":
@@ -1544,19 +1686,16 @@ def register_handlers(bot_client):
                     return await e.answer("Acceso denegado.", alert=True)
                 sellers = db.list_sellers()
                 if not sellers:
-                    text = "💼 **SELLERS**\n\nNo hay sellers registrados."
+                    text = UI.text("sellers_list_empty", lang)
                 else:
-                    lines = []
-                    for sid in sellers:
-                        username = "None"
-                        try:
-                            entity = await state.bot.get_entity(sid)
-                            if entity and getattr(entity, 'username', None):
-                                username = f"@{entity.username}"
-                        except Exception:
-                            pass
-                        lines.append(f"👤 `{sid}` │ {username}")
-                    text = "💼 **SELLERS**\n\n" + "\n".join(lines)
+                    lines = [UI.text("sellers_list_header", lang, len(sellers))]
+                    for sid in sellers[:50]:
+                        uname = await _lookup_username(sid)
+                        lines.append(f"├─ 👤 `{sid}`{uname}")
+                    if len(sellers) > 50:
+                        lines.append(UI.text("list_more", lang, len(sellers) - 50))
+                    lines.append(UI.text("list_footer", lang))
+                    text = "\n".join(lines)
                 await e.edit(text, buttons=Keyboards.back("admin_enter"), parse_mode='md')
 
             elif data == "adm_vips":
@@ -1564,25 +1703,19 @@ def register_handlers(bot_client):
                     return await e.answer("Acceso denegado.", alert=True)
                 vips = db.list_vips()
                 if not vips:
-                    text = "👑 **VIPs**\n\nNo hay usuarios VIP."
+                    text = UI.text("vip_list_empty", lang)
                 else:
-                    lines = []
+                    lines = [UI.text("vip_list_header", lang, len(vips))]
                     for v in vips[:50]:
                         exp = v.get('vip_expiry') or 'N/A'
                         if exp != 'N/A' and len(exp) > 10:
                             exp = exp[:10]
-                        vuid = v['user_id']
-                        username = "None"
-                        try:
-                            entity = await state.bot.get_entity(vuid)
-                            if entity and getattr(entity, 'username', None):
-                                username = f"@{entity.username}"
-                        except Exception:
-                            pass
-                        lines.append(f"👤 `{vuid}` │ {username} → Exp: `{exp}`")
-                    text = "👑 **VIPs**\n\n" + "\n".join(lines)
+                        uname = await _lookup_username(v['user_id'])
+                        lines.append(f"├─ 👤 `{v['user_id']}`{uname} · ⏳ `{exp}`")
                     if len(vips) > 50:
-                        text += f"\n\n... y {len(vips) - 50} mas"
+                        lines.append(UI.text("list_more", lang, len(vips) - 50))
+                    lines.append(UI.text("list_footer", lang))
+                    text = "\n".join(lines)
                 await e.edit(text, buttons=Keyboards.back("admin_enter"), parse_mode='md')
 
             elif data == "adm_genkey":
@@ -1618,5 +1751,12 @@ def register_handlers(bot_client):
             logger.error(f"Error en callback {data}: {exc}")
             try:
                 await e.answer("Error procesando solicitud.", alert=True)
+            except Exception:
+                pass
+        finally:
+            # Fluidez: respuesta instantánea del botón. Si ya se respondió
+            # con alerta, este segundo answer se ignora silenciosamente.
+            try:
+                await e.answer()
             except Exception:
                 pass

@@ -63,18 +63,19 @@ class DownloadProgressTracker:
             fname_display = self.filename[:40]
             size_str = format_size(self.file_size) if self.file_size > 0 else "Desconocido"
             text = (
-                "╭───✦ 📥 DESCARGANDO ({}/{})\n"
-                "├● 📄 `{}`\n"
-                "├● 📊 Tamaño: `{}`\n"
-                "├● ⏳ Preparando descarga...\n"
+                "╭───✦ 📥 **DESCARGANDO** ({}/{})\n"
+                "├─ 📄 `{}`\n"
+                "├─ 📊 Tamaño: `{}`\n"
+                "├─ ⏳ Preparando descarga...\n"
                 "│\n"
-                "├● [░░░░░░░░░░░░] 0.0%\n"
+                "├─ {}\n"
                 "│\n"
-                "├● ✅ Nuevos: `{}` │ 💾 Existentes: `{}` │ ❌ Errores: `{}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                "├─ ✅ Nuevos: `{}` · 💾 Existentes: `{}` · ❌ Errores: `{}`\n"
+                "╰───✦"
             ).format(
                 self.file_index, self.total_files,
                 fname_display, size_str,
+                progress_bar(0),
                 self.stats['new'], self.stats['existing'], self.stats['errors']
             )
             self.message = await client.send_message(
@@ -131,16 +132,16 @@ class DownloadProgressTracker:
             total_str = format_size(total) if total > 0 else size_str
 
             text = (
-                "╭───✦ 📥 DESCARGANDO ({}/{})\n"
-                "├● 📄 `{}`\n"
-                "├● 📊 Tamaño: `{}` / `{}`\n"
-                "├● ⚡ Velocidad: `{}`\n"
+                "╭───✦ 📥 **DESCARGANDO** ({}/{})\n"
+                "├─ 📄 `{}`\n"
+                "├─ 📊 Tamaño: `{}` / `{}`\n"
+                "├─ ⚡ Velocidad: `{}`\n"
                 "│\n"
-                "├● {}\n"
-                "├● ⏱️ ETA: `{}`\n"
+                "├─ {}\n"
+                "├─ ⏱️ ETA: `{}`\n"
                 "│\n"
-                "├● ✅ Nuevos: `{}` │ 💾 Existentes: `{}` │ ❌ Errores: `{}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                "├─ ✅ Nuevos: `{}` · 💾 Existentes: `{}` · ❌ Errores: `{}`\n"
+                "╰───✦"
             ).format(
                 self.file_index, self.total_files,
                 fname_display,
@@ -203,35 +204,33 @@ class DownloadProgressTracker:
             fname_display = self.filename[:40]
             size_str = format_size(self.file_size) if self.file_size > 0 else "Desconocido"
             status = "✅ COMPLETADO" if success else "❌ FALLIDO"
-            icon = "✅" if success else "❌"
 
             if success:
                 speed = self.file_size / elapsed if elapsed > 0 and self.file_size > 0 else 0
                 speed_str = format_size(speed) + "/s" if speed > 0 else "-"
                 time_str = format_time(elapsed)
                 text = (
-                    "╭───✦ {} DESCARGA {}\n"
-                    "├● 📄 `{}`\n"
-                    "├● 📊 Tamaño: `{}`\n"
-                    "├● ⏱️ Tiempo: `{}`\n"
-                    "├● ⚡ Velocidad: `{}`\n"
+                    "╭───✦ ✅ **DESCARGA COMPLETADA**\n"
+                    "├─ 📄 `{}`\n"
+                    "├─ 📊 Tamaño: `{}`\n"
+                    "├─ ⏱️ Tiempo: `{}`\n"
+                    "├─ ⚡ Velocidad: `{}`\n"
                     "│\n"
-                    "├● ✅ Nuevos: `{}` │ 💾 Existentes: `{}` │ ❌ Errores: `{}`\n"
-                    "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                    "├─ ✅ Nuevos: `{}` · 💾 Existentes: `{}` · ❌ Errores: `{}`\n"
+                    "╰───✦"
                 ).format(
-                    icon, status,
                     fname_display, size_str,
                     time_str, speed_str,
                     self.stats['new'], self.stats['existing'], self.stats['errors']
                 )
             else:
                 text = (
-                    "╭───✦ ❌ DESCARGA FALLIDA\n"
-                    "├● 📄 `{}`\n"
-                    "├● 📊 Tamaño: `{}`\n"
+                    "╭───✦ ❌ **DESCARGA FALLIDA**\n"
+                    "├─ 📄 `{}`\n"
+                    "├─ 📊 Tamaño: `{}`\n"
                     "│\n"
-                    "├● ✅ Nuevos: `{}` │ 💾 Existentes: `{}` │ ❌ Errores: `{}`\n"
-                    "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                    "├─ ✅ Nuevos: `{}` · 💾 Existentes: `{}` · ❌ Errores: `{}`\n"
+                    "╰───✦"
                 ).format(
                     fname_display, size_str,
                     self.stats['new'], self.stats['existing'], self.stats['errors']
@@ -662,10 +661,10 @@ async def process_pending_downloads(status_msg=None):
     if status_msg:
         try:
             await status_msg.edit(
-                "╭───✦ 📥 INICIANDO DESCARGAS\n"
-                f"├● 📦 Total: `{total}` archivos en cola\n"
-                f"├● ⏳ Preparando...\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈",
+                "╭───✦ 📥 **INICIANDO DESCARGAS**\n"
+                f"├─ 📦 Total: `{total}` archivos en cola\n"
+                f"├─ ⏳ Preparando...\n"
+                "╰───✦",
                 parse_mode='md'
             )
         except Exception:
@@ -722,12 +721,12 @@ async def process_pending_downloads(status_msg=None):
     if status_msg:
         from ui import Keyboards
         report = (
-            "╭───✦ ✅ DESCARGAS COMPLETADAS\n"
-            f"├● 📥 Nuevos: `{stats['new']}`\n"
-            f"├● 💾 Existentes: `{stats['existing']}`\n"
-            f"├● ❌ Errores: `{stats['errors']}`\n"
-            f"├● ⏱️ Tiempo total: `{format_time(elapsed)}`\n"
-            "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            "╭───✦ ✅ **DESCARGAS COMPLETADAS**\n"
+            f"├─ 📥 Nuevos: `{stats['new']}`\n"
+            f"├─ 💾 Existentes: `{stats['existing']}`\n"
+            f"├─ ❌ Errores: `{stats['errors']}`\n"
+            f"├─ ⏱️ Tiempo total: `{format_time(elapsed)}`\n"
+            "╰───✦"
         )
         try:
             await status_msg.edit(report, buttons=Keyboards.back("adm_files"), parse_mode='md')

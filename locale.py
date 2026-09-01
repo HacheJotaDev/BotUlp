@@ -1,10 +1,11 @@
 """
 ═══════════════════════════════════════════════════════════════
-  HJ ULP EXTRACTOR BOT — Locale Module v5.0
+  HJ ULP EXTRACTOR BOT — Locale Module v6.0 · Obsidian Design
 ═══════════════════════════════════════════════════════════════
-  • Textos unificados al estilo ╭───✦
-  • Nuevos textos para IMAP con keywords
-  • Comando /cmd agregado
+  • Sistema de diseño unificado: tarjetas ╭───✦ + separadores ┈
+  • Banner premium con identidad propia
+  • Textos con ortografía completa (acentos y eñes)
+  • Los JSON de locales/*.json sobrescriben este diccionario
 ═══════════════════════════════════════════════════════════════
 """
 
@@ -15,9 +16,14 @@ from typing import Dict
 from config import config
 from logger_setup import logger
 
+# ── Componentes del sistema de diseño ────────────────────────
+SEP = "┈" * 18            # separador entre tarjetas
+CARD_TOP = "╭───✦"          # cabecera de tarjeta
+CARD_END = "╰───✦"          # cierre de tarjeta
+
 
 class LocaleManager:
-    """Gestor de idiomas con soporte de fallback a espanol."""
+    """Gestor de idiomas con fallback automático a español."""
 
     def __init__(self, locales_dir: Path):
         self.locales_dir = locales_dir
@@ -26,377 +32,563 @@ class LocaleManager:
         self._load_translations()
 
     def _load_translations(self):
+        # Diccionario base ES (diseño Obsidian v4.0)
         self.translations['es'] = {
-            "welcome_new": (
-                "╭───✦ ☾ HJ ULP PRO ☽ 彡\n"
-                "├● ▸ Busqueda ultra-rapida (paralela)\n"
-                "├● ▸ Bases actualizadas 24/7\n"
-                "├● ▸ Privacidad y anonimato total\n"
-                "├● ▸ Data lista para usar\n"
-                "╰───✦ 🚀 by @hjofc20\n"
-                "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n"
-                "╭───✦ 🎁 BIENVENIDO NUEVO USUARIO\n"
-                "├● Tienes **1 busqueda gratis** para probar\n"
-                "├● Despues necesitaras VIP para seguir buscando\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n"
-                "╭───✦ COMANDOS\n"
-                "├● {}\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
-                "🌟 Soporte: @hjofc20\n\n"
-                "👤 **Rol:** `{}` │ 📊 **Busquedas:** `{}`"
-            ),
+            # ── Bienvenida ──────────────────────────────────
             "welcome": (
-                "╭───✦ ☾ HJ ULP PRO ☽ 彡\n"
-                "├● ▸ Busqueda ultra-rapida (paralela)\n"
-                "├● ▸ Bases actualizadas 24/7\n"
-                "├● ▸ Privacidad y anonimato total\n"
-                "├● ▸ Data lista para usar\n"
-                "╰───✦ 🚀 by @hjofc20\n"
-                "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n"
-                "╭───✦ COMANDOS\n"
-                "├● {}\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
-                "🌟 Soporte: @hjofc20\n\n"
-                "👤 **Rol:** `{}` │ 📊 **Busquedas:** `{}`"
+                "╭━━━━━━━━━━━━━━━━━━━━╮\n"
+                "┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n"
+                "┃ ⚡ v4.0 · Professional\n"
+                "╰━━━━━━━━━━━━━━━━━━━━╯\n"
+                "\n"
+                "👋 Hola, **{0}**\n"
+                "\n"
+                "╭───✦ ⚡ **VENTAJAS**\n"
+                "├─ 🔎 Búsqueda paralela ultra-rápida\n"
+                "├─ 🗄️ Bases de datos actualizadas 24/7\n"
+                "├─ 🛡️ Privacidad y anonimato total\n"
+                "├─ 📦 Data lista para usar\n"
+                "╰───✦\n"
+                "\n"
+                + SEP + "\n\n"
+                "╭───✦ 🧭 **COMANDOS**\n"
+                "├─ {1}\n"
+                "╰───✦\n"
+                "\n"
+                + SEP + "\n\n"
+                "╭───✦ 👤 **TU CUENTA**\n"
+                "├─ 🎖️ Rol: **{2}**\n"
+                "├─ 📊 Búsquedas: `{3}`\n"
+                "╰───✦\n"
+                "\n"
+                "🌟 Soporte: @hjofc20"
             ),
+            "welcome_new": (
+                "╭━━━━━━━━━━━━━━━━━━━━╮\n"
+                "┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n"
+                "┃ ⚡ v4.0 · Professional\n"
+                "╰━━━━━━━━━━━━━━━━━━━━╯\n"
+                "\n"
+                "👋 Hola, **{0}**\n"
+                "\n"
+                "╭───✦ ⚡ **VENTAJAS**\n"
+                "├─ 🔎 Búsqueda paralela ultra-rápida\n"
+                "├─ 🗄️ Bases de datos actualizadas 24/7\n"
+                "├─ 🛡️ Privacidad y anonimato total\n"
+                "├─ 📦 Data lista para usar\n"
+                "╰───✦\n"
+                "\n"
+                "╭───✦ 🎁 **REGALO DE BIENVENIDA**\n"
+                "├─ Tienes **1 búsqueda gratis** para probar\n"
+                "├─ Luego necesitarás VIP para seguir buscando\n"
+                "╰───✦\n"
+                "\n"
+                + SEP + "\n\n"
+                "╭───✦ 🧭 **COMANDOS**\n"
+                "├─ {1}\n"
+                "╰───✦\n"
+                "\n"
+                + SEP + "\n\n"
+                "╭───✦ 👤 **TU CUENTA**\n"
+                "├─ 🎖️ Rol: **{2}**\n"
+                "├─ 📊 Búsquedas: `{3}`\n"
+                "╰───✦\n"
+                "\n"
+                "🌟 Soporte: @hjofc20"
+            ),
+
+            # ── Navegación general ──────────────────────────
             "cmd_list": (
-                "╭───✦ 📋 COMANDOS DISPONIBLES\n"
-                "├● {}\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
-                "💡 Usa los botones para interactuar"
+                "╭───✦ 🧭 **COMANDOS DISPONIBLES**\n"
+                "├─ {0}\n"
+                "╰───✦\n"
+                "\n"
+                "💡 También puedes usar los botones de abajo."
             ),
-            "buy_vip_info": (
-                "╭───✦ 💰 COMPRAR VIP ACCESS 💰\n"
-                "├● ⟡ 1 dia     »  $6\n"
-                "├● ⟡ 3 dias    »  $10\n"
-                "├● ⟡ 7 dias    »  $25\n"
-                "├● ⟡ 30 dias   »  $100\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
-                "📬 **CONTACTO:**\n{}"
-            ),
-            "file_management": (
-                "╭───✦ 📂 GESTION DE ARCHIVOS\n"
-                "├● 📊 **Base de Datos:**\n"
-                "├● 📁 Total: `{}` archivos\n"
-                "├● ⚡ Ultimas 24h: `{}`\n"
-                "├● 🗄  Historico: `{}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
-                "╭───✦ 🔄 DESCARGAS\n"
-                "├● ♻  Auto-DL: `{}`\n"
-                "├● 📝 En cola: `{}` archivos\n"
-                "├● ⬇  Activas: `{}` descargas\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "no_results": (
-                "╭───✦ ❌ SIN RESULTADOS\n"
-                "├● No se encontraron datos para `{}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "search_step_time": (
-                "╭───✦ 🔍 BUSQUEDA\n"
-                "├● 🔎 **Dominio:** `{}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
-                "⏳ Selecciona el rango de tiempo:"
-            ),
-            "loading": "⚙️ **Procesando...**",
-            "access_denied": (
-                "╭───✦ 🚫 ACCESO DENEGADO\n"
-                "├● Tu busqueda gratis ya fue usada\n"
-                "├● Necesitas VIP para seguir buscando\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "access_denied_no_free": (
-                "╭───✦ 🚫 ACCESO DENEGADO\n"
-                "├● Solo usuarios VIP pueden realizar busquedas\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "search_in_progress": (
-                "⏳ **Espera a que termine tu busqueda anterior.**\n\n"
-                "Tu nueva busqueda se iniciara automaticamente cuando la actual termine.\n"
-                "Posicion en cola: `{}`"
-            ),
-            "search_already_running": (
-                "⏳ **Busqueda en curso.**\n\n"
-                "Se ejecutara automaticamente al terminar la actual."
-            ),
-            "ask_domain": (
-                "╭───✦ 🔍 NUEVA BUSQUEDA\n"
-                "├● Escribe el dominio a buscar\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+            "select_language": (
+                "╭───✦ 🌐 **IDIOMA / LANGUAGE**\n"
+                "├─ Selecciona tu idioma preferido\n"
+                "╰───✦"
             ),
             "language_selected": "🌐 Idioma actualizado correctamente.",
-            "select_language": (
-                "╭───✦ 🌐 SELECT LANGUAGE\n"
-                "├● Elige tu idioma preferido\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
             "my_account": (
-                "╭───✦ 👤 MI CUENTA\n"
-                "├● 🆔 ID: `{}`\n"
-                "├● 🎖 Rango: `{}`\n"
-                "├● 📅 Expira: `{}`\n"
-                "├● 📊 Busquedas: `{}`\n"
-                "├● 🔍 Busqueda gratis: `{}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                "╭───✦ 👤 **MI CUENTA**\n"
+                "├─ 🆔 ID: `{0}`\n"
+                "├─ 🎖️ Rango: **{1}**\n"
+                "├─ 📅 VIP expira: `{2}`\n"
+                "├─ 📊 Búsquedas totales: `{3}`\n"
+                "├─ 🔍 Búsqueda gratis: **{4}**\n"
+                "╰───✦"
+            ),
+            "ping_info": (
+                "╭───✦ 📶 **PONG**\n"
+                "├─ ⚡ Latencia: `{0:.0f} ms`\n"
+                "├─ ⏱️ Uptime: `{1}`\n"
+                "├─ 🧩 Versión: `{2}`\n"
+                "╰───✦"
+            ),
+            "id_info": (
+                "╭───✦ 🪪 **INFORMACIÓN**\n"
+                "├─ 👤 Tu ID: `{0}`\n"
+                "├─ 💬 Chat ID: `{1}`\n"
+                "├─ 📌 Tipo: `{2}`\n"
+                "╰───✦"
+            ),
+
+            # ── Búsqueda ────────────────────────────────────
+            "ask_domain": (
+                "╭───✦ 🔍 **NUEVA BÚSQUEDA**\n"
+                "├─ ✍️ Escribe el dominio que deseas buscar\n"
+                "├─ 💡 Ejemplo: `ejemplo.com`\n"
+                "╰───✦"
+            ),
+            "search_step_time": (
+                "╭───✦ 🔍 **NUEVA BÚSQUEDA**\n"
+                "├─ 🔎 Dominio: `{0}`\n"
+                "╰───✦\n"
+                "\n"
+                "⏳ Selecciona el rango de tiempo:"
+            ),
+            "search_step_format": (
+                "╭───✦ 📄 **FORMATO DE SALIDA**\n"
+                "├─ Elige cómo quieres recibir los resultados\n"
+                "╰───✦"
+            ),
+            "search_loading": (
+                "╭───✦ 🔍 **BUSCANDO**\n"
+                "├─ 🔎 Dominio: `{0}`\n"
+                "├─ ⏱️ Transcurrido: `{3}s`\n"
+                "╰───✦\n"
+                "\n"
+                "{1} {2}"
             ),
             "search_completed": (
-                "╭───✦ ✅ BUSQUEDA COMPLETADA\n"
-                "├● 🔍 Dominio: `{}`\n"
-                "├● 📑 Tipo: `{}`\n"
-                "├● 📊 Resultados: `{}`\n"
-                "├● ⏱ Tiempo: `{:.1f}s`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                "╭───✦ ✅ **BÚSQUEDA COMPLETADA**\n"
+                "├─ 🔎 Dominio: `{0}`\n"
+                "├─ 📑 Formato: `{1}`\n"
+                "├─ 📊 Resultados: **{2}**\n"
+                "├─ ⏱️ Tiempo: `{3:.1f}s`\n"
+                "╰───✦"
             ),
             "search_completed_free": (
-                "╭───✦ ✅ BUSQUEDA COMPLETADA\n"
-                "├● 🔍 Dominio: `{}`\n"
-                "├● 📑 Tipo: `{}`\n"
-                "├● 📊 Resultados: `{}`\n"
-                "├● ⏱ Tiempo: `{:.1f}s`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
-                "🎁 Esta fue tu **busqueda gratis**. Para seguir buscando, compra VIP."
+                "╭───✦ ✅ **BÚSQUEDA COMPLETADA**\n"
+                "├─ 🔎 Dominio: `{0}`\n"
+                "├─ 📑 Formato: `{1}`\n"
+                "├─ 📊 Resultados: **{2}**\n"
+                "├─ ⏱️ Tiempo: `{3:.1f}s`\n"
+                "╰───✦\n"
+                "\n"
+                "🎁 Esta fue tu **búsqueda gratis**.\n"
+                "💎 Consigue VIP para seguir buscando."
             ),
-            "download_progress": (
-                "📥 Descargando: `{}`\n\n"
-                "📊 Progreso: `{}`\n"
-                "⚡ Velocidad: `{}`\n"
-                "⏱ ETA: `{}`"
+            "no_results": (
+                "╭───✦ ⚠️ **SIN RESULTADOS**\n"
+                "├─ No se encontraron datos para `{0}`\n"
+                "├─ 🔁 Prueba con «24h + Antiguos» o reporta la URL\n"
+                "╰───✦"
             ),
+            "search_in_progress": (
+                "⏳ **Búsqueda en curso**\n"
+                "\n"
+                "Tu búsqueda se ejecutará automáticamente al terminar la actual.\n"
+                "📋 Posición en cola: `{0}`"
+            ),
+            "search_already_running": (
+                "⏳ **Búsqueda en curso** — se ejecutará automáticamente al terminar la actual."
+            ),
+            "access_denied": (
+                "╭───✦ 🚫 **ACCESO DENEGADO**\n"
+                "├─ Tu búsqueda gratis ya fue utilizada\n"
+                "├─ 💎 Necesitas VIP para seguir buscando\n"
+                "╰───✦"
+            ),
+            "access_denied_no_free": (
+                "╭───✦ 🚫 **ACCESO DENEGADO**\n"
+                "├─ Esta función es exclusiva para usuarios **VIP**\n"
+                "├─ 💎 Consigue tu VIP desde «Comprar VIP»\n"
+                "╰───✦"
+            ),
+            "loading": "⚙️ **Procesando...**",
+
+            # ── Keys / canje ────────────────────────────────
             "redeem_success": (
-                "╭───✦ 🎉 FELICIDADES\n"
-                "├● Tu cuenta VIP ha sido activada exitosamente\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                "╭━━━━━━━━━━━━━━━━━━━━╮\n"
+                "┃ 🎉 **¡VIP ACTIVADO!**\n"
+                "╰━━━━━━━━━━━━━━━━━━━━╯\n"
+                "\n"
+                "✅ Tu cuenta VIP se activó correctamente.\n"
+                "🚀 Disfruta de todas las funciones premium."
             ),
             "canjear_invalid": (
-                "╭───✦ ❌ KEY INVALIDA\n"
-                "├● El codigo ingresado no es valido o ya fue usado\n"
-                "├● Usa: /canjear HJ-XXXXXXXXXXXX\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                "╭───✦ ❌ **KEY INVÁLIDA**\n"
+                "├─ El código no existe o ya fue utilizado\n"
+                "├─ 📌 Formato: `/canjear HJ-XXXXXXXXXXXX`\n"
+                "╰───✦"
             ),
             "canjear_info": (
-                "╭───✦ 🔑 CANJEAR KEY VIP\n"
-                "├● Usa el comando para activar tu VIP:\n"
-                "├● /canjear HJ-XXXXXXXXXXXX\n"
-                "├● \n"
-                "├● 💡 Ejemplo:\n"
-                "├● /canjear HJ-ABC123DEF456\n"
-                "├● \n"
-                "├● 📬 Consigue una key contactando a:\n"
-                "├● @hjofc20\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                "╭───✦ 🔑 **CANJEAR KEY VIP**\n"
+                "├─ Activa tu VIP con el comando:\n"
+                "├─ ➡️ `/canjear HJ-XXXXXXXXXXXX`\n"
+                "├─\n"
+                "├─ 💡 Ejemplo:\n"
+                "├─ ➡️ `/canjear HJ-ABC123DEF456`\n"
+                "╰───✦\n"
+                "\n"
+                "📞 Consigue tu key en: @hjofc20"
             ),
             "key_generated": (
-                "╭───✦ ✅ KEY GENERADA EXITOSAMENTE\n"
-                "├● 🔑 Codigo: `{}`\n"
-                "├● 🔗 Link de canje: {}\n"
-                "├● 📅 Dias: {}\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                "╭───✦ ✅ **KEY GENERADA**\n"
+                "├─ 🔑 Código: `{0}`\n"
+                "├─ 🔗 Canje: {1}\n"
+                "├─ 📅 Duración: **{2} días**\n"
+                "╰───✦\n"
+                "\n"
+                "📤 Comparte el link con tu cliente para activarlo."
             ),
-            "admin_panel": (
-                "╭───✦ 🔐 PANEL ADMIN\n"
-                "├● 👑 VIPs: `{}`\n"
-                "├● 💼 Sellers: `{}`\n"
-                "├● 🔍 Busquedas: `{}`\n"
-                "├● 👥 Total usuarios: `{}`\n"
-                "├● 🆕 Nuevos (sin buscar): `{}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "stats_global": (
-                "╭───✦ 📊 ESTADISTICAS GLOBALES\n"
-                "├● 👑 Usuarios VIP: `{}`\n"
-                "├● 💼 Sellers: `{}`\n"
-                "├● 🔍 Busquedas Totales: `{}`\n"
-                "├● 👥 Total Usuarios: `{}`\n"
-                "├● 🆕 Nuevos (sin buscar): `{}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "broadcast_done": (
-                "╭───✦ ✅ BROADCAST FINALIZADO\n"
-                "├● 📬 Enviados: `{}`\n"
-                "├● 🚫 Fallidos: `{}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "update_bot_start": (
-                "╭───✦ 🔄 ACTUALIZANDO BOT\n"
-                "├● ⏳ Descargando cambios...\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "update_bot_success": (
-                "╭───✦ ✅ BOT ACTUALIZADO\n"
-                "├● 🔄 Reiniciando en 3 segundos...\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "update_bot_fail": (
-                "╭───✦ ❌ ERROR AL ACTUALIZAR\n"
-                "├● 📄 `{}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "update_bot_uptodate": (
-                "╭───✦ ✅ BOT ACTUALIZADO\n"
-                "├● Ya esta en la ultima version\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "imap_info": (
-                "╝══─✦ 📧 IMAP CHECKER\n"
-                "├● Chequea combos **mail:pass** via IMAP SSL\n"
-                "╰══─✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
-                "**Formas de uso:**\n\n"
-                "1️⃣ **Sin keywords** (hits directos):\n"
-                "   Responde a un .txt + `/imap`\n\n"
-                "2️⃣ **Con keywords** (filtro + ZIP):\n"
-                "   Responde a un .txt + `/imap kw1, kw2`\n\n"
-                "3️⃣ **Por pais** (geolocalizacion + ZIP):\n"
-                "   Responde a un .txt + `/imap country`\n\n"
-                "**Ejemplo:**\n"
-                "`/imap netflix, spotify, amazon`\n\n"
-                "📌 **Maximo 10 keywords** separadas por coma\n\n"
-                "📁 El ZIP contiene:\n"
-                "   📄 `all_hits.txt` — todos los hits\n"
-                "   📄 `bad_accounts.txt` — cuentas fallidas\n"
-                "   📁 `domains/` — hits agrupados por dominio\n"
-                "   📁 `keywords/` — resultados por keyword con fecha\n"
-                "   📁 `countries/` — hits agrupados por pais (modo country)"
-            ),
-            "imap_no_file": (
-                "╭───✦ ❌ IMAP CHECKER\n"
-                "├● Debes **responder a un .txt** con combos mail:pass\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
-                "💡 Responde al archivo + `/imap kw1, kw2`"
-            ),
-            "imap_too_many_keywords": (
-                "╭───✦ ⚠️ IMAP CHECKER\n"
-                "├● Maximo **10 keywords** permitidas\n"
-                "├● Usaste: `{}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "imap_keywords_waiting_file": (
-                "╭───✦ 📧 IMAP CHECKER\n"
-                "├● 🔎 **Keywords:** `{}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
-                "⏳ Ahora envia un .txt con mail:pass para iniciar."
-            ),
-            "imap_processing": (
-                "╭───✦ 📧 IMAP CHECKER\n"
-                "├● 📊 Progreso: `{}/{}` │ ✅ Hits: `{}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
-                "{}"
-            ),
-            "imap_completed": (
-                "╭───✦ 📧 IMAP CHECK\n"
-                "├● 📊 Total: `{}`\n"
-                "├● ✅ Hits: `{}`\n"
-                "├● ❌ Bads: `{}`\n"
-                "├● ⏱ Tiempo: `{:.1f}s`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "imap_no_hits": (
-                "╭───✦ 📧 IMAP CHECK\n"
-                "├● 📊 Total: `{}`\n"
-                "├● ❌ 0 Hits encontrados\n"
-                "├● ⏱ Tiempo: `{:.1f}s`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-            ),
-            "imap_zip_caption": (
-                "╭───✦ 📧 IMAP + KEYWORDS\n"
-                "├● 📊 Total: `{}` │ ✅ Hits: `{}` │ ❌ Bads: `{}`\n"
-                "├● ⏱ Tiempo: `{:.1f}s`\n"
-                "├● 🔎 Keywords: `{}`\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
-                "📁 `all_hits.txt` — `{}` hits totales\n"
-                "📁 `bad_accounts.txt` — cuentas fallidas\n"
-                "📁 `domains/` — por dominio\n"
-                "📁 `keywords/` — por keyword con fecha"
-            ),
-            "imap_country_waiting_file": (
-                "\u255d\u2500\u2500\u2500\u2726 \U0001f4e7 IMAP CHECKER\n"
-                "\u251c\u25cf \U0001f30d **Modo:** Geolocalizacion por pais\n"
-                "\u2570\u2500\u2500\u2500\u2726 \u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\n\n"
-                "\u23f3 Ahora envia un .txt con mail:pass para iniciar."
-            ),
-            "imap_country_resolving": (
-                "\u255d\u2500\u2500\u2500\u2726 \U0001f30d GEOLICALIZANDO HITS\n"
-                "\u251c\u25cf \U0001f4e7 {} hits para resolver\n"
-                "\u2570\u2500\u2500\u2500\u2726 \u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508"
-            ),
-            "imap_country_progress": (
-                "\u255d\u2500\u2500\u2500\u2726 \U0001f30d GEOLICALIZANDO HITS\n"
-                "\u251c\u25cf \U0001f4ca Progreso: `{}/{}` \u2502 \U0001f30d Paises: `{}`\n"
-                "\u2570\u2500\u2500\u2500\u2726 \u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\n\n"
-                "{}"
-            ),
-            "imap_zip_caption_country": (
-                "\u255d\u2500\u2500\u2500\u2726 \U0001f4e7 IMAP + COUNTRIES\n"
-                "\u251c\u25cf \U0001f4ca Total: `{}` \u2502 \u2705 Hits: `{}` \u2502 \u274c Bads: `{}`\n"
-                "\u251c\u25cf \u23f1 Tiempo: `{:.1f}s`\n"
-                "\u251c\u25cf \U0001f30d Paises detectados: `{}`\n"
-                "\u2570\u2500\u2500\u2500\u2726 \u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\n\n"
-                "\U0001f4c1 `all_hits.txt` — todos los hits\n"
-                "\U0001f4c1 `bad_accounts.txt` — cuentas fallidas\n"
-                "\U0001f4c1 `domains/` — por dominio\n"
-                "\U0001f4c1 `countries/` — por pais con resumen"
-            ),
-            "imap_zip_caption_country_kw": (
-                "\u255d\u2500\u2500\u2500\u2726 \U0001f4e7 IMAP + KEYWORDS + COUNTRIES\n"
-                "\u251c\u25cf \U0001f4ca Total: `{}` \u2502 \u2705 Hits: `{}` \u2502 \u274c Bads: `{}`\n"
-                "\u251c\u25cf \u23f1 Tiempo: `{:.1f}s`\n"
-                "\u251c\u25cf \U0001f50d Keywords: `{}`\n"
-                "\u251c\u25cf \U0001f30d Paises detectados: `{}`\n"
-                "\u2570\u2500\u2500\u2500\u2726 \u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\u2508\n\n"
-                "\U0001f4c1 `all_hits.txt` — `{}` hits totales\n"
-                "\U0001f4c1 `bad_accounts.txt` — cuentas fallidas\n"
-                "\U0001f4c1 `domains/` — por dominio\n"
-                "\U0001f4c1 `keywords/` — por keyword con fecha\n"
-                "\U0001f4c1 `countries/` — por pais con resumen"
+
+            # ── Compra VIP ──────────────────────────────────
+            "buy_vip_info": (
+                "╭───✦ 💎 **COMPRAR VIP**\n"
+                "├─ ⚡ 1 día » $6\n"
+                "├─ 📊 3 días » $10\n"
+                "├─ 🔥 7 días » $25\n"
+                "├─ 👑 30 días » $100\n"
+                "╰───✦\n"
+                "\n"
+                "📬 Contacto: {0}"
             ),
             "pay_plans": (
-                "╭───✦ 💳 COMPRAR VIP — PAGO AUTOMATICO\n"
-                "├● Moneda: **Multi-Cripto (USDT, TRX, etc.)**\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
-                "Selecciona tu plan:"
+                "╭───✦ 💳 **COMPRAR VIP**\n"
+                "├─ 🪙 Pago automático multi-cripto\n"
+                "├─ ⚡ Activación instantánea al confirmar\n"
+                "╰───✦\n"
+                "\n"
+                "👇 Selecciona tu plan:"
             ),
             "pay_invoice": (
-                "╭───✦ 💳 PAGO CREADO\n"
-                "├● 📦 Plan: **{}**\n"
-                "├● 💲 Monto: **${:.2f} USD**\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n"
-                "🔗 **Paga aqui:**\n{}\n\n"
-                "⏳ VIP se activara automaticamente al confirmar.\n"
-                "📋 Verificacion cada 30 segundos."
+                "╭───✦ 💳 **PAGO CREADO**\n"
+                "├─ 📦 Plan: **{0}**\n"
+                "├─ 💲 Monto: **${1:.2f} USD**\n"
+                "╰───✦\n"
+                "\n"
+                "🔗 Paga aquí: {2}\n"
+                "\n"
+                "⏳ Tu VIP se activa automáticamente al confirmar el pago."
             ),
-            "pay_checking": "⏳ Verificando estado del pago...",
+            "pay_checking": "⏳ Verificando el estado de tu pago...",
             "pay_pending": (
-                "╭───✦ ⏳ PAGO PENDIENTE\n"
-                "├● Tu pago esta siendo procesado\n"
-                "├● El VIP se activara automaticamente\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                "╭───✦ ⏳ **PAGO PENDIENTE**\n"
+                "├─ Tu pago está siendo procesado por la red\n"
+                "├─ ⚡ El VIP se activará automáticamente al confirmar\n"
+                "╰───✦"
+            ),
+            "pay_status_pending": (
+                "╭───✦ ⏳ **PAGO EN PROCESO**\n"
+                "├─ 📦 Plan: **{0}**\n"
+                "├─ 💲 Monto: **${1:.2f} USD**\n"
+                "├─ 🌐 La red está confirmando tu transacción\n"
+                "├─ ⚡ El VIP se activa automáticamente al confirmar\n"
+                "╰───✦"
+            ),
+            "pay_no_pending": (
+                "╭───✦ 💳 **SIN PAGOS PENDIENTES**\n"
+                "├─ No encontramos pagos en proceso para tu cuenta\n"
+                "├─ 💎 Crea uno desde «Comprar VIP»\n"
+                "╰───✦"
             ),
             "pay_expired": (
-                "╭───✦ ❌ PAGO EXPIRADO\n"
-                "├● La factura expiro\n"
-                "├● Crea una nueva para intentar de nuevo\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                "╭───✦ ❌ **PAGO EXPIRADO**\n"
+                "├─ La factura ha expirado\n"
+                "├─ 🔄 Crea una nueva desde «Comprar VIP»\n"
+                "╰───✦"
             ),
             "pay_failed": (
-                "╭───✦ ❌ PAGO FALLIDO\n"
-                "├● Hubo un error con el pago\n"
-                "├● Intenta nuevamente o contacta soporte\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                "╭───✦ ❌ **PAGO FALLIDO**\n"
+                "├─ Hubo un error procesando el pago\n"
+                "├─ 🔄 Inténtalo de nuevo o contacta a soporte\n"
+                "╰───✦"
             ),
             "pay_success": (
-                "╭───✦ ✅ PAGO CONFIRMADO\n"
-                "├● 🎉 Tu VIP ha sido activado por **{} dias**\n"
-                "├● Ya puedes usar /url para buscar\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                "╭━━━━━━━━━━━━━━━━━━━━╮\n"
+                "┃ ✅ **PAGO CONFIRMADO**\n"
+                "╰━━━━━━━━━━━━━━━━━━━━╯\n"
+                "\n"
+                "🎉 Tu VIP fue activado por **{0} días**.\n"
+                "🚀 Ya puedes usar /url o el menú para buscar."
             ),
             "pay_api_error": (
-                "╭───✦ ❌ ERROR DE PAGO\n"
-                "├● No se pudo crear la factura\n"
-                "├● Intenta de nuevo en unos minutos\n"
-                "╰───✦ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+                "╭───✦ ❌ **ERROR DE PAGO**\n"
+                "├─ No se pudo crear la factura\n"
+                "├─ ⏳ Inténtalo de nuevo en unos minutos\n"
+                "╰───✦"
+            ),
+            "pay_deposit": (
+                "╭───✦ 💳 **PAGO CREADO**\n"
+                "├─ 📦 Plan: **{0}**\n"
+                "├─ 💲 Precio: **${1:.2f} USD**\n"
+                "╰───✦\n"
+                "\n"
+                "📎 Envía exactamente: **{2} {3}**\n"
+                "📍 A la dirección: `{4}`\n"
+                "\n"
+                "⏳ El VIP se activa automáticamente al confirmar."
+            ),
+
+            # ── Admin ───────────────────────────────────────
+            "admin_panel": (
+                "╭───✦ 🔐 **PANEL DE ADMINISTRACIÓN**\n"
+                "├─ 👑 VIPs activos: `{0}`\n"
+                "├─ 💼 Sellers: `{1}`\n"
+                "├─ 🔍 Búsquedas totales: `{2}`\n"
+                "├─ 👥 Usuarios registrados: `{3}`\n"
+                "├─ 🆕 Nuevos (sin buscar): `{4}`\n"
+                "╰───✦"
+            ),
+            "stats_global": (
+                "╭───✦ 📊 **ESTADÍSTICAS GLOBALES**\n"
+                "├─ 👑 Usuarios VIP: `{0}`\n"
+                "├─ 💼 Sellers: `{1}`\n"
+                "├─ 🔍 Búsquedas totales: `{2}`\n"
+                "├─ 👥 Usuarios totales: `{3}`\n"
+                "├─ 🆕 Nuevos (sin buscar): `{4}`\n"
+                "╰───✦"
+            ),
+            "vip_list_header": "╭───✦ 👑 **USUARIOS VIP** · {0}",
+            "sellers_list_header": "╭───✦ 💼 **SELLERS** · {0}",
+            "vip_list_empty": (
+                "╭───✦ 👑 **USUARIOS VIP**\n"
+                "├─ No hay usuarios VIP activos\n"
+                "╰───✦"
+            ),
+            "sellers_list_empty": (
+                "╭───✦ 💼 **SELLERS**\n"
+                "├─ No hay sellers registrados\n"
+                "╰───✦"
+            ),
+            "list_footer": "╰───✦",
+            "list_more": "├─ … y **{0}** más",
+            "broadcast_started": (
+                "╭───✦ 📣 **{0} INICIADO**\n"
+                "├─ 👥 Destinatarios: `{1}`\n"
+                "├─ ⏳ Enviando...\n"
+                "╰───✦"
+            ),
+            "broadcast_progress": (
+                "╭───✦ 📣 **{0}**\n"
+                "├─ 📬 Enviados: `{1}/{2}`\n"
+                "├─ 🚫 Fallidos: `{3}`\n"
+                "╰───✦"
+            ),
+            "broadcast_done": (
+                "╭───✦ ✅ **BROADCAST FINALIZADO**\n"
+                "├─ 📬 Enviados: `{0}`\n"
+                "├─ 🚫 Fallidos: `{1}`\n"
+                "╰───✦"
+            ),
+            "sizedisp_info": (
+                "╭───✦ 💾 **ALMACENAMIENTO VPS**\n"
+                "├─ 📊 Total: `{0}`\n"
+                "├─ 📈 Usado: `{1}` (`{2:.1f}%`)\n"
+                "├─ 📉 Libre: `{3}`\n"
+                "╰───✦\n"
+                "\n"
+                "`{4}`"
+            ),
+
+            # ── Actualización ───────────────────────────────
+            "update_bot_start": (
+                "╭───✦ 🔄 **ACTUALIZANDO BOT**\n"
+                "├─ ⏳ Descargando cambios desde GitHub...\n"
+                "╰───✦"
+            ),
+            "update_bot_success": (
+                "╭───✦ ✅ **BOT ACTUALIZADO**\n"
+                "├─ 🔄 Reiniciando en 3 segundos...\n"
+                "╰───✦"
+            ),
+            "update_bot_fail": (
+                "╭───✦ ❌ **ERROR AL ACTUALIZAR**\n"
+                "├─ 📄 `{0}`\n"
+                "╰───✦"
+            ),
+            "update_bot_uptodate": (
+                "╭───✦ ✅ **BOT ACTUALIZADO**\n"
+                "├─ Ya estás en la última versión\n"
+                "╰───✦"
+            ),
+
+            # ── IMAP Checker ────────────────────────────────
+            "imap_info": (
+                "╭───✦ 📧 **IMAP CHECKER**\n"
+                "├─ Verifica combos **mail:pass** vía IMAP SSL\n"
+                "╰───✦\n"
+                "\n"
+                "**Modos de uso:**\n"
+                "\n"
+                "1️⃣ **Clásico** — hits directos:\n"
+                "     Responde a un .txt + `/imap`\n"
+                "\n"
+                "2️⃣ **Con keywords** — filtro + ZIP:\n"
+                "     Responde a un .txt + `/imap kw1, kw2`\n"
+                "\n"
+                "3️⃣ **Por país** — geolocalización + ZIP:\n"
+                "     Responde a un .txt + `/imap country`\n"
+                "\n"
+                "📌 Ejemplo: `/imap netflix, spotify, amazon`\n"
+                "📌 Máximo **10 keywords** separadas por coma\n"
+                "\n"
+                "📁 El ZIP incluye:\n"
+                "     📄 `all_hits.txt` — todos los hits\n"
+                "     📄 `bad_accounts.txt` — cuentas fallidas\n"
+                "     📁 `domains/` — agrupados por dominio\n"
+                "     📁 `keywords/` — por keyword con detalle\n"
+                "     📁 `countries/` — por país (modo country)"
+            ),
+            "imap_no_file": (
+                "╭───✦ ❌ **IMAP CHECKER**\n"
+                "├─ Debes responder a un archivo **.txt** con combos `mail:pass`\n"
+                "╰───✦\n"
+                "\n"
+                "💡 Uso: responde al archivo + `/imap kw1, kw2`"
+            ),
+            "imap_too_many_keywords": (
+                "╭───✦ ⚠️ **IMAP CHECKER**\n"
+                "├─ Máximo **10 keywords** permitidas\n"
+                "├─ Usaste: `{0}`\n"
+                "╰───✦"
+            ),
+            "imap_keywords_waiting_file": (
+                "╭───✦ 📧 **IMAP CHECKER**\n"
+                "├─ 🔎 Keywords: `{0}`\n"
+                "╰───✦\n"
+                "\n"
+                "⏳ Ahora envía un archivo .txt con `mail:pass` para iniciar."
+            ),
+            "imap_country_waiting_file": (
+                "╭───✦ 🌍 **IMAP CHECKER · MODO PAÍS**\n"
+                "├─ Los hits se agruparán por geolocalización\n"
+                "╰───✦\n"
+                "\n"
+                "⏳ Ahora envía un archivo .txt con `mail:pass` para iniciar."
+            ),
+            "imap_processing": (
+                "╭───✦ 📧 **IMAP CHECKER**\n"
+                "├─ 📊 Progreso: `{0}/{1}` · ✅ Hits: `{2}`\n"
+                "╰───✦\n"
+                "\n"
+                "{3}"
+            ),
+            "imap_country_resolving": (
+                "╭───✦ 🌍 **GEOLOCALIZANDO HITS**\n"
+                "├─ 📧 Resolviendo: `{0}` cuentas\n"
+                "╰───✦"
+            ),
+            "imap_country_progress": (
+                "╭───✦ 🌍 **GEOLOCALIZANDO HITS**\n"
+                "├─ 📊 Progreso: `{0}/{1}` · 🌍 Países: `{2}`\n"
+                "╰───✦\n"
+                "\n"
+                "{3}"
+            ),
+            "imap_completed": (
+                "╭───✦ 📧 **IMAP CHECK FINALIZADO**\n"
+                "├─ 📊 Total: `{0}`\n"
+                "├─ ✅ Hits: `{1}`\n"
+                "├─ ❌ Bads: `{2}`\n"
+                "├─ ⏱️ Tiempo: `{3:.1f}s`\n"
+                "╰───✦"
+            ),
+            "imap_no_hits": (
+                "╭───✦ 📧 **IMAP CHECK FINALIZADO**\n"
+                "├─ 📊 Total: `{0}`\n"
+                "├─ ❌ 0 hits encontrados\n"
+                "├─ ⏱️ Tiempo: `{1:.1f}s`\n"
+                "╰───✦"
+            ),
+            "imap_zip_caption": (
+                "╭───✦ 📧 **IMAP + KEYWORDS**\n"
+                "├─ 📊 Total: `{0}` · ✅ Hits: `{1}` · ❌ Bads: `{2}`\n"
+                "├─ ⏱️ Tiempo: `{3:.1f}s`\n"
+                "├─ 🔎 Keywords: `{4}`\n"
+                "╰───✦\n"
+                "\n"
+                "📁 `all_hits.txt` — {5} hits totales\n"
+                "📁 `bad_accounts.txt` — cuentas fallidas\n"
+                "📁 `domains/` — agrupados por dominio\n"
+                "📁 `keywords/` — por keyword con detalle"
+            ),
+            "imap_zip_caption_country": (
+                "╭───✦ 🌍 **IMAP + PAÍSES**\n"
+                "├─ 📊 Total: `{0}` · ✅ Hits: `{1}` · ❌ Bads: `{2}`\n"
+                "├─ ⏱️ Tiempo: `{3:.1f}s`\n"
+                "├─ 🌍 Países detectados: `{4}`\n"
+                "╰───✦\n"
+                "\n"
+                "📁 `all_hits.txt` — todos los hits\n"
+                "📁 `bad_accounts.txt` — cuentas fallidas\n"
+                "📁 `domains/` — agrupados por dominio\n"
+                "📁 `countries/` — por país con resumen"
+            ),
+            "imap_zip_caption_country_kw": (
+                "╭───✦ 🌍 **IMAP + KEYWORDS + PAÍSES**\n"
+                "├─ 📊 Total: `{0}` · ✅ Hits: `{1}` · ❌ Bads: `{2}`\n"
+                "├─ ⏱️ Tiempo: `{3:.1f}s`\n"
+                "├─ 🔎 Keywords: `{4}`\n"
+                "├─ 🌍 Países detectados: `{6}`\n"
+                "╰───✦\n"
+                "\n"
+                "📁 `all_hits.txt` — {5} hits totales\n"
+                "📁 `bad_accounts.txt` — cuentas fallidas\n"
+                "📁 `domains/` — agrupados por dominio\n"
+                "📁 `keywords/` — por keyword con detalle\n"
+                "📁 `countries/` — por país con resumen"
+            ),
+
+            # ── Descargas ───────────────────────────────────
+            "file_management": (
+                "╭───✦ 📂 **GESTIÓN DE ARCHIVOS**\n"
+                "├─ 📁 Total: `{0}` archivos\n"
+                "├─ ⚡ Últimas 24h: `{1}`\n"
+                "├─ 🗄️ Histórico: `{2}`\n"
+                "╰───✦\n"
+                "\n"
+                "╭───✦ 🔄 **DESCARGAS**\n"
+                "├─ ♻️ Auto-DL: **{3}**\n"
+                "├─ 📥 En cola: `{4}` archivos\n"
+                "├─ ⬇️ Activas: `{5}` descargas\n"
+                "╰───✦"
+            ),
+            "download_progress": (
+                "📥 **Descargando:** `{0}`\n"
+                "\n"
+                "📊 Progreso: `{1}`\n"
+                "⚡ Velocidad: `{2}`\n"
+                "⏱️ ETA: `{3}`"
+            ),
+
+            # ── Errores ─────────────────────────────────────
+            "error_generic": (
+                "╭───✦ ❌ **ERROR**\n"
+                "├─ Ocurrió un problema: `{0}`\n"
+                "├─ 🔄 Inténtalo de nuevo en unos segundos\n"
+                "╰───✦"
+            ),
+
+            # ── Fases de búsqueda / misc ────────────────────
+            "phase_scanning": "📂 Escaneando bases de datos...",
+            "phase_processing": "⚡ Procesando coincidencias...",
+            "phase_filtering": "🧮 Filtrando resultados...",
+            "free_available": "Disponible",
+            "free_used": "Usada",
+            "report_received": (
+                "╭───✦ ⚠️ **REPORTE DE URL**\n"
+                "├─ 👤 Usuario: `{0}`\n"
+                "├─ 🔍 URL: `{1}`\n"
+                "╰───✦"
             ),
         }
 
-        # Cargar archivos de locale externos
+        # Los archivos locales/*.json sobrescriben el diccionario base
         for lang_file in self.locales_dir.glob('*.json'):
             lang_code = lang_file.stem
             try:
@@ -415,7 +607,7 @@ class LocaleManager:
             return self.get(key, 'es', *args)
         try:
             return text.format(*args) if args else text
-        except (IndexError, KeyError):
+        except (IndexError, KeyError, ValueError):
             return text
 
 

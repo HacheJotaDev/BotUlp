@@ -38,3 +38,7 @@ auto_dl_task: Optional[asyncio.Task] = None
 # Referencia a clientes Telegram (se asignan en bot.py)
 bot = None
 userbot = None
+
+# v4.0 — Info de sesión
+START_TIME: float = 0.0                 # epoch del arranque (para /ping)
+USER_NAMES: Dict[int, str] = {}         # caché de nombres para saludos

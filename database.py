@@ -8,9 +8,10 @@ import sqlite3
 import random
 import string
 import threading
+import time
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from config import config
 from logger_setup import logger
@@ -26,13 +27,33 @@ class Database:
     def __init__(self, db_path: Path):
         self.db_path = db_path
         self._lock = threading.Lock()
+        # Caché de usuarios en RAM: uid -> (dict_usuario, timestamp)
+        # FIX v4.0: evita un SELECT + UPDATE + commit por cada mensaje/callback
+        # (antes se golpeaba SQLite en CADA interaccion del bot)
+        self._user_cache: Dict[int, Tuple[dict, float]] = {}
+        self._last_active_ts: Dict[int, float] = {}
         self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.execute("PRAGMA cache_size=-64000")
         self.conn.execute("PRAGMA temp_store=MEMORY")
+        self.conn.execute("PRAGMA busy_timeout=5000")
         self._init_schema()
+
+    # ── Caché de usuarios ───────────────────────────────────
+
+    def _cache_get(self, uid: int):
+        entry = self._user_cache.get(uid)
+        if entry and (time.time() - entry[1]) < config.USER_CACHE_TTL:
+            return entry[0]
+        return None
+
+    def _cache_set(self, user: dict):
+        self._user_cache[user['user_id']] = (user, time.time())
+
+    def _cache_invalidate(self, uid: int):
+        self._user_cache.pop(uid, None)
 
     def _init_schema(self):
         c = self.conn.cursor()
@@ -110,6 +131,11 @@ class Database:
         self.conn.commit()
 
     def get_user(self, uid: int) -> dict:
+        # 1) Servir desde caché (lecturas rapidísimas, cero SQL)
+        cached = self._cache_get(uid)
+        if cached is not None:
+            return cached
+
         c = self.conn.cursor()
         c.execute("SELECT * FROM users WHERE user_id = ?", (uid,))
         row = c.fetchone()
@@ -120,21 +146,33 @@ class Database:
                 (uid, now, now)
             )
             self.conn.commit()
-            return {
+            user = {
                 'user_id': uid, 'role': 'FREE', 'vip_expiry': None,
                 'search_count': 0, 'language': 'es',
                 'first_seen': now, 'last_active': now,
                 'free_search_used': 0
             }
-        try:
-            c.execute(
-                "UPDATE users SET last_active = ? WHERE user_id = ?",
-                (datetime.now(timezone.utc).isoformat(), uid)
-            )
-            self.conn.commit()
-        except Exception:
-            pass
-        return dict(row)
+            self._cache_set(user)
+            return user
+
+        user = dict(row)
+
+        # 2) last_active con throttle: como mucho 1 UPDATE cada LAST_ACTIVE_INTERVAL
+        now_ts = time.time()
+        last_upd = self._last_active_ts.get(uid, 0)
+        if now_ts - last_upd > config.LAST_ACTIVE_INTERVAL:
+            self._last_active_ts[uid] = now_ts
+            try:
+                c.execute(
+                    "UPDATE users SET last_active = ? WHERE user_id = ?",
+                    (datetime.now(timezone.utc).isoformat(), uid)
+                )
+                self.conn.commit()
+            except Exception:
+                pass
+
+        self._cache_set(user)
+        return user
 
     def is_new_user(self, uid: int) -> bool:
         """Verificar si el usuario es nuevo (nunca ha usado su busqueda gratis)."""
@@ -150,12 +188,14 @@ class Database:
                 (uid,)
             )
             self.conn.commit()
+        self._cache_invalidate(uid)
 
     def set_language(self, uid: int, lang: str):
         with self._lock:
             c = self.conn.cursor()
             c.execute("UPDATE users SET language = ? WHERE user_id = ?", (lang, uid))
             self.conn.commit()
+        self._cache_invalidate(uid)
 
     def set_role(self, uid: int, role: str, days: int = 0):
         expiry = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat() if role == 'VIP' else None
@@ -167,12 +207,14 @@ class Database:
                 (uid, role, expiry)
             )
             self.conn.commit()
+        self._cache_invalidate(uid)
 
     def remove_vip(self, uid: int):
         with self._lock:
             c = self.conn.cursor()
             c.execute("UPDATE users SET role='FREE', vip_expiry=NULL WHERE user_id=?", (uid,))
             self.conn.commit()
+        self._cache_invalidate(uid)
 
     def gen_key(self, creator: int, days: int) -> str:
         code = f"HJ-{''.join(random.choices(string.ascii_uppercase + string.digits, k=12))}"
@@ -217,6 +259,7 @@ class Database:
                 (uid, expiry)
             )
             self.conn.commit()
+        self._cache_invalidate(uid)
         return True
 
     def add_search(self, uid: int):
@@ -224,6 +267,7 @@ class Database:
             c = self.conn.cursor()
             c.execute("UPDATE users SET search_count = search_count + 1 WHERE user_id = ?", (uid,))
             self.conn.commit()
+        self._cache_invalidate(uid)
 
     def get_stats(self) -> dict:
         self.cleanup_expired_vips()
@@ -258,6 +302,10 @@ class Database:
             if count > 0:
                 self.conn.commit()
                 logger.info(f"VIPs expirados limpiados: {count}")
+        if count > 0:
+            # Invalidar caché de los usuarios afectados
+            for uid in list(self._user_cache.keys()):
+                self._cache_invalidate(uid)
         return count
 
     def list_vips(self) -> List[dict]:
@@ -345,6 +393,16 @@ class Database:
             (user_id,)
         )
         return [dict(r) for r in c.fetchall()]
+
+
+    def close(self):
+        """Cerrar la conexión de base de datos ordenadamente (shutdown)."""
+        try:
+            self.conn.commit()
+            self.conn.close()
+            logger.info("Base de datos cerrada correctamente")
+        except Exception as e:
+            logger.warning(f"Error cerrando base de datos: {e}")
 
 
 db = Database(config.DB_FILE)
