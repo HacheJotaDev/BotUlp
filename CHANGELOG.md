@@ -2,6 +2,15 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.0.1] — Restauración de funciones
+
+### 🔧 Corregido
+- **💎 Comprar VIP restaurado en el menú FREE**: el botón ahora está SIEMPRE visible para usuarios FREE (en 4.0.0 desaparecía mientras la búsqueda gratis estuviera disponible, y el usuario no tenía forma de comprar desde el menú).
+- **💎 Renovar VIP añadido al menú VIP**: los usuarios VIP pueden renovar su suscripción directamente desde el menú principal.
+- **Rango OWNER**: el rango máximo ahora se muestra como `OWNER` (antes `ADMIN`), reflejando los 4 rangos del bot: FREE · VIP · SELLER · OWNER. Se mantiene `UserRole.ADMIN` como alias interno — cero cambios requeridos en el resto del código.
+- Menú FREE reorganizado: `Búsqueda gratis` + `Comprar VIP` + `Canjear key` visibles a la vez, como en versiones anteriores.
+- README actualizado con la nomenclatura de 4 rangos (FREE · VIP · SELLER · OWNER).
+
 ## [4.0.0] — Obsidian Edition
 
 ### 🎨 Diseño

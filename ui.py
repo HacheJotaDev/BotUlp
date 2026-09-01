@@ -36,11 +36,11 @@ class Keyboards:
             buttons = []
             if has_free_search:
                 buttons.append([Button.inline("🎁  Búsqueda gratis  (1/1)", b"search_init")])
-            else:
-                buttons.append([Button.inline("💎  Comprar VIP", b"buy_vip_info")])
-            buttons.append([Button.inline("🔑  Canjear key", b"canjear_key"),
-                            Button.inline("👤  Mi cuenta", b"my_account")])
-            buttons.append([Button.inline("📋  Comandos", b"cmd_list")])
+            # Comprar VIP SIEMPRE visible para usuarios FREE
+            buttons.append([Button.inline("💎  Comprar VIP", b"buy_vip_info"),
+                            Button.inline("🔑  Canjear key", b"canjear_key")])
+            buttons.append([Button.inline("👤  Mi cuenta", b"my_account"),
+                            Button.inline("📋  Comandos", b"cmd_list")])
             buttons.append(Keyboards.LANG_BTN)
             return buttons
 
@@ -48,8 +48,9 @@ class Keyboards:
             return [
                 [Button.inline("🔍  Nueva búsqueda", b"search_init"),
                  Button.inline("📧  IMAP Checker", b"imap_info")],
-                [Button.inline("👤  Mi cuenta", b"my_account"),
-                 Button.inline("📋  Comandos", b"cmd_list")],
+                [Button.inline("💎  Renovar VIP", b"buy_vip_info"),
+                 Button.inline("👤  Mi cuenta", b"my_account")],
+                [Button.inline("📋  Comandos", b"cmd_list")],
                 Keyboards.LANG_BTN,
             ]
 

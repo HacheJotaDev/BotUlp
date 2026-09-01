@@ -26,7 +26,7 @@
 
 - 🔎 **Motor de búsqueda paralelo** con `mmap` y límites anti-cuelgue (resultados, matches y tiempo)
 - 📥 **Descargas hasta 4GB** con streaming, progreso en vivo y cola secuencial anti-FloodWait
-- 👥 **Roles**: FREE (1 búsqueda gratis) · VIP · SELLER · ADMIN
+- 👥 **Roles**: FREE (1 búsqueda gratis) · VIP · SELLER · OWNER
 - 🌐 **Multi-idioma**: Español, English, Português (configurable por usuario)
 - 💳 **Pagos automáticos** con NOWPayments (USDT, BTC, ETH, LTC…) + canje de keys
 - 📧 **IMAP Checker** con keywords, agrupación por dominio y geolocalización por país (ZIP)

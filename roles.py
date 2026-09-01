@@ -12,7 +12,10 @@ from database import db
 
 
 class UserRole(Enum):
-    ADMIN = "ADMIN"
+    # Rango máximo (definido por config.ADMIN_IDS). Se muestra como OWNER.
+    OWNER = "OWNER"
+    # Alias de compatibilidad: UserRole.ADMIN es exactamente UserRole.OWNER
+    ADMIN = "OWNER"
     SELLER = "SELLER"
     VIP = "VIP"
     FREE = "FREE"
