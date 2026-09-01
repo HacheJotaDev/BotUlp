@@ -2,6 +2,21 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.1.0] — Professional Polish
+
+### 🎨 Diseño
+- **Insignias únicas por rango**: el rango se muestra con identidad propia en bienvenida y cuenta — 🆓 FREE · 💎 VIP · 💼 SELLER · 👑 OWNER.
+- **«Mi cuenta» rediseñado**: fecha de registro (Miembro desde), barra de vigencia VIP `▰▰▰▰▱▱`, días restantes con gramática correcta (resta/restan) y fecha DD/MM/AAAA.
+- **Aviso de renovación inteligente**: los VIPs con ≤ 3 días de suscripción ven una advertencia en la bienvenida y en su cuenta para renovar a tiempo.
+- **Teclado «Sin resultados» mejorado**: acceso directo a Nueva búsqueda, Reportar URL y Comprar VIP sin volver al menú.
+- **Botones bajo el archivo de resultados**: «Nueva búsqueda» y «Mi cuenta» adjuntos al archivo entregado — flujo continuo sin pasos extra.
+- Banner y textos actualizados a v4.1 en los 3 idiomas (ES/EN/PT) con claves nuevas sincronizadas en locale.py y locales/*.json.
+
+### 🔧 Corregido
+- Días VIP redondeados hacia arriba (23h restantes muestra «1 día», antes «0 días»).
+- Tildes en respuestas del sistema («Grupo añadido», antes «anadido»).
+- README y docstrings alineados con la nomenclatura de 4 rangos (OWNER).
+
 ## [4.0.1] — Restauración de funciones
 
 ### 🔧 Corregido

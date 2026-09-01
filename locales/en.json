@@ -34,7 +34,7 @@
   "list_footer": "╰───✦",
   "list_more": "├─ … and **{0}** more",
   "loading": "⚙️ **Processing...**",
-  "my_account": "╭───✦ 👤 **MY ACCOUNT**\n├─ 🆔 ID: `{0}`\n├─ 🎖️ Role: **{1}**\n├─ 📅 VIP expires: `{2}`\n├─ 📊 Total searches: `{3}`\n├─ 🔍 Free search: **{4}**\n╰───✦",
+  "my_account": "╭───✦ 👤 **MY ACCOUNT**\n├─ 🆔 ID: `{0}`\n├─ 🎖️ Rank: **{1}**\n├─ 📅 Member since: `{2}`\n├─ 📊 Total searches: `{3}`\n{4}╰───✦",
   "no_results": "╭───✦ ⚠️ **NO RESULTS**\n├─ No data found for `{0}`\n├─ 🔁 Try «24h + Old» or report the URL\n╰───✦",
   "pay_api_error": "╭───✦ ❌ **PAYMENT ERROR**\n├─ Could not create the invoice\n├─ ⏳ Try again in a few minutes\n╰───✦",
   "pay_checking": "⏳ Checking your payment status...",
@@ -71,6 +71,13 @@
   "update_bot_uptodate": "╭───✦ ✅ **BOT UPDATED**\n├─ You are already on the latest version\n╰───✦",
   "vip_list_empty": "╭───✦ 👑 **VIP USERS**\n├─ No active VIP users\n╰───✦",
   "vip_list_header": "╭───✦ 👑 **VIP USERS** · {0}",
-  "welcome": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.0 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hello, **{0}**\n\n╭───✦ ⚡ **ADVANTAGES**\n├─ 🔎 Ultra-fast parallel search\n├─ 🗄️ Databases updated 24/7\n├─ 🛡️ Privacy & full anonymity\n├─ 📦 Data ready to use\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMMANDS**\n├─ {1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **YOUR ACCOUNT**\n├─ 🎖️ Role: **{2}**\n├─ 📊 Searches: `{3}`\n╰───✦\n\n🌟 Support: @hjofc20",
-  "welcome_new": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.0 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hello, **{0}**\n\n╭───✦ ⚡ **ADVANTAGES**\n├─ 🔎 Ultra-fast parallel search\n├─ 🗄️ Databases updated 24/7\n├─ 🛡️ Privacy & full anonymity\n├─ 📦 Data ready to use\n╰───✦\n\n╭───✦ 🎁 **WELCOME GIFT**\n├─ You have **1 free search** to try\n├─ Then you'll need VIP to keep searching\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMMANDS**\n├─ {1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **YOUR ACCOUNT**\n├─ 🎖️ Role: **{2}**\n├─ 📊 Searches: `{3}`\n╰───✦\n\n🌟 Support: @hjofc20"
+  "welcome": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.1 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hello, **{0}**\n\n╭───✦ ⚡ **ADVANTAGES**\n├─ 🔎 Ultra-fast parallel search\n├─ 🗄️ Databases updated 24/7\n├─ 🛡️ Privacy & full anonymity\n├─ 📦 Data ready to use\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMMANDS**\n├─ {1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **YOUR ACCOUNT**\n├─ 🎖️ Rank: **{2}**\n├─ 📊 Searches: `{3}`\n╰───✦\n\n{4}🌟 Support: @hjofc20",
+  "welcome_new": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.1 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hello, **{0}**\n\n╭───✦ ⚡ **ADVANTAGES**\n├─ 🔎 Ultra-fast parallel search\n├─ 🗄️ Databases updated 24/7\n├─ 🛡️ Privacy & full anonymity\n├─ 📦 Data ready to use\n╰───✦\n\n╭───✦ 🎁 **WELCOME GIFT**\n├─ You have **1 free search** to try\n├─ Afterwards you'll need VIP to keep searching\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMMANDS**\n├─ {1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **YOUR ACCOUNT**\n├─ 🎖️ Rank: **{2}**\n├─ 📊 Searches: `{3}`\n╰───✦\n\n{4}🌟 Support: @hjofc20",
+  "vip_expiring": "⚠️ **Your VIP expires in {0} day(s)** — renew via «💎 Renovar VIP» to keep access",
+  "vip_expiring_today": "⚠️ **Your VIP expires TODAY** — renew now via «💎 Renovar VIP»",
+  "acct_vip_line": "├─ ⏳ VIP active until: `{0}` · {1}\n├─ {2}\n",
+  "acct_free_available": "├─ 🎁 Free search: **Available**\n",
+  "acct_free_used": "├─ 🎁 Free search: **Used** — become a 💎 **VIP** to keep searching\n",
+  "acct_vip_days_many": "**{0} days** left",
+  "acct_vip_days_one": "**1 day** left"
 }

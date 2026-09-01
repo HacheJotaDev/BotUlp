@@ -38,7 +38,7 @@ class LocaleManager:
             "welcome": (
                 "╭━━━━━━━━━━━━━━━━━━━━╮\n"
                 "┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n"
-                "┃ ⚡ v4.0 · Professional\n"
+                "┃ ⚡ v4.1 · Professional\n"
                 "╰━━━━━━━━━━━━━━━━━━━━╯\n"
                 "\n"
                 "👋 Hola, **{0}**\n"
@@ -57,16 +57,17 @@ class LocaleManager:
                 "\n"
                 + SEP + "\n\n"
                 "╭───✦ 👤 **TU CUENTA**\n"
-                "├─ 🎖️ Rol: **{2}**\n"
+                "├─ 🎖️ Rango: **{2}**\n"
                 "├─ 📊 Búsquedas: `{3}`\n"
                 "╰───✦\n"
                 "\n"
+                "{4}"
                 "🌟 Soporte: @hjofc20"
             ),
             "welcome_new": (
                 "╭━━━━━━━━━━━━━━━━━━━━╮\n"
                 "┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n"
-                "┃ ⚡ v4.0 · Professional\n"
+                "┃ ⚡ v4.1 · Professional\n"
                 "╰━━━━━━━━━━━━━━━━━━━━╯\n"
                 "\n"
                 "👋 Hola, **{0}**\n"
@@ -90,10 +91,11 @@ class LocaleManager:
                 "\n"
                 + SEP + "\n\n"
                 "╭───✦ 👤 **TU CUENTA**\n"
-                "├─ 🎖️ Rol: **{2}**\n"
+                "├─ 🎖️ Rango: **{2}**\n"
                 "├─ 📊 Búsquedas: `{3}`\n"
                 "╰───✦\n"
                 "\n"
+                "{4}"
                 "🌟 Soporte: @hjofc20"
             ),
 
@@ -115,11 +117,18 @@ class LocaleManager:
                 "╭───✦ 👤 **MI CUENTA**\n"
                 "├─ 🆔 ID: `{0}`\n"
                 "├─ 🎖️ Rango: **{1}**\n"
-                "├─ 📅 VIP expira: `{2}`\n"
+                "├─ 📅 Miembro desde: `{2}`\n"
                 "├─ 📊 Búsquedas totales: `{3}`\n"
-                "├─ 🔍 Búsqueda gratis: **{4}**\n"
+                "{4}"
                 "╰───✦"
             ),
+            "vip_expiring": "⚠️ **Tu VIP expira en {0} día(s)** — renuévalo desde «💎 Renovar VIP» para no perder acceso",
+            "vip_expiring_today": "⚠️ **Tu VIP expira HOY** — renuévalo ahora desde «💎 Renovar VIP»",
+            "acct_vip_line": "├─ ⏳ VIP activo hasta: `{0}` · {1}\n├─ {2}\n",
+            "acct_vip_days_many": "restan **{0} días**",
+            "acct_vip_days_one": "resta **1 día**",
+            "acct_free_available": "├─ 🎁 Búsqueda gratis: **Disponible**\n",
+            "acct_free_used": "├─ 🎁 Búsqueda gratis: **Usada** — hazte 💎 **VIP** para seguir buscando\n",
             "ping_info": (
                 "╭───✦ 📶 **PONG**\n"
                 "├─ ⚡ Latencia: `{0:.0f} ms`\n"

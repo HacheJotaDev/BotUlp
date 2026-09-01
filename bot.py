@@ -1,10 +1,10 @@
 """
 ═══════════════════════════════════════════════════════════════
-  HJ ULP EXTRACTOR BOT — PRO EDITION v4.0 · Obsidian
+  HJ ULP EXTRACTOR BOT — PRO EDITION v4.1 · Obsidian
 ═══════════════════════════════════════════════════════════════
   • Motor de búsqueda paralelo con mmap ultra-rápido
   • Descarga de archivos hasta 4GB con streaming + progreso
-  • Sistema de roles: FREE / VIP / SELLER / ADMIN
+  • Sistema de roles con insignias: FREE / VIP / SELLER / OWNER
   • Interfaz premium con diseño Obsidian
   • Sistema multi-idioma (ES / EN / PT)
   • Base de datos SQLite thread-safe con WAL + caché de usuarios

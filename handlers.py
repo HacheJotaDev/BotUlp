@@ -14,6 +14,7 @@
 
 import os
 import sys
+import math
 import asyncio
 import subprocess
 import time
@@ -312,6 +313,94 @@ def _get_file_counts_display() -> tuple:
     return counts, auto_status, total_pending, active_count
 
 
+def _vip_days_left(user: dict):
+    """Días restantes de VIP (redondeo hacia arriba), o None si no tiene expiración.
+
+    Con redondeo hacia arriba un VIP con 23h restantes muestra "1 día", no "0".
+    """
+    exp = user.get('vip_expiry')
+    if not exp:
+        return None
+    try:
+        dt = datetime.fromisoformat(exp)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        delta = dt - datetime.now(timezone.utc)
+        if delta.total_seconds() <= 0:
+            return 0
+        return max(1, math.ceil(delta.total_seconds() / 86400))
+    except Exception:
+        return None
+
+
+def _welcome_extra(user: dict, role: UserRole, lang: str) -> str:
+    """Línea opcional que se añade al final de la bienvenida.
+
+    Hoy: aviso de renovación para VIPs a punto de expirar (≤ 3 días).
+    Para el resto retorna cadena vacía (no rompe el layout).
+    """
+    if role != UserRole.VIP:
+        return ""
+    days = _vip_days_left(user)
+    if days is None:
+        return ""
+    if days <= 1:
+        return UI.text("vip_expiring_today", lang) + "\n\n"
+    if days <= 3:
+        return UI.text("vip_expiring", lang, days) + "\n\n"
+    return ""
+
+
+def _account_block(user: dict, role: UserRole, lang: str) -> str:
+    """Bloque {4} de «Mi cuenta»: información específica por rango.
+
+    VIP   → fecha de expiración, días restantes y barra de vigencia.
+    FREE  → estado de la búsqueda gratis con upsell.
+    Resto → cadena vacía.
+    """
+    if role == UserRole.VIP:
+        exp_raw = (user.get('vip_expiry') or '')[:10]
+        exp = _fmt_date_slash(exp_raw) if exp_raw else 'N/A'
+        days = _vip_days_left(user)
+        # Barra de vigencia (30 días = ciclo de referencia del plan máximo)
+        try:
+            ratio = min(max(days or 0, 0), 30) / 30
+        except Exception:
+            ratio = 0
+        bar = progress_bar(ratio * 100, width=12).rsplit(' ', 1)[0]
+        if days is not None and days > 0:
+            days_phrase = (UI.text("acct_vip_days_one", lang)
+                           if days == 1 else UI.text("acct_vip_days_many", lang, days))
+        else:
+            days_phrase = UI.text("acct_vip_days_many", lang, 0)
+        line = UI.text("acct_vip_line", lang, exp, days_phrase, bar)
+        if days is not None and days <= 3:
+            warn = UI.text("vip_expiring_today" if days <= 1 else "vip_expiring", lang, days)
+            line += "├─ " + warn + "\n"
+        return line
+
+    if role == UserRole.FREE:
+        if db.is_new_user(user['user_id']):
+            return UI.text("acct_free_available", lang)
+        return UI.text("acct_free_used", lang)
+
+    return ""
+
+
+def _fmt_member_since(user: dict) -> str:
+    """Fecha de registro del usuario en formato DD/MM/AAAA (o —)."""
+    return _fmt_date_slash(str(user.get('first_seen') or '')[:10]) or "—"
+
+
+def _fmt_date_slash(iso_date: str) -> str:
+    """Convertir 'AAAA-MM-DD' a 'DD/MM/AAAA'. Retorna '' si es inválido."""
+    try:
+        y, m, d = iso_date.split('-')
+        return f"{d}/{m}/{y}"
+    except Exception:
+        return iso_date
+
+
 async def _auto_delete_msg(msg, delay=4):
     """Eliminar un mensaje despues de un delay."""
     await asyncio.sleep(delay)
@@ -321,14 +410,15 @@ async def _auto_delete_msg(msg, delay=4):
         pass
 
 
-async def _send_search_result(target_chat, result_file, caption, e=None, msg=None, reply_to=None):
+async def _send_search_result(target_chat, result_file, caption, e=None, msg=None, reply_to=None, buttons=None):
     """Enviar archivo de resultados y limpiar."""
     try:
         await state.bot.send_file(
             target_chat, result_file,
             caption=caption,
             parse_mode='md',
-            reply_to=reply_to
+            reply_to=reply_to,
+            buttons=buttons
         )
     except Exception as ex:
         logger.error(f"Error enviando resultado: {ex}")
@@ -753,7 +843,8 @@ def register_handlers(bot_client):
 
                 await _send_search_result(chat_id, result_file, caption,
                                                e=callback_event, msg=loading_msg,
-                                               reply_to=reply_to)
+                                               reply_to=reply_to,
+                                               buttons=Keyboards.result_actions())
             else:
                 no_res_text = UI.text("no_results", lang, kw)
                 no_res_kb = Keyboards.no_results(kw)
@@ -848,7 +939,7 @@ def register_handlers(bot_client):
         else:
             welcome_key = "welcome"
 
-        welcome_text = UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), role.value, user['search_count'])
+        welcome_text = UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user['search_count'], _welcome_extra(user, role, lang))
 
         await e.reply(
             welcome_text,
@@ -950,7 +1041,7 @@ def register_handlers(bot_client):
             return await e.reply("⚠️ Este comando solo funciona en grupos.")
         state.allowed_groups.add(e.chat_id)
         db.add_allowed_group(e.chat_id, e.sender_id)
-        await e.reply("✅ Grupo anadido a la lista permitida y guardado en la base de datos.")
+        await e.reply("✅ Grupo añadido a la lista permitida y guardado en la base de datos.")
 
     @bot_client.on(events.NewMessage(pattern=r"/ungp"))
     async def cmd_ungp(e):
@@ -1146,7 +1237,7 @@ def register_handlers(bot_client):
         name = await _display_name(e, uid)
         welcome_key = "welcome_new" if has_free else "welcome"
         await e.reply(
-            UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), role.value, user['search_count']),
+            UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user['search_count'], _welcome_extra(user, role, lang)),
             buttons=Keyboards.main(role, lang, has_free),
             parse_mode='md'
         )
@@ -1339,7 +1430,7 @@ def register_handlers(bot_client):
                 name = await _display_name(e, uid)
                 welcome_key = "welcome_new" if has_free else "welcome"
                 await e.edit(
-                    UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), role.value, user['search_count']),
+                    UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user['search_count'], _welcome_extra(user, role, lang)),
                     buttons=Keyboards.main(role, lang, has_free),
                     parse_mode='md'
                 )
@@ -1364,10 +1455,10 @@ def register_handlers(bot_client):
 
             # ─── MI CUENTA ───
             elif data == "my_account":
-                exp = (user['vip_expiry'] or 'N/A')[:10] if user['vip_expiry'] else "N/A"
-                free_status = UI.text("free_available" if db.is_new_user(uid) else "free_used", lang)
                 await e.edit(
-                    UI.text("my_account", lang, uid, role.value, exp, user['search_count'], free_status),
+                    UI.text("my_account", lang, uid, UI.role_badge(role),
+                            _fmt_member_since(user), user['search_count'],
+                            _account_block(user, role, lang)),
                     buttons=Keyboards.back(),
                     parse_mode='md'
                 )
@@ -1483,7 +1574,7 @@ def register_handlers(bot_client):
                 name = await _display_name(e, uid)
                 welcome_key = "welcome_new" if has_free else "welcome"
                 await e.edit(
-                    UI.text(welcome_key, new_lang, name, _get_commands_by_role(role, has_free), role.value, user['search_count']),
+                    UI.text(welcome_key, new_lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user['search_count'], _welcome_extra(user, role, new_lang)),
                     buttons=Keyboards.main(role, new_lang, has_free),
                     parse_mode='md'
                 )

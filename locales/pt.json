@@ -34,7 +34,7 @@
   "list_footer": "╰───✦",
   "list_more": "├─ … e mais **{0}**",
   "loading": "⚙️ **Processando...**",
-  "my_account": "╭───✦ 👤 **MINHA CONTA**\n├─ 🆔 ID: `{0}`\n├─ 🎖️ Patente: **{1}**\n├─ 📅 VIP expira: `{2}`\n├─ 📊 Buscas totais: `{3}`\n├─ 🔍 Busca grátis: **{4}**\n╰───✦",
+  "my_account": "╭───✦ 👤 **MINHA CONTA**\n├─ 🆔 ID: `{0}`\n├─ 🎖️ Patente: **{1}**\n├─ 📅 Membro desde: `{2}`\n├─ 📊 Buscas totais: `{3}`\n{4}╰───✦",
   "no_results": "╭───✦ ⚠️ **SEM RESULTADOS**\n├─ Nenhum dado encontrado para `{0}`\n├─ 🔁 Tente «24h + Antigos» ou reporte a URL\n╰───✦",
   "pay_api_error": "╭───✦ ❌ **ERRO DE PAGAMENTO**\n├─ Não foi possível criar a fatura\n├─ ⏳ Tente novamente em alguns minutos\n╰───✦",
   "pay_checking": "⏳ Verificando o status do seu pagamento...",
@@ -71,6 +71,13 @@
   "update_bot_uptodate": "╭───✦ ✅ **BOT ATUALIZADO**\n├─ Você já está na versão mais recente\n╰───✦",
   "vip_list_empty": "╭───✦ 👑 **USUÁRIOS VIP**\n├─ Nenhum usuário VIP ativo\n╰───✦",
   "vip_list_header": "╭───✦ 👑 **USUÁRIOS VIP** · {0}",
-  "welcome": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.0 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Olá, **{0}**\n\n╭───✦ ⚡ **VANTAGENS**\n├─ 🔎 Busca paralela ultrarrápida\n├─ 🗄️ Bases de dados atualizadas 24/7\n├─ 🛡️ Privacidade e anonimato total\n├─ 📦 Dados prontos para usar\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMANDOS**\n├─ {1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **SUA CONTA**\n├─ 🎖️ Função: **{2}**\n├─ 📊 Buscas: `{3}`\n╰───✦\n\n🌟 Suporte: @hjofc20",
-  "welcome_new": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.0 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Olá, **{0}**\n\n╭───✦ ⚡ **VANTAGENS**\n├─ 🔎 Busca paralela ultrarrápida\n├─ 🗄️ Bases de dados atualizadas 24/7\n├─ 🛡️ Privacidade e anonimato total\n├─ 📦 Dados prontos para usar\n╰───✦\n\n╭───✦ 🎁 **PRESENTE DE BOAS-VINDAS**\n├─ Você tem **1 busca grátis** para experimentar\n├─ Depois precisará de VIP para continuar buscando\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMANDOS**\n├─ {1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **SUA CONTA**\n├─ 🎖️ Função: **{2}**\n├─ 📊 Buscas: `{3}`\n╰───✦\n\n🌟 Suporte: @hjofc20"
+  "welcome": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.1 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Olá, **{0}**\n\n╭───✦ ⚡ **VANTAGENS**\n├─ 🔎 Busca paralela ultrarrápida\n├─ 🗄️ Bases de dados atualizadas 24/7\n├─ 🛡️ Privacidade e anonimato total\n├─ 📦 Dados prontos para usar\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMANDOS**\n├─ {1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **SUA CONTA**\n├─ 🎖️ Patente: **{2}**\n├─ 📊 Buscas: `{3}`\n╰───✦\n\n{4}🌟 Suporte: @hjofc20",
+  "welcome_new": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.1 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Olá, **{0}**\n\n╭───✦ ⚡ **VANTAGENS**\n├─ 🔎 Busca paralela ultrarrápida\n├─ 🗄️ Bases de dados atualizadas 24/7\n├─ 🛡️ Privacidade e anonimato total\n├─ 📦 Dados prontos para usar\n╰───✦\n\n╭───✦ 🎁 **PRESENTE DE BOAS-VINDAS**\n├─ Você tem **1 busca grátis** para experimentar\n├─ Depois precisará de VIP para continuar buscando\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMANDOS**\n├─ {1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **SUA CONTA**\n├─ 🎖️ Patente: **{2}**\n├─ 📊 Buscas: `{3}`\n╰───✦\n\n{4}🌟 Suporte: @hjofc20",
+  "vip_expiring": "⚠️ **Seu VIP expira em {0} dia(s)** — renove em «💎 Renovar VIP» para não perder acesso",
+  "vip_expiring_today": "⚠️ **Seu VIP expira HOJE** — renove agora em «💎 Renovar VIP»",
+  "acct_vip_line": "├─ ⏳ VIP ativo até: `{0}` · {1}\n├─ {2}\n",
+  "acct_free_available": "├─ 🎁 Busca grátis: **Disponível**\n",
+  "acct_free_used": "├─ 🎁 Busca grátis: **Usada** — vire 💎 **VIP** para continuar buscando\n",
+  "acct_vip_days_many": "restam **{0} dias**",
+  "acct_vip_days_one": "resta **1 dia**"
 }

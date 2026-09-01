@@ -4,7 +4,8 @@
 ═══════════════════════════════════════════════════════════════
   • Botones con jerarquía visual consistente
   • Botones URL reales (pagar invoice, soporte)
-  • Roles FREE / VIP / SELLER / ADMIN
+  • Insignias únicas por rango: 🆓 FREE · 💎 VIP · 💼 SELLER · 👑 OWNER
+  • Roles FREE / VIP / SELLER / OWNER
 ═══════════════════════════════════════════════════════════════
 """
 
@@ -16,6 +17,19 @@ from config import config
 
 
 class UI:
+    # Insignias visuales unicas por rango (identidad del bot)
+    ROLE_BADGES = {
+        UserRole.OWNER: "👑 OWNER",
+        UserRole.SELLER: "💼 SELLER",
+        UserRole.VIP: "💎 VIP",
+        UserRole.FREE: "🆓 FREE",
+    }
+
+    @staticmethod
+    def role_badge(role: UserRole) -> str:
+        """Insignia con emoji por rango — se muestra en bienvenida y cuenta."""
+        return UI.ROLE_BADGES.get(role, role.value)
+
     @staticmethod
     def text(key: str, lang: str = 'es', *args) -> str:
         localized = locale_manager.get(key, lang, *args)
@@ -98,8 +112,18 @@ class Keyboards:
     @staticmethod
     def no_results(kw: str):
         return [
-            [Button.inline("⚠️  Reportar URL", b"report_url")],
+            [Button.inline("🔍  Nueva búsqueda", b"search_init"),
+             Button.inline("⚠️  Reportar URL", b"report_url")],
+            [Button.inline("💎  Comprar VIP", b"buy_vip_info")],
             [Button.inline("«  Volver", b"back_main")],
+        ]
+
+    @staticmethod
+    def result_actions():
+        """Acciones bajo el archivo de resultados de una búsqueda."""
+        return [
+            [Button.inline("🔍  Nueva búsqueda", b"search_init"),
+             Button.inline("👤  Mi cuenta", b"my_account")],
         ]
 
     @staticmethod
