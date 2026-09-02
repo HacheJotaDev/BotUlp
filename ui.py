@@ -125,11 +125,13 @@ class Keyboards:
         ]
 
     @staticmethod
-    def no_results(kw: str):
+    def no_results():
+        """Teclado de SIN RESULTADOS: reintento directo con el mismo dominio
+        en «24h + Antiguos» (lo que promete el mensaje) + reporte. Sin botones
+        vanosos: Comprar VIP y Nueva búsqueda ya viven en el menú principal."""
         return [
-            [Button.inline("🔍  Nueva búsqueda", b"search_init"),
-             Button.inline("⚠️  Reportar URL", b"report_url")],
-            [Button.inline("💎  Comprar VIP", b"buy_vip_info")],
+            [Button.inline("🔁  Reintentar · 24h + Antiguos", b"retry_all")],
+            [Button.inline("⚠️  Reportar URL", b"report_url")],
             [Button.inline("«  Volver", b"back_main")],
         ]
 
@@ -227,6 +229,5 @@ class Keyboards:
                      f"&text={share_text}")
         return [
             [Button.url("📢  Compartir mi link", share_url)],
-            [Button.inline("👤  Mi cuenta", b"my_account")],
             [Button.inline("«  Volver", b"back_main")],   # fila directa (back() es [[btn]])
         ]

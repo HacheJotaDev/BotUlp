@@ -837,6 +837,14 @@ def register_handlers(bot_client):
             elif is_free_search == 'bonus' and not (u_now.get('bonus_searches') or 0):
                 is_free_search = None
 
+        # Guardar contexto de la busqueda: alimenta el reintento directo
+        # «24h + Antiguos» de SIN RESULTADOS y el reporte de URL.
+        state.last_search[uid] = {
+            'kw': kw, 't_opt': t_opt, 'modo': modo, 'tipo_texto': tipo_texto,
+            'is_free_search': is_free_search, 'chat_id': chat_id,
+            'lang': lang, 'reply_to': reply_to,
+        }
+
         loading_text = UI.text(
             "search_loading", lang, kw,
             LOADING_FRAMES[0], UI.text("phase_scanning", lang), 0
@@ -907,7 +915,7 @@ def register_handlers(bot_client):
                                                reply_to=reply_to)
             else:
                 no_res_text = UI.text("no_results", lang, kw)
-                no_res_kb = Keyboards.no_results(kw)
+                no_res_kb = Keyboards.no_results()
                 if callback_event:
                     try:
                         await callback_event.edit(no_res_text, buttons=no_res_kb, parse_mode='md')
@@ -1841,6 +1849,56 @@ def register_handlers(bot_client):
                 else:
                     await e.answer("Usa 'Nueva búsqueda' primero.", alert=True)
 
+            # ─── REINTENTAR SIN RESULTADOS (24h + Antiguos) ───
+            elif data == "retry_all":
+                last = state.last_search.get(uid)
+                if not last:
+                    return await e.answer(
+                        "No hay búsqueda previa. Usa 'Nueva búsqueda'.",
+                        alert=True
+                    )
+
+                # Autorizar segun el chat donde corrio la busqueda original:
+                # grupo permitido → todos pueden; privado → reglas FREE/VIP.
+                last_chat = last.get('chat_id', uid)
+                if last_chat != uid:
+                    if last_chat not in state.allowed_groups:
+                        return await e.answer("Este grupo ya no está autorizado.", alert=True)
+                    is_free_search = None
+                else:
+                    allowed, is_free_search = await _check_search_access(
+                        uid, lang,
+                        False,   # callback siempre es privado
+                        True
+                    )
+                    if not allowed:
+                        return await e.answer(
+                            _get_access_denied_text(lang),
+                            alert=True
+                        )
+
+                # Anti-superposicion: si ya esta buscando, bloquear
+                if uid in state.active_searches:
+                    return await e.answer(
+                        UI.text("search_already_running", lang),
+                        alert=True
+                    )
+
+                # Mismo dominio y formato, pero escaneando 24h + Antiguos
+                await _execute_search(
+                    uid=uid,
+                    kw=last['kw'],
+                    t_opt='all',
+                    modo=last['modo'],
+                    tipo_texto=last['tipo_texto'],
+                    is_free_search=is_free_search,
+                    chat_id=last_chat,
+                    lang=lang,
+                    callback_event=e,
+                    reply_to=last.get('reply_to')
+                )
+                return
+
             # ─── EJECUTAR BUSQUEDA (con cola anti-superposicion) ───
             elif data.startswith("fmt_"):
                 if uid not in state.temp_state or not state.temp_state[uid].get('kw'):
@@ -1891,7 +1949,10 @@ def register_handlers(bot_client):
 
             # ─── REPORTAR URL ───
             elif data == "report_url":
-                kw = state.temp_state.get(uid, {}).get('kw', 'Desconocido')
+                # El dominio real viene de la última búsqueda ejecutada
+                # (temp_state ya se limpió al lanzarla → antes decía "Desconocido").
+                kw = (state.last_search.get(uid, {}).get('kw')
+                      or state.temp_state.get(uid, {}).get('kw', 'Desconocido'))
                 for admin_id in config.ADMIN_IDS:
                     try:
                         await state.bot.send_message(

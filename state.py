@@ -31,6 +31,9 @@ temp_state: Dict[int, dict] = {}
 active_searches: Set[int] = set()  # UIDs con busqueda en curso
 search_queue: Dict[int, list] = {}  # UID -> lista de busquedas encoladas
 
+# Ultima busqueda ejecutada por usuario (contexto para reintentos y reportes)
+last_search: Dict[int, dict] = {}
+
 # Task de limpieza y auto-dl (FIX #15: guardar referencias para cancelación)
 cleanup_task: Optional[asyncio.Task] = None
 auto_dl_task: Optional[asyncio.Task] = None

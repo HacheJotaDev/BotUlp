@@ -35,7 +35,7 @@
   "list_more": "├─ … and **{0}** more",
   "loading": "⚙️ **Processing...**",
   "my_account": "╭───✦ 👤 **MY ACCOUNT**\n├─ 🆔 ID: `{0}`\n├─ 🎖️ Rank: **{1}**\n├─ 📅 Member since: `{2}`\n├─ 📊 Total searches: `{3}`\n{4}╰───✦",
-  "no_results": "╭───✦ ⚠️ **NO RESULTS**\n├─ No data found for `{0}`\n├─ 🔁 Try «24h + Old» or report the URL\n╰───✦",
+  "no_results": "╭───✦ ⚠️ **NO RESULTS**\n├─ No data found for `{0}`\n├─ 🔁 Retry with «24h + Old» or report the URL\n╰───✦",
   "pay_api_error": "╭───✦ ❌ **PAYMENT ERROR**\n├─ Could not create the invoice\n├─ ⏳ Try again in a few minutes\n╰───✦",
   "pay_checking": "⏳ Checking your payment status...",
   "pay_deposit": "╭───✦ 💳 **PAYMENT CREATED**\n├─ 📦 Plan: **{0}**\n├─ 💲 Price: **${1:.2f} USD**\n╰───✦\n\n📎 Send exactly: **{2} {3}**\n📍 To the address: `{4}`\n\n⏳ VIP activates automatically upon confirmation.",

@@ -2,6 +2,20 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.5] — SIN RESULTADOS con reintento directo + limpieza de botones vanosos
+
+### 🐛 El problema del flujo «⚠️ SIN RESULTADOS»
+- El mensaje decía **«Prueba con «24h + Antiguos» o reporta la URL»**, pero el teclado **no tenía ningún botón para hacerlo**: el usuario tenía que darle a «Nueva búsqueda», reescribir el dominio, reelegir el rango de tiempo y reelegir el formato (4 pasos para repetir la misma búsqueda).
+- El teclado además mostraba **«💎 Comprar VIP»**, vanoso: el VIP ya lo tiene quien es VIP y el FREE ya lo tiene en el menú principal.
+- **Bug del reporte**: «⚠️ Reportar URL» siempre enviaba al admin `URL: Desconocido`, porque `temp_state` se limpia justo antes de ejecutar la búsqueda y el callback ya no encontraba el dominio.
+
+### ✅ Fix
+- **Botón «🔁 Reintentar · 24h + Antiguos»**: un solo toque reejecuta la MISMA búsqueda (mismo dominio, mismo formato) escaneando Descargas + Histórico (`t_opt='all'`), sin reescribir nada. Respeta reglas de acceso (FREE/VIP/grupo permitido), anti-superposición y no consume la búsqueda gratis si no hay resultados.
+- `state.py`: nuevo `last_search` por usuario — contexto de la última búsqueda ejecutada (dominio, formato, chat, etc.).
+- `handlers.py`: el reporte de URL ahora manda el **dominio real** buscado, no «Desconocido».
+- **Botones vanosos eliminados**: «💎 Comprar VIP» y «🔍 Nueva búsqueda» fuera del teclado de SIN RESULTADOS (el menú principal ya los tiene); «👤 Mi cuenta» fuera del panel de Referidos (se abrió desde el menú que ya lo tiene).
+- Texto del aviso actualizado en ES/EN/PT para que coincida con el botón («Reintenta con «24h + Antiguos»…»).
+
 ## [4.2.4] — CAUSA RAÍZ del error interno: teclados con filas anidadas
 
 ### 💥 El bug exacto (gracias al diagnóstico en vivo de v4.2.3)

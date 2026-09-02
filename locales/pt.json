@@ -35,7 +35,7 @@
   "list_more": "├─ … e mais **{0}**",
   "loading": "⚙️ **Processando...**",
   "my_account": "╭───✦ 👤 **MINHA CONTA**\n├─ 🆔 ID: `{0}`\n├─ 🎖️ Patente: **{1}**\n├─ 📅 Membro desde: `{2}`\n├─ 📊 Buscas totais: `{3}`\n{4}╰───✦",
-  "no_results": "╭───✦ ⚠️ **SEM RESULTADOS**\n├─ Nenhum dado encontrado para `{0}`\n├─ 🔁 Tente «24h + Antigos» ou reporte a URL\n╰───✦",
+  "no_results": "╭───✦ ⚠️ **SEM RESULTADOS**\n├─ Nenhum dado encontrado para `{0}`\n├─ 🔁 Tente novamente com «24h + Antigos» ou reporte a URL\n╰───✦",
   "pay_api_error": "╭───✦ ❌ **ERRO DE PAGAMENTO**\n├─ Não foi possível criar a fatura\n├─ ⏳ Tente novamente em alguns minutos\n╰───✦",
   "pay_checking": "⏳ Verificando o status do seu pagamento...",
   "pay_deposit": "╭───✦ 💳 **PAGAMENTO CRIADO**\n├─ 📦 Plano: **{0}**\n├─ 💲 Preço: **${1:.2f} USD**\n╰───✦\n\n📎 Envie exatamente: **{2} {3}**\n📍 Para o endereço: `{4}`\n\n⏳ O VIP é ativado automaticamente após a confirmação.",
