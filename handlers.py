@@ -919,8 +919,16 @@ def register_handlers(bot_client):
                                                e=callback_event, msg=loading_msg,
                                                reply_to=reply_to)
             else:
-                no_res_text = UI.text("no_results", lang, kw)
-                no_res_kb = Keyboards.no_results()
+                # v4.2.7: el aviso con «Reintenta con 24h + Antiguos» solo se
+                # muestra en búsquedas PARCIALES ('24h' / 'old'). Si ya se
+                # escaneó todo ('all'), no hay reintento que ofrecer → texto
+                # sin sugerencia y teclado sin el botón de reintentar.
+                if t_opt == 'all':
+                    no_res_text = UI.text("no_results_all", lang, kw)
+                    no_res_kb = Keyboards.no_results_exhausted()
+                else:
+                    no_res_text = UI.text("no_results", lang, kw)
+                    no_res_kb = Keyboards.no_results()
                 if callback_event:
                     try:
                         await callback_event.edit(no_res_text, buttons=no_res_kb, parse_mode='md')

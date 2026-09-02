@@ -2,6 +2,20 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.7] — SIN RESULTADOS solo sugiere «24h + Antiguos» si aún no se usó
+
+### 🎯 Ajuste de experiencia (reporte real del OWNER)
+- El aviso «⚠️ SIN RESULTADOS → 🔁 Reintenta con «24h + Antiguos»» aparecía **SIEMPRE**, incluso cuando el usuario **ya había buscado con «🗂️ 24h + Antiguos»**: sugerirle reintentar lo que ya escaneó es un aviso vanoso (y con el botón de reintento podía reescanear todo en bucle sin sentido).
+- **Ahora**:
+  - Búsqueda parcial («⚡ Últimas 24 horas» o «📅 Solo antiguos») sin resultados → aviso con la sugerencia + botón «🔁 Reintentar · 24h + Antiguos» (igual que antes).
+  - Búsqueda «🗂️ 24h + Antiguos» sin resultados → aviso **sin sugerencia de reintento**: «📂 Ya se escanearon las bases «24h + Antiguos»» + «📨 Reporta la URL para revisión manual». El teclado queda con **«⚠️ Reportar URL» + «« Volver»** (sin el botón de reintentar).
+- El reintento (`retry_all`) ejecuta con rango completo: si tampoco encuentra nada, cae automáticamente en esta nueva variante — **el bucle de reintentos vanosos queda cortado**.
+
+### 🧪 Verificación (Telethon real, sin conexión)
+- `Keyboards.no_results()` (parcial): 3 filas, serializa `ReplyInlineMarkup`, mantiene `retry_all`. ✔
+- `Keyboards.no_results_exhausted()` (nuevo): 2 filas, serializa `ReplyInlineMarkup`, **sin** `retry_all`. ✔
+- Texto `no_results_all` verificado en **ES/EN/PT** (con `{0}` formateado, sin sugerencia de reintento) + fallback ES en `locale.py` + JSON válidos. ✔
+
 ## [4.2.6] — Optimización: el bot ya no se congela durante las búsquedas
 
 ### 🐌 El bug (reporte real: 4 comandos ignorados + latencias de 68s)

@@ -126,11 +126,21 @@ class Keyboards:
 
     @staticmethod
     def no_results():
-        """Teclado de SIN RESULTADOS: reintento directo con el mismo dominio
-        en «24h + Antiguos» (lo que promete el mensaje) + reporte. Sin botones
-        vanosos: Comprar VIP y Nueva búsqueda ya viven en el menú principal."""
+        """Teclado de SIN RESULTADOS (búsquedas parciales «24h» o «Antiguos»):
+        reintento directo con el mismo dominio en «24h + Antiguos» (lo que
+        promete el mensaje) + reporte. Sin botones vanosos: Comprar VIP y
+        Nueva búsqueda ya viven en el menú principal."""
         return [
             [Button.inline("🔁  Reintentar · 24h + Antiguos", b"retry_all")],
+            [Button.inline("⚠️  Reportar URL", b"report_url")],
+            [Button.inline("«  Volver", b"back_main")],
+        ]
+
+    @staticmethod
+    def no_results_exhausted():
+        """v4.2.7: SIN RESULTADOS cuando ya se escaneó «24h + Antiguos».
+        No queda nada más que reintentar → solo reporte y volver."""
+        return [
             [Button.inline("⚠️  Reportar URL", b"report_url")],
             [Button.inline("«  Volver", b"back_main")],
         ]

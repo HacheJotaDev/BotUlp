@@ -36,6 +36,7 @@
   "loading": "⚙️ **Procesando...**",
   "my_account": "╭───✦ 👤 **MI CUENTA**\n├─ 🆔 ID: `{0}`\n├─ 🎖️ Rango: **{1}**\n├─ 📅 Miembro desde: `{2}`\n├─ 📊 Búsquedas totales: `{3}`\n{4}╰───✦",
   "no_results": "╭───✦ ⚠️ **SIN RESULTADOS**\n├─ No se encontraron datos para `{0}`\n├─ 🔁 Reintenta con «24h + Antiguos» o reporta la URL\n╰───✦",
+  "no_results_all": "╭───✦ ⚠️ **SIN RESULTADOS**\n├─ No se encontraron datos para `{0}`\n├─ 📂 Ya se escanearon las bases «24h + Antiguos»\n├─ 📨 Reporta la URL para revisión manual\n╰───✦",
   "pay_api_error": "╭───✦ ❌ **ERROR DE PAGO**\n├─ No se pudo crear la factura\n├─ ⏳ Inténtalo de nuevo en unos minutos\n╰───✦",
   "pay_checking": "⏳ Verificando el estado de tu pago...",
   "pay_deposit": "╭───✦ 💳 **PAGO CREADO**\n├─ 📦 Plan: **{0}**\n├─ 💲 Precio: **${1:.2f} USD**\n╰───✦\n\n📎 Envía exactamente: **{2} {3}**\n📍 A la dirección: `{4}`\n\n⏳ El VIP se activa automáticamente al confirmar.",

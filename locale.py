@@ -196,6 +196,15 @@ class LocaleManager:
                 "├─ 🔁 Prueba con «24h + Antiguos» o reporta la URL\n"
                 "╰───✦"
             ),
+            # v4.2.7: sin resultados tras escanear YA «24h + Antiguos» →
+            # no se ofrece reintento (no queda nada más que revisar).
+            "no_results_all": (
+                "╭───✦ ⚠️ **SIN RESULTADOS**\n"
+                "├─ No se encontraron datos para `{0}`\n"
+                "├─ 📂 Ya se escanearon las bases «24h + Antiguos»\n"
+                "├─ 📨 Reporta la URL para revisión manual\n"
+                "╰───✦"
+            ),
             "search_in_progress": (
                 "⏳ **Búsqueda en curso**\n"
                 "\n"
