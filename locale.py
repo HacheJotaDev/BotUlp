@@ -211,6 +211,10 @@ class LocaleManager:
                 "├─ ✍️ Ejemplo: `/url ejemplo.com`\n"
                 "╰───✦"
             ),
+            "start_error": (
+                "⚠️ Ocurrió un error interno al procesar tu comando.\n"
+                "Por favor, inténtalo de nuevo enviando /start"
+            ),
             "access_denied": (
                 "╭───✦ 🚫 **ACCESO DENEGADO**\n"
                 "├─ Tu búsqueda gratis ya fue utilizada\n"

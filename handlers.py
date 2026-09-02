@@ -968,83 +968,94 @@ def register_handlers(bot_client):
             except Exception:
                 pass
 
-    @bot_client.on(events.NewMessage(pattern=r"/(start|cmds)(\s|$)"))
+    @bot_client.on(events.NewMessage(pattern=r"/(start|cmds)(@\w+)?(\s|$)"))
     async def start(e):
         """Bienvenida + menú principal. /start y /cmds son el mismo comando
-        (alias el uno del otro, por si acaso el usuario usa cualquiera)."""
+        (alias el uno del otro, por si acaso el usuario usa cualquiera).
+        Acepta también la forma con mención que Telegram usa en grupos:
+        /start@MiBot [param]."""
         if e.is_group and e.chat_id not in state.allowed_groups:
             return
 
-        uid = e.sender_id
+        lang = 'es'
+        try:
+            uid = e.sender_id
 
-        # Deep link: /start <param>   (ref_<uid> = referidos · HJ-xxx = keys)
-        args = e.message.message.split()
-        param = args[1] if len(args) > 1 else None
+            # Deep link: /start <param>   (ref_<uid> = referidos · HJ-xxx = keys)
+            args = e.message.message.split()
+            param = args[1] if len(args) > 1 else None
 
-        # Referido: evaluar ANTES de crear el registro (solo usuarios nuevos)
-        is_brand_new = not db.user_exists(uid)
+            # Referido: evaluar ANTES de crear el registro (solo usuarios nuevos)
+            is_brand_new = not db.user_exists(uid)
 
-        user = db.get_user(uid)
-        lang = user.get('language', 'es')
-        role = get_user_role(uid)
-        has_free = db.is_new_user(uid) and role == UserRole.FREE
-        name = await _display_name(e, uid)
+            user = db.get_user(uid)
+            lang = user.get('language', 'es')
+            role = get_user_role(uid)
+            has_free = db.is_new_user(uid) and role == UserRole.FREE
+            name = await _display_name(e, uid)
 
-        referral_applied = False
-        if param and param.startswith("ref_"):
+            referral_applied = False
+            if param and param.startswith("ref_"):
+                try:
+                    referrer_id = int(param[4:])
+                except ValueError:
+                    referrer_id = None
+                if referrer_id and is_brand_new:
+                    referral_applied = db.apply_referral(uid, referrer_id)
+                    if referral_applied:
+                        # Refrescar datos del invitado (ahora tiene +1 bono)
+                        user = db.get_user(uid)
+                        # Notificar al referidor en SU idioma
+                        referrer_user = db.get_user(referrer_id)
+                        try:
+                            await state.bot.send_message(
+                                referrer_id,
+                                UI.text("ref_notify_referrer",
+                                        referrer_user.get('language', 'es'),
+                                        name, db.get_referral_count(referrer_id)),
+                                parse_mode='md'
+                            )
+                        except Exception:
+                            pass
+            elif param:
+                # Deep link para canjear key VIP
+                if db.redeem(uid, param):
+                    role = get_user_role(uid)
+                    await e.reply(
+                        locale_manager.get("redeem_success", lang),
+                        buttons=Keyboards.main(role, lang, 0),
+                        parse_mode='md'
+                    )
+                    return
+
+            # Elegir texto de bienvenida
+            if has_free:
+                welcome_key = "welcome_new"
+            else:
+                welcome_key = "welcome"
+
+            free_n = _free_search_count(user) if role == UserRole.FREE else 0
+
+            welcome_text = UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user['search_count'], _welcome_extra(user, role, lang))
+
+            await e.reply(
+                welcome_text,
+                buttons=Keyboards.main(role, lang, free_n) if e.is_private else None,
+                parse_mode='md'
+            )
+        except Exception:
+            # Garantía anti-mudez: si algo falla, NUNCA quedarse en silencio
+            logger.exception("Error en /start")
             try:
-                referrer_id = int(param[4:])
-            except ValueError:
-                referrer_id = None
-            if referrer_id and is_brand_new:
-                referral_applied = db.apply_referral(uid, referrer_id)
-                if referral_applied:
-                    # Refrescar datos del invitado (ahora tiene +1 bono)
-                    user = db.get_user(uid)
-                    # Notificar al referidor en SU idioma
-                    referrer_user = db.get_user(referrer_id)
-                    try:
-                        await state.bot.send_message(
-                            referrer_id,
-                            UI.text("ref_notify_referrer",
-                                    referrer_user.get('language', 'es'),
-                                    name, db.get_referral_count(referrer_id)),
-                            parse_mode='md'
-                        )
-                    except Exception:
-                        pass
-        elif param:
-            # Deep link para canjear key VIP
-            if db.redeem(uid, param):
-                role = get_user_role(uid)
-                await e.reply(
-                    locale_manager.get("redeem_success", lang),
-                    buttons=Keyboards.main(role, lang, 0),
-                    parse_mode='md'
-                )
-                return
-
-        # Elegir texto de bienvenida
-        if has_free:
-            welcome_key = "welcome_new"
-        else:
-            welcome_key = "welcome"
-
-        free_n = _free_search_count(user) if role == UserRole.FREE else 0
-
-        welcome_text = UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user['search_count'], _welcome_extra(user, role, lang))
-
-        await e.reply(
-            welcome_text,
-            buttons=Keyboards.main(role, lang, free_n) if e.is_private else None,
-            parse_mode='md'
-        )
+                await e.reply(locale_manager.get("start_error", lang), parse_mode=None)
+            except Exception:
+                pass
 
     @bot_client.on(events.NewMessage(pattern="/updateBot"))
     async def update_bot_cmd(e):
         await cmd_update_bot(e)
 
-    @bot_client.on(events.NewMessage(pattern=r"/(cmd|help)(\s|$)"))
+    @bot_client.on(events.NewMessage(pattern=r"/(cmd|help)(@\w+)?(\s|$)"))
     async def cmd_cmd(e):
         """Mostrar lista de comandos disponibles."""
         if e.is_group and e.chat_id not in state.allowed_groups:
@@ -1080,7 +1091,7 @@ def register_handlers(bot_client):
             parse_mode='md'
         )
 
-    @bot_client.on(events.NewMessage(pattern=r"^/id$"))
+    @bot_client.on(events.NewMessage(pattern=r"^/id(@\w+)?$"))
     async def cmd_id(e):
         """Mostrar IDs del usuario y del chat actual."""
         if e.is_group and e.chat_id not in state.allowed_groups:
@@ -1149,7 +1160,7 @@ def register_handlers(bot_client):
         else:
             await e.reply("⚠️ Este grupo no esta en la lista permitida.")
 
-    @bot_client.on(events.NewMessage(pattern=r"/canjear (.+)"))
+    @bot_client.on(events.NewMessage(pattern=r"/canjear(?:@\w+)? (.+)"))
     async def cmd_canjear(e):
         """Canjear una key VIP directamente con /canjear <codigo>."""
         uid = e.sender_id
@@ -1174,7 +1185,7 @@ def register_handlers(bot_client):
                 parse_mode='md'
             )
 
-    @bot_client.on(events.NewMessage(pattern=r"/url\s*$"))
+    @bot_client.on(events.NewMessage(pattern=r"/url(@\w+)?\s*$"))
     async def cmd_url_usage(e):
         """Ayuda de uso cuando /url se envía sin enlace (ya no se queda mudo)."""
         if e.is_group and e.chat_id not in state.allowed_groups:
@@ -1188,7 +1199,7 @@ def register_handlers(bot_client):
             parse_mode='md'
         )
 
-    @bot_client.on(events.NewMessage(pattern=r"/url\s+(\S.*)"))
+    @bot_client.on(events.NewMessage(pattern=r"/url(?:@\w+)?\s+(\S.*)"))
     async def cmd_url(e):
         uid = e.sender_id
         user = db.get_user(uid)

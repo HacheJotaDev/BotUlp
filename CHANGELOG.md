@@ -2,6 +2,19 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.2] — Fix: comandos con @mención en grupos + /start a prueba de fallos
+
+### 🐛 El bug real de «/start no responde»
+- **Causa encontrada**: en grupos, Telegram envía los comandos con mención — `/start@MiBot` — y el patrón estricto introducido en v4.2.1 ya no los capturaba (el bot se quedaba mudo). Lo mismo ocurría con `/cmd@MiBot`, `/help@MiBot` y `/url@MiBot enlace` (esta última ¡desde la versión original!).
+- **Fix**: todos los patrones de comandos de usuario aceptan ahora la forma `@mención`: `/start@MiBot`, `/cmds@MiBot`, `/cmd@MiBot`, `/help@MiBot`, `/url@MiBot enlace`, `/url@MiBot` (ayuda), `/id@MiBot` y `/canjear@MiBot HJ-XXX`.
+
+### 🛡️ Garantía anti-mudez en /start
+- El handler de `/start` está protegido con try/except: si cualquier error inesperado ocurre, el bot **responde con un aviso de error** (texto plano, a prueba de Markdown) en lugar de quedarse callado, y registra el traceback completo en el log.
+
+### 🔧 Interno
+- 1 clave nueva de localización (`start_error`) en ES/EN/PT (91 claves sincronizadas).
+- Verificación end-to-end con Telethon real: los 23 handlers registran y despachan correctamente en privado y en grupos permitidos (con y sin @mención).
+
 ## [4.2.1] — Comandos que nunca se quedan mudos
 
 ### 🗣️ Correcciones de comandos

@@ -55,6 +55,7 @@
   "report_received": "╭───✦ ⚠️ **URL REPORT**\n├─ 👤 User: `{0}`\n├─ 🔍 URL: `{1}`\n╰───✦",
   "search_already_running": "⏳ **Search in progress** — it will run automatically when the current one finishes.",
   "url_usage": "╭───✦ ⚠️ **MISSING LINK**\n├─ Type `/url` followed by the domain to search\n├─ ✍️ Example: `/url example.com`\n╰───✦",
+  "start_error": "⚠️ An internal error occurred while processing your command.\nPlease try again by sending /start",
   "search_completed": "╭───✦ ✅ **SEARCH COMPLETED**\n├─ 🔎 Domain: `{0}`\n├─ 📑 Format: `{1}`\n├─ 📊 Results: **{2}**\n├─ ⏱️ Time: `{3:.1f}s`\n╰───✦",
   "search_completed_free": "╭───✦ ✅ **SEARCH COMPLETED**\n├─ 🔎 Domain: `{0}`\n├─ 📑 Format: `{1}`\n├─ 📊 Results: **{2}**\n├─ ⏱️ Time: `{3:.1f}s`\n╰───✦\n\n🎁 That was your **free search**.\n💎 Get VIP to keep searching.",
   "search_in_progress": "⏳ **Search in progress**\n\nYour search will run automatically when the current one finishes.\n📋 Queue position: `{0}`",
