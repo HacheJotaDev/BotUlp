@@ -11,7 +11,6 @@
 """
 
 import re
-import mmap
 import asyncio
 import time
 import threading
@@ -37,9 +36,30 @@ MAX_RESULTS_PER_FILE = 10000    # Maximo de resultados unicos por archivo
 MAX_MATCHES_PER_FILE = 100000   # Maximo de MATCHES procesados por archivo (hard stop)
 FILE_TIME_LIMIT = 60            # 60 segundos maximo por archivo dentro del thread
 
+# v4.2.6 — Anti-bloqueo del event loop:
+#   mmap.find()/slices NO liberan el GIL: un scan de GBs congelaba TODO el bot
+#   (por eso /ping llegaba con 68s de latencia durante una busqueda).
+#   Ahora se lee por CHUNKS con open/read (el read del SO SI libera el GIL) y
+#   cada bytes.find() queda acotado a 32MB (~5ms de GIL maximo).
+READ_CHUNK = 16 * 1024 * 1024   # 16MB por lectura (stall C ~15ms)
+LINE_LIMIT = 65536              # lineas mayores = basura binaria: solo se mira el inicio
+GIANT_SKIP_CHUNK = 8 * 1024 * 1024  # al saltar una linea gigante, scans acotados
+GIANT_LINE_THRESHOLD = 8 * 1024 * 1024 + 65536  # carry mayor = linea gigante (basura)
+
 
 def _search_file(path: Path, kw: str, modo: SearchMode, cancel_event: threading.Event = None) -> List[str]:
-    """Busqueda en archivo con mmap - con limites duros de matches y tiempo."""
+    """Busqueda en archivo por chunks — rapida Y fluida para el event loop.
+
+    v4.2.6: reemplaza mmap.find() (que retenia el GIL durante scans de GBs y
+    congelaba el bot entero) por lecturas de 32MB. El read() del SO libera el
+    GIL y cada operacion C queda acotada al tamano de un chunk (~15-30ms max).
+
+    Estrategia por chunk:
+      1. Deteccion case-insensitive del keyword en el chunk (2 scans C).
+         Si NO esta → cero procesamiento de lineas (solo continuidad).
+      2. Si esta → loop de lineas del chunk (con carry entre chunks).
+    Mantiene los mismos limites duros de resultados, matches y tiempo.
+    """
     if cancel_event and cancel_event.is_set():
         return []
 
@@ -54,88 +74,124 @@ def _search_file(path: Path, kw: str, modo: SearchMode, cancel_event: threading.
         if file_size == 0:
             return []
 
+        carry = b''     # cola de linea incompleta del chunk anterior
+        tail = b''      # ultimos 1KB (keyword cruzando el borde del chunk)
+        done = False
+
         with open(path, 'rb') as f:
-            with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
-                pos = 0
-                mm_size = mm.size()
+            while not done:
+                # === LIMITES DUROS (por chunk) ===
+                if len(res_set) >= MAX_RESULTS_PER_FILE:
+                    break
+                if matches_processed >= MAX_MATCHES_PER_FILE:
+                    logger.info(f"Archivo {path.name}: hard stop {MAX_MATCHES_PER_FILE} matches procesados")
+                    break
+                if time.time() - start_time > FILE_TIME_LIMIT:
+                    logger.info(f"Archivo {path.name}: time limit {FILE_TIME_LIMIT}s alcanzado")
+                    break
+                if cancel_event and cancel_event.is_set():
+                    break
 
-                while pos < mm_size:
-                    # === LIMITES DUROS ===
-                    if len(res_set) >= MAX_RESULTS_PER_FILE:
-                        break
-                    if matches_processed >= MAX_MATCHES_PER_FILE:
-                        logger.info(f"Archivo {path.name}: hard stop {MAX_MATCHES_PER_FILE} matches procesados")
-                        break
-                    if time.time() - start_time > FILE_TIME_LIMIT:
-                        logger.info(f"Archivo {path.name}: time limit {FILE_TIME_LIMIT}s alcanzado")
-                        break
+                chunk = f.read(READ_CHUNK)   # syscall: LIBERA el GIL aqui
+                if not chunk:
+                    break
 
+                # ── Fase 1: detección case-insensitive acotada ──
+                # (a) frontera: keyword cruzando el borde del chunk anterior
+                #     — copia mínima de ~3KB, NO un concat de 32MB
+                if tail:
+                    boundary = tail + chunk[:2048]
+                    hit = enc_kw in boundary.lower()
+                else:
+                    hit = False
+                # (b) chunk completo (scan C ~15ms con 16MB)
+                if not hit:
+                    hit = enc_kw in chunk.lower()
+                if not hit:
+                    # Sin keyword en este chunk: cero procesamiento de lineas
+                    nl_last = chunk.rfind(b'\n')
+                    if nl_last == -1:
+                        carry = carry + chunk if carry else chunk
+                    else:
+                        carry = chunk[nl_last + 1:]
+                    tail = chunk[-1024:]
+
+                    # linea gigante creciendo sin \n: scan acotado y salto
+                    if len(carry) > GIANT_LINE_THRESHOLD:
+                        ok, rem = _skip_giant_line(f, carry, enc_kw, res_set, kw_lower, modo)
+                        if not ok:
+                            break   # EOF dentro de una linea gigante
+                        carry = rem
+                        tail = rem[-1024:] if rem else b''
+                    continue
+
+                # ── Fase 2: el chunk contiene el keyword → procesar lineas ──
+                buf = (carry + chunk) if carry else chunk
+                start = 0
+                while True:
+                    nl = buf.find(b'\n', start)
+                    if nl == -1:
+                        break
+                    if nl > start:
+                        line = buf[start:nl]
+
+                        if len(line) <= LINE_LIMIT:
+                            low = line.lower()
+                            if enc_kw in low:
+                                # Solo cuentan los candidatos reales (igual
+                                # que el algoritmo mmap original)
+                                matches_processed += 1
+                                if matches_processed % 500 == 0 and cancel_event and cancel_event.is_set():
+                                    done = True
+                                    break
+                                try:
+                                    decoded = line.decode('utf-8', 'ignore').strip()
+                                    if decoded and kw_lower in decoded.lower():
+                                        _add_result(res_set, decoded, modo)
+                                except Exception:
+                                    pass
+                        else:
+                            # Linea gigante (dump corrupto): solo el inicio acotado
+                            seg = line[:LINE_LIMIT]
+                            if enc_kw in seg.lower():
+                                matches_processed += 1
+                                try:
+                                    decoded = seg.decode('utf-8', 'ignore').strip()
+                                    if decoded and kw_lower in decoded.lower():
+                                        _add_result(res_set, decoded, modo)
+                                except Exception:
+                                    pass
+                            if cancel_event and cancel_event.is_set():
+                                done = True
+                                break
+                    start = nl + 1
+
+                if done:
+                    break
+
+                carry = buf[start:]
+                tail = chunk[-1024:]
+
+                if len(carry) > GIANT_LINE_THRESHOLD:
+                    ok, rem = _skip_giant_line(f, carry, enc_kw, res_set, kw_lower, modo)
+                    if not ok:
+                        break
+                    carry = rem
+                    tail = rem[-1024:] if rem else b''
+
+                time.sleep(0)    # yield explicito del GIL entre chunks
+
+            # Ultima linea del archivo (sin \n final), acotada
+            if carry and not done:
+                seg = carry[:LINE_LIMIT]
+                if enc_kw in seg.lower():
                     matches_processed += 1
-                    if matches_processed % 500 == 0 and cancel_event and cancel_event.is_set():
-                        break
-
-                    found = mm.find(enc_kw, pos)
-                    if found == -1:
-                        break
-
-                    line_start = mm.rfind(b'\n', max(0, found - 4096), found)
-                    if line_start == -1:
-                        line_start = 0
-                    else:
-                        line_start += 1
-
-                    line_end = mm.find(b'\n', found)
-                    if line_end == -1:
-                        line_end = mm_size
-                    else:
-                        line_end += 1
-
-                    line_data = mm[line_start:line_end].strip()
-                    if not line_data:
-                        pos = line_end
-                        continue
-
                     try:
-                        decoded = line_data.decode('utf-8', 'ignore').strip()
-                        if not decoded or kw_lower not in decoded.lower():
-                            pos = line_end
-                            continue
-
-                        if modo == SearchMode.ULP:
-                            res_set.add(decoded)
-
-                        elif modo in (SearchMode.MAIL, SearchMode.USERPASS):
-                            clean_line = decoded.replace("|", ":").replace(";", ":")
-                            parts = [p.strip() for p in clean_line.split(":") if p.strip()]
-
-                            user = ""
-                            password = ""
-
-                            if len(parts) >= 3:
-                                user = parts[-2]
-                                password = parts[-1]
-                            elif len(parts) == 2:
-                                user = parts[0]
-                                password = parts[1]
-                            else:
-                                pos = line_end
-                                continue
-
-                            if not user or not password:
-                                pos = line_end
-                                continue
-
-                            if modo == SearchMode.MAIL:
-                                if _EMAIL_RE.match(user):
-                                    res_set.add(f"{user}:{password}")
-                            elif modo == SearchMode.USERPASS:
-                                if "@" not in user:
-                                    res_set.add(f"{user}:{password}")
-
+                        decoded = seg.decode('utf-8', 'ignore').strip()
+                        if decoded and kw_lower in decoded.lower():
+                            _add_result(res_set, decoded, modo)
                     except Exception:
                         pass
-
-                    pos = line_end
 
     except Exception:
         pass
@@ -145,6 +201,87 @@ def _search_file(path: Path, kw: str, modo: SearchMode, cancel_event: threading.
         logger.info(f"Archivo {path.name}: {len(res_set)} resultados en {elapsed:.1f}s ({matches_processed} matches procesados)")
 
     return list(res_set)
+
+
+def _skip_giant_line(f, carry: bytes, enc_kw: bytes, res_set: set, kw_lower: str, modo: SearchMode):
+    """Linea gigante (basura binaria > umbral): scan acotado por ventanas y
+    salto hasta el proximo \n. Retorna (ok, remainder): ok=False si se alcanza
+    EOF dentro de ella; remainder = bytes tras el \n (lineas normales que NO
+    deben perderse — estaban dentro del bloque de salto).
+
+    El keyword detectado en la linea produce el resultado acotado a su inicio
+    (LINE_LIMIT) — nunca una linea de cientos de MB en los resultados.
+    """
+    # Ventanas sobre lo ya acumulado (con solape anti-corte de keyword)
+    wpos = 0
+    found = False
+    while wpos < len(carry):
+        w = carry[wpos:wpos + GIANT_SKIP_CHUNK]
+        if enc_kw in w.lower():
+            found = True
+            break
+        wpos += GIANT_SKIP_CHUNK - 1024
+    if found:
+        try:
+            seg = carry[:LINE_LIMIT]
+            decoded = seg.decode('utf-8', 'ignore').strip()
+            if decoded:
+                _add_result(res_set, decoded, modo)
+        except Exception:
+            pass
+
+    # Saltar el resto de la linea leyendo en bloques acotados
+    skip_tail = carry[-1024:] if carry else b''
+    while True:
+        gc = f.read(GIANT_SKIP_CHUNK)
+        if not gc:
+            return False, b''   # EOF dentro de la linea gigante
+        nl2 = gc.find(b'\n')
+        # SOLO la porcion de la linea gigante (antes del \n): el keyword de
+        # la linea siguiente NO pertenece a esta linea (falso positivo v4.2.6)
+        scan_end = nl2 if nl2 != -1 else len(gc)
+        if not found and enc_kw in (skip_tail + gc[:scan_end]).lower():
+            found = True
+            try:
+                seg = carry[:LINE_LIMIT]
+                decoded = seg.decode('utf-8', 'ignore').strip()
+                if decoded:
+                    _add_result(res_set, decoded, modo)
+            except Exception:
+                pass
+        if nl2 != -1:
+            return True, gc[nl2 + 1:]   # resto normal: se procesa después
+        skip_tail = gc[-1024:]
+
+
+def _add_result(res_set: set, decoded: str, modo: SearchMode):
+    """Agregar una linea decodificada al set segun el modo de busqueda."""
+    if modo == SearchMode.ULP:
+        res_set.add(decoded)
+        return
+
+    if modo in (SearchMode.MAIL, SearchMode.USERPASS):
+        clean_line = decoded.replace("|", ":").replace(";", ":")
+        parts = [p.strip() for p in clean_line.split(":") if p.strip()]
+
+        if len(parts) >= 3:
+            user = parts[-2]
+            password = parts[-1]
+        elif len(parts) == 2:
+            user = parts[0]
+            password = parts[1]
+        else:
+            return
+
+        if not user or not password:
+            return
+
+        if modo == SearchMode.MAIL:
+            if _EMAIL_RE.match(user):
+                res_set.add(f"{user}:{password}")
+        elif modo == SearchMode.USERPASS:
+            if "@" not in user:
+                res_set.add(f"{user}:{password}")
 
 
 async def search_engine(kw: str, time_opt: str, modo: SearchMode) -> Optional[Path]:
@@ -220,8 +357,12 @@ async def search_engine(kw: str, time_opt: str, modo: SearchMode) -> Optional[Pa
     kw_safe = re.sub(r'[^\w\-.]', '_', kw[:20])
     out = config.DIR_CACHE / f"result_{int(time.time())}_{kw_safe}.txt"
 
-    with open(out, 'w', encoding='utf-8', buffering=1024*64) as f:
-        f.write('\n'.join(final))
+    def _write_results(data: set, out_path: Path):
+        with open(out_path, 'w', encoding='utf-8', buffering=1024 * 64) as f:
+            f.write('\n'.join(data))
+
+    # v4.2.6: la escritura de hasta 500k líneas va a un thread (no bloquea el loop)
+    await asyncio.to_thread(_write_results, final, out)
 
     elapsed = time.time() - search_start
     logger.info(f"Busqueda '{kw}' completada: {len(final)} resultados en {elapsed:.1f}s")

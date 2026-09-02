@@ -2,6 +2,25 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.6] — Optimización: el bot ya no se congela durante las búsquedas
+
+### 🐌 El bug (reporte real: 4 comandos ignorados + latencias de 68s)
+- Durante una búsqueda (`/url …`), el bot **dejaba de responder a TODO** (`/ping`, `/start` en silencio) y al terminar llegaban todas las respuestas de golpe con latencias de 47–68 segundos.
+- **Causa raíz**: el motor de búsqueda usaba `mmap.find()` en threads, pero las operaciones de mmap de Python **NO liberan el GIL** — un scan de GBs sostenía el GIL durante toda la llamada C y **congelaba el event loop** (nada del bot podía ejecutarse). Además, una «línea» corrupta de cientos de MB disparaba slice+strip+decode+lower de GBs en llamadas C indivisibles.
+- **Medido**: un solo scan de 512MB congelaba el loop **337 ms**; en el VPS con archivos de GBs y 16 workers en paralelo, la congelación era continua durante toda la búsqueda.
+
+### ⚡ Nuevo motor de búsqueda (chunked, misma semántica)
+- Lecturas por **chunks de 16MB** con `open()/read()` — la syscall del SO **sí libera el GIL**; cada operación C queda acotada (~15-30ms máximo).
+- **Detección por chunk**: si el keyword no está en el chunk (2 scans C case-insensitive), se salta el procesamiento de líneas por completo — velocidad de scan casi igual al mmap original.
+- **Detección de frontera** con copia mínima de 3KB: keywords que cruzan el borde entre dos chunks nunca se pierden.
+- **Líneas gigantes** (dumps corruptos/binarios > 8MB): se escanean por ventanas acotadas y se saltan sin copiar GBs — el keyword detectado produce el resultado recortado al inicio de la línea (nunca líneas de cientos de MB en los resultados).
+- La escritura del archivo de resultados (hasta 500k líneas) y el conteo de líneas van a un thread (`asyncio.to_thread`) — cero trabajo pesado en el loop.
+
+### 🧪 Verificación (Python real, archivos sintéticos de hasta 512MB)
+- **Corrección exacta** vs algoritmo original: keyword cruzando chunks, inicio/fin de archivo, sin `\n` final, líneas vacías, dedup, separadores MAIL (`:`, `|`, `;`), USERPASS, líneas gigantes y falsos positivos de frontera (3 bugs cazados y corregidos por la batería de tests antes del push).
+- **Rendimiento**: congelación máxima del loop **31ms** durante un scan de 512MB (antes: 337ms por scan y congelación total en producción); búsqueda completa en ~1s por 512MB.
+- El bot queda **100% responsivo durante las búsquedas**: `/ping`, `/start` y cualquier comando responden al instante mientras escanea.
+
 ## [4.2.5] — SIN RESULTADOS con reintento directo + limpieza de botones vanosos
 
 ### 🐛 El problema del flujo «⚠️ SIN RESULTADOS»

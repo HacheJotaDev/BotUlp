@@ -37,7 +37,7 @@ def _env_list(key: str, default: List) -> List:
 @dataclass
 class Config:
     # ── Version ──────────────────────────────────────────────
-    VERSION: str = "4.2.4"
+    VERSION: str = "4.2.6"
 
     # ── Telegram ─────────────────────────────────────────────
     API_ID: int = int(os.getenv("API_ID", "33426502"))

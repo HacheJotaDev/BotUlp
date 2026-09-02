@@ -892,10 +892,15 @@ def register_handlers(bot_client):
                 else:
                     db.add_search(uid)
 
-                count = 0
-                with open(result_file, 'rb') as f:
-                    for _ in f:
-                        count += 1
+                # v4.2.6: conteo de líneas en thread (no bloquea el loop)
+                def _count_lines(p):
+                    n = 0
+                    with open(p, 'rb') as f:
+                        for _ in f:
+                            n += 1
+                    return n
+
+                count = await asyncio.to_thread(_count_lines, result_file)
 
                 if is_free_search:
                     caption = UI.text("search_completed_free", lang, kw, tipo_texto, count, elapsed)
