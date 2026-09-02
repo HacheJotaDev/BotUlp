@@ -134,14 +134,6 @@ class Keyboards:
         ]
 
     @staticmethod
-    def result_actions():
-        """Acciones bajo el archivo de resultados de una búsqueda."""
-        return [
-            [Button.inline("🔍  Nueva búsqueda", b"search_init"),
-             Button.inline("👤  Mi cuenta", b"my_account")],
-        ]
-
-    @staticmethod
     def admin():
         return [
             [Button.inline("👑  Ver VIPs", b"adm_vips"),

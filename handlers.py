@@ -904,8 +904,7 @@ def register_handlers(bot_client):
 
                 await _send_search_result(chat_id, result_file, caption,
                                                e=callback_event, msg=loading_msg,
-                                               reply_to=reply_to,
-                                               buttons=Keyboards.result_actions())
+                                               reply_to=reply_to)
             else:
                 no_res_text = UI.text("no_results", lang, kw)
                 no_res_kb = Keyboards.no_results(kw)
