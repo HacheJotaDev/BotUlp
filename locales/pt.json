@@ -54,6 +54,7 @@
   "redeem_success": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ 🎉 **VIP ATIVADO!**\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n✅ Sua conta VIP foi ativada com sucesso.\n🚀 Aproveite todos os recursos premium.",
   "report_received": "╭───✦ ⚠️ **RELATÓRIO DE URL**\n├─ 👤 Usuário: `{0}`\n├─ 🔍 URL: `{1}`\n╰───✦",
   "search_already_running": "⏳ **Busca em andamento** — será executada automaticamente quando a atual terminar.",
+  "url_usage": "╭───✦ ⚠️ **FALTA O LINK**\n├─ Digite `/url` seguido do domínio a buscar\n├─ ✍️ Exemplo: `/url exemplo.com`\n╰───✦",
   "search_completed": "╭───✦ ✅ **BUSCA CONCLUÍDA**\n├─ 🔎 Domínio: `{0}`\n├─ 📑 Formato: `{1}`\n├─ 📊 Resultados: **{2}**\n├─ ⏱️ Tempo: `{3:.1f}s`\n╰───✦",
   "search_completed_free": "╭───✦ ✅ **BUSCA CONCLUÍDA**\n├─ 🔎 Domínio: `{0}`\n├─ 📑 Formato: `{1}`\n├─ 📊 Resultados: **{2}**\n├─ ⏱️ Tempo: `{3:.1f}s`\n╰───✦\n\n🎁 Essa foi sua **busca grátis**.\n💎 Adquira VIP para continuar buscando.",
   "search_in_progress": "⏳ **Busca em andamento**\n\nSua busca será executada automaticamente quando a atual terminar.\n📋 Posição na fila: `{0}`",

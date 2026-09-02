@@ -968,8 +968,10 @@ def register_handlers(bot_client):
             except Exception:
                 pass
 
-    @bot_client.on(events.NewMessage(pattern="/start"))
+    @bot_client.on(events.NewMessage(pattern=r"/(start|cmds)(\s|$)"))
     async def start(e):
+        """Bienvenida + menú principal. /start y /cmds son el mismo comando
+        (alias el uno del otro, por si acaso el usuario usa cualquiera)."""
         if e.is_group and e.chat_id not in state.allowed_groups:
             return
 
@@ -1172,7 +1174,21 @@ def register_handlers(bot_client):
                 parse_mode='md'
             )
 
-    @bot_client.on(events.NewMessage(pattern=r"/url (.+)"))
+    @bot_client.on(events.NewMessage(pattern=r"/url\s*$"))
+    async def cmd_url_usage(e):
+        """Ayuda de uso cuando /url se envía sin enlace (ya no se queda mudo)."""
+        if e.is_group and e.chat_id not in state.allowed_groups:
+            return
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        await e.reply(
+            UI.text("url_usage", lang),
+            buttons=Keyboards.back() if e.is_private else None,
+            parse_mode='md'
+        )
+
+    @bot_client.on(events.NewMessage(pattern=r"/url\s+(\S.*)"))
     async def cmd_url(e):
         uid = e.sender_id
         user = db.get_user(uid)

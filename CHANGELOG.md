@@ -2,6 +2,17 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.1] — Comandos que nunca se quedan mudos
+
+### 🗣️ Correcciones de comandos
+- **`/url` sin enlace ahora responde**: antes el bot ignoraba `/url` enviado sin argumento (silencio total). Ahora muestra una tarjeta de ayuda con el uso correcto — ✍️ Ejemplo: `/url ejemplo.com` — en el idioma del usuario.
+- **`/cmds` restaurado**: `/start` y `/cmds` son ahora el mismo comando (alias el uno del otro). Da igual cuál escribas — ambos abren la bienvenida con el menú principal. `/cmd` y `/help` siguen mostrando la lista de comandos como siempre.
+
+### 🔧 Interno
+- Patrón de `/start` unificado a `/(start|cmds)(\s|$)` — más estricto (ya no captura texto como `/startup`) y compatible con deep links (`ref_<id>`, keys `HJ-`).
+- Nuevo handler `/url\s*$` que solo captura el comando vacío, sin interferir con la búsqueda: el patrón real se endureció a `/url\s+(\S.*)` (exige contenido no-espacio, evita dobles respuestas y términos en blanco).
+- 1 clave nueva de localización (`url_usage`) en ES/EN/PT (90 claves sincronizadas).
+
 ## [4.2.0] — Sistema de Referidos
 
 ### 👥 Nuevo: Programa de Referidos

@@ -54,6 +54,7 @@
   "redeem_success": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ 🎉 **¡VIP ACTIVADO!**\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n✅ Tu cuenta VIP se activó correctamente.\n🚀 Disfruta de todas las funciones premium.",
   "report_received": "╭───✦ ⚠️ **REPORTE DE URL**\n├─ 👤 Usuario: `{0}`\n├─ 🔍 URL: `{1}`\n╰───✦",
   "search_already_running": "⏳ **Búsqueda en curso** — se ejecutará automáticamente al terminar la actual.",
+  "url_usage": "╭───✦ ⚠️ **FALTA EL ENLACE**\n├─ Escribe `/url` seguido del dominio a buscar\n├─ ✍️ Ejemplo: `/url ejemplo.com`\n╰───✦",
   "search_completed": "╭───✦ ✅ **BÚSQUEDA COMPLETADA**\n├─ 🔎 Dominio: `{0}`\n├─ 📑 Formato: `{1}`\n├─ 📊 Resultados: **{2}**\n├─ ⏱️ Tiempo: `{3:.1f}s`\n╰───✦",
   "search_completed_free": "╭───✦ ✅ **BÚSQUEDA COMPLETADA**\n├─ 🔎 Dominio: `{0}`\n├─ 📑 Formato: `{1}`\n├─ 📊 Resultados: **{2}**\n├─ ⏱️ Tiempo: `{3:.1f}s`\n╰───✦\n\n🎁 Esta fue tu **búsqueda gratis**.\n💎 Consigue VIP para seguir buscando.",
   "search_in_progress": "⏳ **Búsqueda en curso**\n\nTu búsqueda se ejecutará automáticamente al terminar la actual.\n📋 Posición en cola: `{0}`",

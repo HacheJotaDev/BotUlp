@@ -205,6 +205,12 @@ class LocaleManager:
             "search_already_running": (
                 "⏳ **Búsqueda en curso** — se ejecutará automáticamente al terminar la actual."
             ),
+            "url_usage": (
+                "╭───✦ ⚠️ **FALTA EL ENLACE**\n"
+                "├─ Escribe `/url` seguido del dominio a buscar\n"
+                "├─ ✍️ Ejemplo: `/url ejemplo.com`\n"
+                "╰───✦"
+            ),
             "access_denied": (
                 "╭───✦ 🚫 **ACCESO DENEGADO**\n"
                 "├─ Tu búsqueda gratis ya fue utilizada\n"
