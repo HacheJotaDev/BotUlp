@@ -2,6 +2,23 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.8] — /imap <remitente>: buzones con mensajes de un correo concreto (máx. 10)
+
+### 📬 Nuevo modo del IMAP Checker
+- **`/imap remitente@dominio.com`** (ej. `/imap disneyplus@trx.mail2.disneyplus.com`): encuentra **buzones que hayan recibido mensajes enviados por ese correo**.
+  - Búsqueda IMAP nativa **`FROM "remitente"`** — precisa, no confunde el remitente con el cuerpo (a diferencia del `TEXT` de keywords).
+  - **Máximo 10 buzones**: al alcanzar el tope se cancelan los chequeos pendientes y se detiene (ahorra conexiones y tiempo).
+  - Un buzón válido pero **sin mensajes de ese remitente se descarta** (no aparece como hit); `bad_accounts.txt` aclara: *discarded (bad login or no messages from sender)*.
+- El ZIP incluye carpeta **`sender/`** con cada buzón, su número de mensajes del remitente y hasta **5 asuntos/fechas de muestra**.
+- Flujo idéntico a keywords: responde al .txt con el comando, o pon el comando primero y envía el .txt después (privado y grupos permitidos).
+- `imap_info` actualizado en **ES/EN/PT** con el 4º modo, ejemplos y carpetas del ZIP.
+
+### 🔍 Auditoría de botones vanosos (reporte del OWNER: «si no hay, no hagas nada»)
+- Comparados **todos los callbacks de teclados** (`ui.py`) contra el dispatcher de callbacks: **0 callbacks muertos**, 0 botones sin efecto tras las limpiezas v4.2.5/4.2.7 — los `Button.url` (soporte/pagar/compartir) son acciones reales. **No se eliminó nada porque no queda nada vanoso.**
+
+### 🧪 Verificación (IMAP simulado, 25 combos)
+- Corte exacto a **10 hits** con cancelación de pendientes ✔ · sin tope encuentra los 12 con mensajes ✔ · modo clásico intacto (login OK = hit) ✔ · regex distingue email/keywords/country ✔ · textos y JSON ES/EN/PT ✔ · py_compile de los 4 módulos ✔
+
 ## [4.2.7] — SIN RESULTADOS solo sugiere «24h + Antiguos» si aún no se usó
 
 ### 🎯 Ajuste de experiencia (reporte real del OWNER)

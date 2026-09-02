@@ -13,6 +13,7 @@
 """
 
 import os
+import re
 import sys
 import math
 import asyncio
@@ -44,7 +45,7 @@ from nowpayments import (
     create_invoice, VIP_PLANS, get_payment_status,
     SUCCESS_STATUSES, WAITING_STATUSES, FAIL_STATUSES, _deliver_vip
 )
-from imap_checker import imap_check_file
+from imap_checker import imap_check_file, MAX_SENDER_RESULTS
 from geoip_checker import get_country_for_email
 from download import (
     DownloadProgressTracker,
@@ -481,8 +482,18 @@ async def _send_search_result(target_chat, result_file, caption, e=None, msg=Non
 # HANDLERS DE COMANDOS
 # ═════════════════════════════════════════════════════════════
 
-async def _execute_imap_check(event, file_msg, keywords, lang, uid, mode_country=False):
-    """Execute IMAP check with optional keyword/country search + generate proper ZIP."""
+# v4.2.8: /imap <remitente> — detectar una dirección de correo como argumento
+EMAIL_RE = re.compile(r'^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$')
+
+
+async def _execute_imap_check(event, file_msg, keywords, lang, uid,
+                              mode_country=False, sender=None, max_hits=None):
+    """Execute IMAP check with optional keyword/country/sender search + ZIP.
+
+    v4.2.8: modo `sender` — encuentra buzones que tengan mensajes enviados
+    POR esa dirección (búsqueda IMAP FROM). `max_hits` corta el chequeo al
+    alcanzar N resultados (10 por defecto en modo sender).
+    """
     import zipfile
     from datetime import datetime
     from collections import defaultdict
@@ -550,7 +561,9 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid, mode_country
             lambda: imap_check_file(
                 Path(input_path), Path(output_path),
                 keywords=keywords,
-                progress_callback=progress_cb
+                progress_callback=progress_cb,
+                sender=sender,
+                max_hits=max_hits
             )
         )
 
@@ -574,8 +587,8 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid, mode_country
                 c = c.strip()
                 return c or 'Unknown'
 
-            # Determinar si generamos ZIP (keywords o country)
-            need_zip = keywords or mode_country
+            # Determinar si generamos ZIP (keywords, country o remitente)
+            need_zip = keywords or mode_country or sender
 
             if need_zip:
                 domains_dir = os.path.join(temp_dir, 'domains')
@@ -592,7 +605,10 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid, mode_country
                 # 2) bad_accounts.txt
                 bads_path = os.path.join(temp_dir, 'bad_accounts.txt')
                 with open(bads_path, 'w', encoding='utf-8') as f:
-                    f.write('# BAD ACCOUNTS\n\n')
+                    if sender:
+                        f.write('# DISCARDED (bad login or no messages from sender)\n\n')
+                    else:
+                        f.write('# BAD ACCOUNTS\n\n')
                     for bad in bads_list:
                         f.write(bad + '\n')
 
@@ -632,6 +648,25 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid, mode_country
                                             'Date: ' + date_str
                                         ]
                                         f.write(' | '.join(parts) + '\n')
+
+                # 4b) sender/ si modo remitente (v4.2.8)
+                sender_dir = None
+                if sender:
+                    sender_dir = os.path.join(temp_dir, 'sender')
+                    os.makedirs(sender_dir, exist_ok=True)
+
+                    safe_s = sanitize_domain(sender)
+                    spath = os.path.join(sender_dir, safe_s + '.txt')
+                    with open(spath, 'w', encoding='utf-8') as f:
+                        f.write('# MESSAGES FROM: ' + sender + '\n')
+                        f.write('# MAILBOX | sender messages | samples\n\n')
+                        for h in hits_data:
+                            f.write(h['combo'] + ' | Mensajes: '
+                                    + str(h.get('sender_count', 0)) + '\n')
+                            for (subject, date_str) in h.get('sender_matches', []):
+                                f.write('    • ' + (date_str or '')
+                                        + ' — ' + (subject or '(sin asunto)') + '\n')
+                            f.write('\n')
 
                 # 5) countries/ si modo country
                 countries_dir = None
@@ -735,12 +770,21 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid, mode_country
                         kw_dir = os.path.join(temp_dir, 'keywords')
                         for fn in os.listdir(kw_dir):
                             zf.write(os.path.join(kw_dir, fn), 'keywords/' + fn)
+                    if sender_dir:
+                        for fn in os.listdir(sender_dir):
+                            zf.write(os.path.join(sender_dir, fn), 'sender/' + fn)
                     if countries_dir:
                         for fn in os.listdir(countries_dir):
                             zf.write(os.path.join(countries_dir, fn), 'countries/' + fn)
 
                 # Caption del ZIP
-                if mode_country and keywords:
+                if sender:
+                    caption = UI.text(
+                        'imap_zip_caption_sender', lang,
+                        sender, stats['total'], stats['hits'], stats['bads'],
+                        stats['elapsed'], stats['hits']
+                    )
+                elif mode_country and keywords:
                     kw_str = ', '.join(keywords)
                     caption = UI.text(
                         'imap_zip_caption_country_kw', lang,
@@ -1296,12 +1340,14 @@ def register_handlers(bot_client):
 
     @bot_client.on(events.NewMessage(pattern=r"/imap(.*)"))
     async def cmd_imap(e):
-        """IMAP Checker v2 — soporta keywords, country y genera ZIP.
+        """IMAP Checker v2 — soporta keywords, country, remitente y genera ZIP.
 
         Uso:
           /imap                      → sin keywords (modo clasico)
           /imap kw1, kw2, kw3         → con keywords (genera ZIP)
           /imap country              → agrupa hits por pais (genera ZIP)
+          /imap remitente@dominio     → v4.2.8: buzones con mensajes de ese
+                                        remitente (ZIP, maximo 10 buzones)
         Requiere responder a un archivo .txt con mail:pass.
         Si se pasan keywords sin archivo, las guarda y espera el archivo.
         """
@@ -1320,13 +1366,19 @@ def register_handlers(bot_client):
                 parse_mode='md'
             )
 
-        # Parsear keywords o modo country del comando
+        # Parsear keywords, modo country o remitente del comando
         raw_args = (e.pattern_match.group(1) or "").strip()
         keywords = []
         mode_country = False
+        mode_sender = False
+        sender = None
         if raw_args:
             if raw_args.lower() == 'country':
                 mode_country = True
+            elif "," not in raw_args and EMAIL_RE.match(raw_args.strip()):
+                # v4.2.8: /imap <remitente> → buzones con mensajes de ese correo
+                mode_sender = True
+                sender = raw_args.strip().lower()
             else:
                 keywords = [kw.strip().lower() for kw in raw_args.split(",") if kw.strip()]
 
@@ -1339,14 +1391,20 @@ def register_handlers(bot_client):
 
         reply = await e.get_reply_message()
 
-        # Si hay keywords pero no archivo: guardar keywords y esperar archivo
-        if (keywords or mode_country) and (not reply or not reply.document):
+        # Si hay keywords/country/remitente pero no archivo: esperar archivo
+        if (keywords or mode_country or mode_sender) and (not reply or not reply.document):
             state.temp_state[uid] = {
                 'step': 'WAITING_IMAP_FILE',
                 'imap_keywords': keywords,
                 'imap_mode_country': mode_country,
+                'imap_sender': sender,
                 'chat_id': e.chat_id
             }
+            if mode_sender:
+                return await e.reply(
+                    UI.text("imap_sender_waiting_file", lang, sender),
+                    parse_mode='md'
+                )
             if mode_country:
                 return await e.reply(
                     UI.text("imap_country_waiting_file", lang),
@@ -1366,7 +1424,12 @@ def register_handlers(bot_client):
             )
 
         # Tenemos archivo: ejecutar IMAP check
-        await _execute_imap_check(e, reply, keywords, lang, uid, mode_country=mode_country)
+        await _execute_imap_check(
+            e, reply, keywords, lang, uid,
+            mode_country=mode_country,
+            sender=sender,
+            max_hits=MAX_SENDER_RESULTS if mode_sender else None
+        )
 
     # --- Conversación: usuario envía archivo después de poner keywords ---
     @bot_client.on(events.NewMessage(
@@ -1382,7 +1445,13 @@ def register_handlers(bot_client):
         ts = state.temp_state.pop(uid, {})
         keywords = ts.get('imap_keywords', [])
         mode_country = ts.get('imap_mode_country', False)
-        await _execute_imap_check(e, e, keywords, lang, uid, mode_country=mode_country)
+        sender = ts.get('imap_sender')
+        await _execute_imap_check(
+            e, e, keywords, lang, uid,
+            mode_country=mode_country,
+            sender=sender,
+            max_hits=MAX_SENDER_RESULTS if sender else None
+        )
 
     # --- Si el usuario envia texto (no archivo) mientras espera IMAP file, cancelar ---
     @bot_client.on(events.NewMessage(
@@ -1422,7 +1491,13 @@ def register_handlers(bot_client):
         ts = state.temp_state.pop(uid, {})
         keywords = ts.get('imap_keywords', [])
         mode_country = ts.get('imap_mode_country', False)
-        await _execute_imap_check(e, e, keywords, lang, uid, mode_country=mode_country)
+        sender = ts.get('imap_sender')
+        await _execute_imap_check(
+            e, e, keywords, lang, uid,
+            mode_country=mode_country,
+            sender=sender,
+            max_hits=MAX_SENDER_RESULTS if sender else None
+        )
 
     # --- BROADCAST ---
 
