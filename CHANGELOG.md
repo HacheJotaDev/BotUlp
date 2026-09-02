@@ -2,6 +2,22 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.4] — CAUSA RAÍZ del error interno: teclados con filas anidadas
+
+### 💥 El bug exacto (gracias al diagnóstico en vivo de v4.2.3)
+- El OWNER recibía: `🔧 Diagnóstico: AttributeError: 'list' object has no attribute 'SUBCLASS_OF_ID'` — error de Telethon al **serializar un teclado donde una fila contiene una lista en vez de un botón**.
+- **Afectados**: teclado principal FREE y OWNER/ADMIN (el botón «🌐 Idioma», definido como *fila*, estaba anidado dentro de la fila «📋 Comandos») y el panel «👥 Referidos» (el botón «« Volver» definido como lista de filas) — este último roto desde v4.2.0.
+- VIP y SELLER funcionaban porque ahí el botón de idioma estaba como fila suelta.
+- Resultado: `/start`, `/cmds` y el botón de referidos **explotaban al construir el teclado** → error interno.
+
+### ✅ Fix
+- `ui.py`: separados `LANG_BUTTON` (botón individual, para filas de 2) y `LANG_BTN` (fila de 1, VIP/SELLER); panel de referidos con la fila «« Volver» directa.
+- `handlers.py`: red de seguridad en `/start` y `/cmd` — si el envío con teclado falla, **reintenta sin botones** para que la bienvenida nunca se pierda.
+
+### 🧪 Verificación
+- Los **20 teclados** del bot (los 4 roles × variantes de bono, admin, pagos, idiomas, referidos…) validados con `build_reply_markup` de **Telethon real**: 5 rotos antes → **0 rotos después**.
+- Sin construcción manual de botones en handlers.py (todo sale de `ui.py` ya validado).
+
 ## [4.2.3] — Diagnóstico en vivo: el OWNER ve la causa exacta del error
 
 ### 🔎 Por qué salía «⚠️ Ocurrió un error interno»

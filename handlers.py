@@ -1038,11 +1038,14 @@ def register_handlers(bot_client):
 
             welcome_text = UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, lang))
 
-            await e.reply(
-                welcome_text,
-                buttons=Keyboards.main(role, lang, free_n) if e.is_private else None,
-                parse_mode='md'
-            )
+            main_kb = Keyboards.main(role, lang, free_n) if e.is_private else None
+            try:
+                await e.reply(welcome_text, buttons=main_kb, parse_mode='md')
+            except Exception as send_err:
+                # Red de seguridad v4.2.4: si el teclado falla al serializar,
+                # reintentar sin botones para no perder la bienvenida.
+                logger.error(f"/start reintento sin botones (teclado): {send_err}")
+                await e.reply(welcome_text, parse_mode='md')
         except Exception as exc:
             # Garantía anti-mudez: si algo falla, NUNCA quedarse en silencio.
             # v4.2.3: el OWNER ve además la causa técnica exacta en el chat
@@ -1073,11 +1076,16 @@ def register_handlers(bot_client):
             role = get_user_role(uid)
             has_free = db.is_new_user(uid) and role == UserRole.FREE
             cmds = _get_commands_by_role(role, has_free)
-            await e.reply(
-                UI.text("cmd_list", lang, cmds),
-                buttons=Keyboards.back() if e.is_private else None,
-                parse_mode='md'
-            )
+            try:
+                await e.reply(
+                    UI.text("cmd_list", lang, cmds),
+                    buttons=Keyboards.back() if e.is_private else None,
+                    parse_mode='md'
+                )
+            except Exception as send_err:
+                # Red de seguridad v4.2.4: reintento sin botones
+                logger.error(f"/cmd reintento sin botones (teclado): {send_err}")
+                await e.reply(UI.text("cmd_list", lang, cmds), parse_mode='md')
         except Exception as exc:
             # Anti-mudez + diagnóstico para admins (mismo criterio que /start)
             logger.exception("Error en /cmd")

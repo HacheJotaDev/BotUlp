@@ -43,7 +43,11 @@ class UI:
 class Keyboards:
     # Botones compartidos
     BACK = [[Button.inline("«  Volver", b"back_main")]]
-    LANG_BTN = [Button.inline("🌐  Idioma", b"ch_lang")]
+    # v4.2.4 FIX: separar el BOTÓN individual de la FILA. Met una lista dentro
+    # de una fila provocaba "AttributeError: 'list' object has no attribute
+    # 'SUBCLASS_OF_ID'" al serializar el teclado (rompía /start para FREE y OWNER).
+    LANG_BUTTON = Button.inline("🌐  Idioma", b"ch_lang")   # botón suelto (filas de 2)
+    LANG_BTN = [LANG_BUTTON]                               # fila de 1 (VIP/SELLER)
     SUPPORT_URL = [Button.url("📞  Soporte", f"https://t.me/{config.SUPPORT_CONTACT.lstrip('@')}")]
 
     @staticmethod
@@ -63,7 +67,7 @@ class Keyboards:
             buttons.append([Button.inline("👥  Referidos", b"ref_info"),
                             Button.inline("👤  Mi cuenta", b"my_account")])
             buttons.append([Button.inline("📋  Comandos", b"cmd_list"),
-                            Keyboards.LANG_BTN])
+                            Keyboards.LANG_BUTTON])
             return buttons
 
         elif role == UserRole.VIP:
@@ -97,7 +101,7 @@ class Keyboards:
                 [Button.inline("👥  Referidos", b"ref_info"),
                  Button.inline("👤  Mi cuenta", b"my_account")],
                 [Button.inline("📋  Comandos", b"cmd_list"),
-                 Keyboards.LANG_BTN],
+                 Keyboards.LANG_BUTTON],
             ]
 
         return []
@@ -232,5 +236,5 @@ class Keyboards:
         return [
             [Button.url("📢  Compartir mi link", share_url)],
             [Button.inline("👤  Mi cuenta", b"my_account")],
-            Keyboards.BACK,
+            [Button.inline("«  Volver", b"back_main")],   # fila directa (back() es [[btn]])
         ]
