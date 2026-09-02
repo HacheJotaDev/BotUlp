@@ -1036,18 +1036,24 @@ def register_handlers(bot_client):
 
             free_n = _free_search_count(user) if role == UserRole.FREE else 0
 
-            welcome_text = UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user['search_count'], _welcome_extra(user, role, lang))
+            welcome_text = UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, lang))
 
             await e.reply(
                 welcome_text,
                 buttons=Keyboards.main(role, lang, free_n) if e.is_private else None,
                 parse_mode='md'
             )
-        except Exception:
-            # Garantía anti-mudez: si algo falla, NUNCA quedarse en silencio
+        except Exception as exc:
+            # Garantía anti-mudez: si algo falla, NUNCA quedarse en silencio.
+            # v4.2.3: el OWNER ve además la causa técnica exacta en el chat
+            # (diagnóstico en vivo sin necesidad de entrar al VPS).
             logger.exception("Error en /start")
             try:
-                await e.reply(locale_manager.get("start_error", lang), parse_mode=None)
+                err_txt = locale_manager.get("start_error", lang)
+                if e.sender_id in config.ADMIN_IDS:
+                    diag = (type(exc).__name__ + ": " + str(exc))[:200]
+                    err_txt += "\n\n🔧 Diagnóstico (solo admins): " + diag
+                await e.reply(err_txt, parse_mode=None)
             except Exception:
                 pass
 
@@ -1060,17 +1066,29 @@ def register_handlers(bot_client):
         """Mostrar lista de comandos disponibles."""
         if e.is_group and e.chat_id not in state.allowed_groups:
             return
-        uid = e.sender_id
-        user = db.get_user(uid)
-        lang = user.get('language', 'es')
-        role = get_user_role(uid)
-        has_free = db.is_new_user(uid) and role == UserRole.FREE
-        cmds = _get_commands_by_role(role, has_free)
-        await e.reply(
-            UI.text("cmd_list", lang, cmds),
-            buttons=Keyboards.back() if e.is_private else None,
-            parse_mode='md'
-        )
+        try:
+            uid = e.sender_id
+            user = db.get_user(uid)
+            lang = user.get('language', 'es')
+            role = get_user_role(uid)
+            has_free = db.is_new_user(uid) and role == UserRole.FREE
+            cmds = _get_commands_by_role(role, has_free)
+            await e.reply(
+                UI.text("cmd_list", lang, cmds),
+                buttons=Keyboards.back() if e.is_private else None,
+                parse_mode='md'
+            )
+        except Exception as exc:
+            # Anti-mudez + diagnóstico para admins (mismo criterio que /start)
+            logger.exception("Error en /cmd")
+            try:
+                err_txt = locale_manager.get("start_error", 'es')
+                if e.sender_id in config.ADMIN_IDS:
+                    diag = (type(exc).__name__ + ": " + str(exc))[:200]
+                    err_txt += "\n\n🔧 Diagnóstico (solo admins): " + diag
+                await e.reply(err_txt, parse_mode=None)
+            except Exception:
+                pass
 
     # ═════════════════════════════════════════════════════════════
     # UTILIDADES: /ping · /id · /help
@@ -1356,7 +1374,7 @@ def register_handlers(bot_client):
         name = await _display_name(e, uid)
         welcome_key = "welcome_new" if has_free else "welcome"
         await e.reply(
-            UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user['search_count'], _welcome_extra(user, role, lang)),
+            UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, lang)),
             buttons=Keyboards.main(role, lang, free_n),
             parse_mode='md'
         )
@@ -1550,7 +1568,7 @@ def register_handlers(bot_client):
                 name = await _display_name(e, uid)
                 welcome_key = "welcome_new" if has_free else "welcome"
                 await e.edit(
-                    UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user['search_count'], _welcome_extra(user, role, lang)),
+                    UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, lang)),
                     buttons=Keyboards.main(role, lang, free_n),
                     parse_mode='md'
                 )
@@ -1577,7 +1595,7 @@ def register_handlers(bot_client):
             elif data == "my_account":
                 await e.edit(
                     UI.text("my_account", lang, uid, UI.role_badge(role),
-                            _fmt_member_since(user), user['search_count'],
+                            _fmt_member_since(user), user.get('search_count', 0),
                             _account_block(user, role, lang)),
                     buttons=Keyboards.back(),
                     parse_mode='md'
@@ -1707,7 +1725,7 @@ def register_handlers(bot_client):
                 name = await _display_name(e, uid)
                 welcome_key = "welcome_new" if has_free else "welcome"
                 await e.edit(
-                    UI.text(welcome_key, new_lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user['search_count'], _welcome_extra(user, role, new_lang)),
+                    UI.text(welcome_key, new_lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, new_lang)),
                     buttons=Keyboards.main(role, new_lang, free_n),
                     parse_mode='md'
                 )

@@ -2,6 +2,20 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.3] — Diagnóstico en vivo: el OWNER ve la causa exacta del error
+
+### 🔎 Por qué salía «⚠️ Ocurrió un error interno»
+- Tras v4.2.2, la garantía anti-mudez de `/start` **ya no deja al bot mudo**: si algo falla responde con el aviso de error. Ese mensaje confirma que el código llega al handler y que una **excepción del entorno del VPS** (datos de la DB, proceso, red de Telegram) se está capturando correctamente.
+- Verificación end-to-end del handler `/start` con los módulos reales del bot y 8 escenarios (OWNER, FREE nuevo, FREE usado, referido, key inválida, grupo, DB con schema antiguo + migraciones, dict de fila vieja): **todos responden correctamente en entorno limpio** → el fallo es específico del entorno de producción.
+
+### 🛡️ Blindaje del handler
+- Accesos defensivos `user.get('search_count', 0)` en los 5 puntos que leían la columna con corchetes directos (`/start`, bienvenida tras canjear, reenvío tras `back_main`, «Mi cuenta» y cambio de idioma) — una fila antigua o migración fallida ya **no puede** provocar `KeyError`.
+- `/cmd` y `/help` ahora también tienen try/except anti-mudez propio (antes un fallo los dejaba en silencio).
+
+### 🔧 Diagnóstico en Telegram (solo admins)
+- Cuando el error ocurre, el **OWNER ve la causa técnica exacta** en la propia respuesta: `🔧 Diagnóstico (solo admins): TipoError: mensaje` (recortado a 200 chars). Los usuarios normales siguen viendo solo el aviso genérico.
+- Con esto no hace falta entrar al VPS a leer logs: el siguiente `/start` fallido muestra la causa raíz en el chat.
+
 ## [4.2.2] — Fix: comandos con @mención en grupos + /start a prueba de fallos
 
 ### 🐛 El bug real de «/start no responde»
