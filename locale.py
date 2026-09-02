@@ -463,19 +463,19 @@ class LocaleManager:
                 "3️⃣ **Por país** — geolocalización + ZIP:\n"
                 "     Responde a un .txt + `/imap country`\n"
                 "\n"
-                "4️⃣ **Por remitente** — buzones con mensajes de un correo + ZIP:\n"
-                "     Responde a un .txt + `/imap remitente@dominio.com`\n"
+                "4️⃣ **Por remitentes** — buzones con mensajes de esos correos + ZIP:\n"
+                "     Responde a un .txt + `/imap r1@dom.com, r2@dom.com`\n"
                 "\n"
                 "📌 Ejemplo: `/imap netflix, spotify, amazon`\n"
-                "📌 Ejemplo remitente: `/imap disneyplus@trx.mail2.disneyplus.com`\n"
-                "📌 Máximo **10 keywords** separadas por coma · Máx. **10 buzones** en modo remitente\n"
+                "📌 Ejemplo remitentes: `/imap disneyplus@trx.mail2.disneyplus.com`\n"
+                "📌 Máximo **10 keywords** o **10 remitentes** separados por coma\n"
                 "\n"
                 "📁 El ZIP incluye:\n"
                 "     📄 `all_hits.txt` — todos los hits\n"
                 "     📄 `bad_accounts.txt` — cuentas fallidas\n"
                 "     📁 `domains/` — agrupados por dominio\n"
                 "     📁 `keywords/` — por keyword con detalle\n"
-                "     📁 `sender/` — buzones con mensajes del remitente\n"
+                "     📁 `sender/` — buzones con mensajes de los remitentes\n"
                 "     📁 `countries/` — por país (modo country)"
             ),
             "imap_no_file": (
@@ -488,6 +488,12 @@ class LocaleManager:
             "imap_too_many_keywords": (
                 "╭───✦ ⚠️ **IMAP CHECKER**\n"
                 "├─ Máximo **10 keywords** permitidas\n"
+                "├─ Usaste: `{0}`\n"
+                "╰───✦"
+            ),
+            "imap_too_many_senders": (
+                "╭───✦ ⚠️ **IMAP CHECKER**\n"
+                "├─ Máximo **10 remitentes** permitidos\n"
                 "├─ Usaste: `{0}`\n"
                 "╰───✦"
             ),
@@ -507,21 +513,21 @@ class LocaleManager:
             ),
             # v4.2.8: modo por remitente
             "imap_sender_waiting_file": (
-                "╭───✦ 📬 **IMAP · BÚSQUEDA POR REMITENTE**\n"
-                "├─ 📨 Remitente: `{0}`\n"
+                "╭───✦ 📬 **IMAP · BÚSQUEDA POR REMITENTES**\n"
+                "├─ 📨 Remitentes ({0}): {1}\n"
                 "╰───✦\n"
                 "\n"
                 "⏳ Ahora envía un archivo .txt con `mail:pass` para iniciar.\n"
-                "🎯 Buscaré buzones con mensajes de ese remitente · Máx. **10**"
+                "🎯 Buscaré TODOS los buzones con mensajes de cualquiera de ellos"
             ),
             "imap_zip_caption_sender": (
-                "╭───✦ 📬 **IMAP + REMITENTE**\n"
-                "├─ 📨 Remitente: `{0}`\n"
+                "╭───✦ 📬 **IMAP + REMITENTES**\n"
+                "├─ 📨 Remitentes: `{0}`\n"
                 "├─ 📊 Total: `{1}` · 📬 Buzones con mensajes: `{2}` · ❌ Descartados: `{3}`\n"
                 "├─ ⏱️ Tiempo: `{4:.1f}s`\n"
                 "╰───✦\n"
                 "\n"
-                "📁 `sender/` — {5} buzones (máx. 10) con mensajes de `{0}`\n"
+                "📁 `sender/` — {5} buzones con mensajes de esos remitentes\n"
                 "📁 `bad_accounts.txt` — descartados (login fallido o sin mensajes)"
             ),
             "imap_processing": (

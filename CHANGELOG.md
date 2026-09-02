@@ -2,6 +2,28 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.9] — /imap <remitentes>: hasta 10 correos remitentes por comando (como keywords)
+
+### 🔧 Corrección según el OWNER (aclaración del «máximo 10»)
+- En v4.2.8 el «máximo 10» se interpretó como tope de **resultados**; el OWNER aclaró: el 10 es para los **correos remitentes del comando**, igual que las 10 keywords.
+- **Ahora**:
+  - `/imap r1@dom.com, r2@dom.com, ...` — **hasta 10 remitentes** separados por coma (si pasas más → nuevo aviso «Máximo 10 remitentes permitidos»).
+  - **Los resultados ya NO tienen tope**: se reportan **TODOS** los buzones que tengan mensajes de cualquiera de esos remitentes.
+  - Compatibilidad total: `/imap un-solo-remitente@dom.com` sigue funcionando igual (v4.2.8).
+
+### ⚙️ Motor (imap_checker.py)
+- **Búsqueda IMAP `FROM` con `OR` anidado**: para N remitentes se genera una única query `OR FROM "r1" OR FROM "r2" FROM "r3"...` — 1 solo SEARCH por buzón aunque busques 10 remitentes (rápido y preciso).
+- Buzón sin mensajes de NINGUNO de los remitentes → descartado (no es hit); `bad_accounts.txt` aclara *no messages from senders*.
+- Eliminado el corte `max_hits` (ya no se cancelan chequeos pendientes por tope de resultados).
+
+### 📦 ZIP y textos
+- Carpeta `sender/`: informe único — 1 remitente → `remitente_dom.txt`; varios → `senders_N.txt` con cabecera `MESSAGES FROM ANY OF: ...` (buzón | nº mensajes | hasta 5 asuntos/fechas).
+- Caption «IMAP + REMITENTES» lista todos los remitentes consultados y el total de buzones (sin «máx. 10»).
+- `imap_info` en **ES/EN/PT**: 4º modo con ejemplo multi-remitente y límite «10 keywords o 10 remitentes»; nuevo aviso `imap_too_many_senders`.
+
+### 🧪 Verificación (IMAP simulado + FakeIMAP con OR real)
+- 1 remitente → **12 hits sin tope** (antes se cortaba en 10) ✔ · 2 remitentes → unión 16 hits (12 de uno + 4 de otro) con query `OR FROM` verificada ✔ · remitente fantasma → 0 hits, todo descartado ✔ · modo clásico intacto (login OK = hit) ✔ · parseo: 1/varios remitentes, keywords, mixto→keywords, country, >10 → error ✔ · i18n es/en/pt con formatos nuevos + JSONs válidos ✔ · py_compile de los 4 módulos ✔
+
 ## [4.2.8] — /imap <remitente>: buzones con mensajes de un correo concreto (máx. 10)
 
 ### 📬 Nuevo modo del IMAP Checker
