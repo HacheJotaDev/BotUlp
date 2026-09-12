@@ -7,7 +7,7 @@
   • Sistema de roles con insignias: FREE / VIP / SELLER / OWNER
   • Interfaz premium con diseño Obsidian
   • Sistema multi-idioma (ES / EN / PT)
-  • Base de datos SQLite thread-safe con WAL + caché de usuarios
+  • Base de datos PostgreSQL con pool de conexiones + caché de usuarios en RAM
   • Auto-limpieza de archivos expirados
   • Búsqueda gratis para nuevos usuarios (1 búsqueda)
   • /updateBot: actualización remota desde Telegram
