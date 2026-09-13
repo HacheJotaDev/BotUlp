@@ -59,26 +59,47 @@ async def _api_get(endpoint: str, params: dict = None) -> Optional[Dict]:
                 else:
                     text = await resp.text()
                     logger.error(f"NP GET {endpoint} error {resp.status}: {text[:300]}")
+    except asyncio.TimeoutError:
+        logger.error(f"NP GET {endpoint} TIMEOUT (>15s)")
+    except aiohttp.ClientError as e:
+        logger.error(f"NP GET {endpoint} client error: {type(e).__name__}: {e}")
     except Exception as e:
-        logger.error(f"NP GET {endpoint} exception: {e}")
+        logger.error(f"NP GET {endpoint} exception: {type(e).__name__}: {e}")
     return None
 
 
-async def _api_post(endpoint: str, payload: dict) -> Optional[Dict]:
-    """POST request a la API de NOWPayments."""
+async def _api_post(endpoint: str, payload: dict,
+                    timeout: int = 20) -> tuple:
+    """POST request a la API de NOWPayments.
+
+    Retorna (data, error_info):
+      - data: dict con la respuesta JSON, o None si falló
+      - error_info: dict con detalle del error {'kind': ..., 'http_code': ..., 'msg': ...}
+                    o None si todo OK
+    """
     url = f"{NP_API_BASE}{endpoint}"
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(url, headers=NP_HEADERS, json=payload,
-                                   timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                                    timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
+                text = await resp.text()
                 if resp.status in (200, 201):
-                    return await resp.json()
+                    try:
+                        return await resp.json(), None
+                    except Exception as je:
+                        return None, {'kind': 'bad_json', 'http_code': resp.status,
+                                      'msg': f'respuesta no-JSON: {text[:200]}'}
                 else:
-                    text = await resp.text()
-                    logger.error(f"NP POST {endpoint} error {resp.status}: {text[:300]}")
+                    return None, {'kind': 'http_error', 'http_code': resp.status,
+                                  'msg': text[:300]}
+    except asyncio.TimeoutError:
+        return None, {'kind': 'timeout', 'msg': f'>{timeout}s'}
+    except aiohttp.ClientConnectorError as e:
+        return None, {'kind': 'conn_error', 'msg': f'{type(e).__name__}: {e}'}
+    except aiohttp.ClientError as e:
+        return None, {'kind': 'client_error', 'msg': f'{type(e).__name__}: {e}'}
     except Exception as e:
-        logger.error(f"NP POST {endpoint} exception: {e}")
-    return None
+        return None, {'kind': 'exception', 'msg': f'{type(e).__name__}: {e}'}
 
 
 async def get_np_status() -> bool:
@@ -101,8 +122,11 @@ async def create_invoice(user_id: int, days: int, lang: str = 'es') -> Optional[
       - price_amount
       - plan_label
 
-    El usuario paga a traves del invoice_url y elige su cripto.
-    La confirmacion llega via IPN webhook.
+    Estrategia robusta:
+      1) Intentar con ipn_callback_url (auto-delivery instantáneo)
+      2) Si falla por IPN URL inválida → reintento SIN ipn_callback_url
+         (el polling de 30s detecta el pago igualmente)
+      3) Hasta 2 reintentos con backoff si hay timeout/error de red
     """
     plan = VIP_PLANS.get(days)
     if not plan:
@@ -120,41 +144,78 @@ async def create_invoice(user_id: int, days: int, lang: str = 'es') -> Optional[
         "ipn_callback_url": config.NOWPAYMENTS_IPN_URL,
     }
 
-    data = await _api_post("/invoice", payload)
-    if not data or "id" not in data or "invoice_url" not in data:
-        logger.error(f"Error creando invoice para {user_id}: {data}")
-        return None
+    last_error = None
 
-    invoice_id = str(data["id"])
-    invoice_url = data["invoice_url"]
+    # Hasta 3 intentos: 1 con IPN, 1 retry con IPN, 1 SIN IPN (fallback)
+    for attempt in range(1, 4):
+        if attempt == 3:
+            # Fallback final: sin IPN callback (solo polling)
+            payload_fallback = dict(payload)
+            payload_fallback.pop("ipn_callback_url", None)
+            logger.warning(
+                f"create_invoice user={user_id}: intento 3 SIN ipn_callback_url "
+                f"(polling de fallback detectará el pago)"
+            )
+            data, err = await _api_post("/invoice", payload_fallback, timeout=25)
+        else:
+            logger.info(f"create_invoice user={user_id}: intento {attempt}/3 con IPN URL")
+            data, err = await _api_post("/invoice", payload, timeout=20)
 
-    logger.info(
-        f"Invoice creado: id={invoice_id} | user={user_id} | {plan['label']} | "
-        f"${price_usd} | url={invoice_url[:50]}..."
+        if data and "id" in data and "invoice_url" in data:
+            invoice_id = str(data["id"])
+            invoice_url = data["invoice_url"]
+
+            logger.info(
+                f"Invoice creado: id={invoice_id} | user={user_id} | {plan['label']} | "
+                f"${price_usd} | url={invoice_url[:50]}... | attempt={attempt}"
+            )
+
+            # Guardar en DB (invoice_id en columna invoice_id)
+            try:
+                db.create_payment(
+                    user_id=user_id,
+                    invoice_id=invoice_id,
+                    order_id=order_id,
+                    days=days,
+                    amount_usd=price_usd,
+                    status="pending",
+                    lang=lang
+                )
+                logger.info(f"Invoice {invoice_id} guardado en DB")
+            except Exception as db_err:
+                logger.error(f"CRITICO: Invoice {invoice_id} NO se guardo en DB: {db_err}")
+
+            return {
+                "invoice_id": invoice_id,
+                "invoice_url": invoice_url,
+                "order_id": order_id,
+                "price_amount": price_usd,
+                "plan_label": plan["label"],
+            }
+
+        # Falló este intento
+        last_error = err
+        if err:
+            logger.error(
+                f"create_invoice user={user_id} intento {attempt} falló: "
+                f"kind={err.get('kind')} http_code={err.get('http_code')} msg={err.get('msg')}"
+            )
+
+        # Si el error es 400/422 por IPN URL, ir directo al fallback sin IPN
+        if err and err.get('http_code') in (400, 422) and attempt == 1:
+            logger.warning("Saltando al fallback sin IPN URL (error 4xx en primer intento)")
+            continue
+
+        # Backoff entre reintentos (excepto si ya vamos al fallback final)
+        if attempt < 3:
+            await asyncio.sleep(1.5 * attempt)
+
+    # Todos los intentos fallaron
+    logger.critical(
+        f"create_invoice user={user_id}: TODOS los intentos fallaron. "
+        f"Último error: {last_error}"
     )
-
-    # Guardar en DB (invoice_id en columna invoice_id)
-    try:
-        db.create_payment(
-            user_id=user_id,
-            invoice_id=invoice_id,
-            order_id=order_id,
-            days=days,
-            amount_usd=price_usd,
-            status="pending",
-            lang=lang
-        )
-        logger.info(f"Invoice {invoice_id} guardado en DB")
-    except Exception as db_err:
-        logger.error(f"CRITICO: Invoice {invoice_id} NO se guardo en DB: {db_err}")
-
-    return {
-        "invoice_id": invoice_id,
-        "invoice_url": invoice_url,
-        "order_id": order_id,
-        "price_amount": price_usd,
-        "plan_label": plan["label"],
-    }
+    return None
 
 
 # ═════════════════════════════════════════════════════════════
