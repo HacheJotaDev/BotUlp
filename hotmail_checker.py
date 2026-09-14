@@ -31,6 +31,7 @@ from hotmail_paises import get_country_info, get_name_from_iso, get_flag_from_is
 # ── Config ──────────────────────────────────────────────────
 HOTMAIL_TIMEOUT = 20
 MAX_HOTMAIL_WORKERS = 20
+MAX_HOTMAIL_COMBOS = 2500  # tope duro: si mandan 5K, solo se procesan 2.5K
 _write_lock = threading.Lock()
 
 # PPFT fallback (extraído de una sesión real de login.live.com)
@@ -593,11 +594,23 @@ def hotmail_check_file(input_path: Path, output_path: Path,
                   elapsed, hits_data (lista de dicts con detalle)
     """
     with open(input_path, 'r', encoding='utf-8', errors='ignore') as f:
-        combos = [line.strip() for line in f if ":" in line.strip()]
+        all_combos = [line.strip() for line in f if ":" in line.strip()]
+
+    total_original = len(all_combos)
+    # Tope duro: si mandan 5K, solo se procesan 2.5K (los primeros)
+    if total_original > MAX_HOTMAIL_COMBOS:
+        logger.warning(
+            f"[HOTMAIL] Archivo tiene {total_original} combos — truncando a "
+            f"{MAX_HOTMAIL_COMBOS} (tope máximo)"
+        )
+        combos = all_combos[:MAX_HOTMAIL_COMBOS]
+    else:
+        combos = all_combos
 
     total = len(combos)
     if total == 0:
-        return {"total": 0, "hits": 0, "bads": 0, "twofa": 0, "locked": 0,
+        return {"total": 0, "total_original": total_original,
+                "hits": 0, "bads": 0, "twofa": 0, "locked": 0,
                 "unknowns": 0, "errors": 0, "elapsed": 0, "hits_data": []}
 
     # Parsear proxies una sola vez
@@ -673,6 +686,8 @@ def hotmail_check_file(input_path: Path, output_path: Path,
     elapsed = time.time() - start_time
     stats = {
         "total": total,
+        "total_original": total_original,
+        "truncated": total_original > total,
         "hits": len(hits_data),
         "bads": len(bads_list),
         "twofa": len(twofa_list),

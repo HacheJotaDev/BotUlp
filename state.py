@@ -31,6 +31,9 @@ temp_state: Dict[int, dict] = {}
 active_searches: Set[int] = set()  # UIDs con busqueda en curso
 search_queue: Dict[int, list] = {}  # UID -> lista de busquedas encoladas
 
+# Control de /hotmail en curso (anti-superposición: 1 check por usuario a la vez)
+active_hotmail_checks: Set[int] = set()
+
 # Ultima busqueda ejecutada por usuario (contexto para reintentos y reportes)
 last_search: Dict[int, dict] = {}
 

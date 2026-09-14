@@ -972,10 +972,24 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
     Genera ZIP con: hits.txt, all_hits.txt, twofa.txt, locked.txt,
     unknown.txt, errors.txt, summary.txt
     Si mode_country=True: agrega countries/ con un .txt por país.
+
+    Anti-superposición: si el usuario ya tiene un check en curso,
+    aborta con mensaje.
     """
+    # ── Anti-superposición: 1 check por usuario a la vez ──
+    if uid in state.active_hotmail_checks:
+        await event.reply(
+            "⚠️ Ya tenés una verificación /hotmail en curso.\n"
+            "Esperá a que termine antes de iniciar otra.",
+            parse_mode='md'
+        )
+        return
+    state.active_hotmail_checks.add(uid)
+
     import zipfile
     from datetime import datetime
     from utils import progress_bar
+    from hotmail_checker import detect_proxy_type
 
     status_msg = await event.reply(
         UI.text("hotmail_processing", lang, 0, "?", 0, LOADING_FRAMES[0]),
@@ -996,17 +1010,12 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
             return
 
         with open(input_path, 'r', encoding='utf-8', errors='ignore') as f:
-            total = sum(1 for line in f if ":" in line.strip())
+            total_in_file = sum(1 for line in f if ":" in line.strip())
 
-        if total == 0:
+        if total_in_file == 0:
             await status_msg.edit(UI.text("hotmail_no_file", lang),
                                   parse_mode='md')
             return
-
-        await status_msg.edit(
-            UI.text("hotmail_processing", lang, 0, total, 0, LOADING_FRAMES[0]),
-            parse_mode='md'
-        )
 
         # Parsear proxies (acepta cualquier formato)
         proxies = []
@@ -1015,6 +1024,40 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
                 parsed = parse_hotmail_proxy(p)
                 if parsed:
                     proxies.append(parsed)
+
+        # ── Detectar tipo de proxy (rotativa vs estática) ──
+        # Hacer 2 requests a httpbin por proxy y comparar IPs de salida.
+        # Si el usuario mandó varios proxies, esto puede tardar ~10s.
+        proxy_types = []  # lista de {proxy, type, ip1, ip2}
+        if proxies:
+            await status_msg.edit(
+                f"🌐 Detectando tipo de proxy ({len(proxies)})…",
+                parse_mode='md'
+            )
+            main_loop = asyncio.get_running_loop()
+            for proxy_url in proxies:
+                info = await main_loop.run_in_executor(
+                    None, detect_proxy_type, proxy_url
+                )
+                proxy_types.append({
+                    'proxy': proxy_url, **info
+                })
+                logger.info(
+                    f"[HOTMAIL] Proxy {proxy_url[:60]}… → {info.get('type')} "
+                    f"(IP1={info.get('ip1')}, IP2={info.get('ip2')})"
+                )
+            rotating_count = sum(1 for p in proxy_types if p.get('type') == 'rotating')
+            static_count = sum(1 for p in proxy_types if p.get('type') == 'static')
+            error_count = sum(1 for p in proxy_types if p.get('type') == 'error')
+            logger.info(
+                f"[HOTMAIL] Resumen proxies: {rotating_count} rotativas, "
+                f"{static_count} estáticas, {error_count} con error"
+            )
+
+        await status_msg.edit(
+            UI.text("hotmail_processing", lang, 0, total_in_file, 0, LOADING_FRAMES[0]),
+            parse_mode='md'
+        )
 
         main_loop = asyncio.get_running_loop()
         progress_data = {'last_edit': 0, 'frame_idx': 0}
@@ -1057,6 +1100,9 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
         locked_data = stats.get('locked_data', [])
         unknown_data = stats.get('unknown_data', [])
         error_data = stats.get('error_data', [])
+        total_processed = stats.get('total', 0)
+        total_original = stats.get('total_original', total_processed)
+        was_truncated = stats.get('truncated', False)
 
         if stats['hits'] > 0 or stats['twofa'] > 0 or stats['locked'] > 0:
             now_str = datetime.now().strftime('%m/%d/%Y, %I:%M:%S %p')
@@ -1065,7 +1111,8 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
             all_hits_path = os.path.join(temp_dir, 'all_hits.txt')
             with open(all_hits_path, 'w', encoding='utf-8') as f:
                 f.write('# HOTMAIL CHECKER RESULTS - ' + now_str + '\n')
-                f.write('# User: ' + str(uid) + ' | Type: hotmail\n\n')
+                f.write('# User: ' + str(uid) + ' | Type: hotmail\n')
+                f.write('# By @hjofc20\n\n')
                 for h in hits_data:
                     f.write(h['combo'] + '\n')
 
@@ -1094,16 +1141,16 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
 
                 countries_count = len(by_country)
 
-                # Crear un .txt por país
+                # Crear un .txt por país — nombre "China 🇨🇳.txt" (nombre + flag)
                 for iso, info in by_country.items():
-                    # Nombre de archivo: "<iso>_<name>.txt" (saneado)
-                    safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', info['name'])[:30]
-                    fname = f"{iso}_{safe_name}.txt"
+                    # Nombre de archivo: "<name> <flag>.txt"
+                    # (Linux ext4 soporta emojis en nombres de archivo sin issues)
+                    fname = f"{info['name']} {info['flag']}.txt"
                     cpath = os.path.join(countries_dir, fname)
                     with open(cpath, 'w', encoding='utf-8') as f:
                         f.write(f"# {info['flag']} {info['name']} ({iso})\n")
-                        f.write(f"# {len(info['combos'])} HITs\n\n")
-                        # Solo mail:pass
+                        f.write(f"# {len(info['combos'])} HITs\n")
+                        f.write("# By @hjofc20\n\n")
                         for combo in info['combos']:
                             f.write(combo + '\n')
 
@@ -1197,6 +1244,26 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
                 parse_mode='md'
             )
 
+            # Construir bloque de info de proxies (rotativa/estática)
+            proxy_info_line = ""
+            if proxy_types:
+                rotating = sum(1 for p in proxy_types if p.get('type') == 'rotating')
+                static = sum(1 for p in proxy_types if p.get('type') == 'static')
+                errs = sum(1 for p in proxy_types if p.get('type') == 'error')
+                parts = []
+                if rotating:
+                    parts.append(f"🔄 {rotating} rotativa" + ("s" if rotating > 1 else ""))
+                if static:
+                    parts.append(f"🔒 {static} estática" + ("s" if static > 1 else ""))
+                if errs:
+                    parts.append(f"⚠️ {errs} error")
+                proxy_info_line = " · ".join(parts)
+
+            # Construir línea de truncado si pasó
+            trunc_line = ""
+            if was_truncated:
+                trunc_line = f"\n├─ ⚠️ Archivo tenía {total_original} combos — solo se procesaron {total_processed} (tope 2500)"
+
             # Enviar el ZIP con el caption combinado elegante (sin botones)
             # Pasamos el PATH (no bytes) para que Telegram muestre el nombre
             # del archivo correctamente — si pasamos bytes, sale "unnamed".
@@ -1216,6 +1283,21 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
                     stats['errors'], f"{stats['elapsed']:.1f}s",
                     stats.get('proxies_used', 0)
                 )
+
+            # Añadir info de tipo de proxy + truncado antes de "📦 Contenido"
+            if proxy_info_line or trunc_line:
+                insert_block = (
+                    (f"├─ 🌐 Proxies: {proxy_info_line}\n" if proxy_info_line else "")
+                    + (trunc_line.lstrip("├─ ").strip() + "\n" if trunc_line else "")
+                )
+                # Insertar antes de "📦 Contenido"
+                marker = "├─ 📦"
+                if marker in caption:
+                    caption = caption.replace(
+                        marker,
+                        insert_block + marker
+                    )
+
             await state.bot.send_file(
                 event.chat_id, zip_path,
                 caption=caption,
@@ -1230,6 +1312,12 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
                 stats['locked'], stats['unknowns'], stats['errors'],
                 f"{stats['elapsed']:.1f}s"
             )
+            if was_truncated:
+                trunc_note = (
+                    f"\n\n⚠️ El archivo tenía {total_original} combos — "
+                    f"solo se procesaron {total_processed} (tope 2500)."
+                )
+                display_text = display_text + trunc_note
             await status_msg.edit(display_text, parse_mode='md')
 
         try:
@@ -1253,6 +1341,9 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
                 shutil.rmtree(temp_dir, ignore_errors=True)
         except Exception:
             pass
+    finally:
+        # ── Anti-superposición: liberar al usuario SIEMPRE ──
+        state.active_hotmail_checks.discard(uid)
 
 
 
