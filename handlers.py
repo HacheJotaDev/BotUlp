@@ -1050,18 +1050,20 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid):
             )
 
             # Enviar el ZIP con el caption combinado elegante (sin botones)
-            with open(zip_path, 'rb') as zf:
-                await event.reply(
-                    UI.text(
-                        "hotmail_zip_caption", lang,
-                        stats['total'], stats['hits'], stats['bads'],
-                        stats['twofa'], stats['locked'], stats['unknowns'],
-                        stats['errors'], f"{stats['elapsed']:.1f}s",
-                        stats.get('proxies_used', 0)
-                    ),
-                    file=zf.read(),
-                    parse_mode='md'
-                )
+            # Pasamos el PATH (no bytes) para que Telegram muestre el nombre
+            # del archivo correctamente — si pasamos bytes, sale "unnamed".
+            await state.bot.send_file(
+                event.chat_id, zip_path,
+                caption=UI.text(
+                    "hotmail_zip_caption", lang,
+                    stats['total'], stats['hits'], stats['bads'],
+                    stats['twofa'], stats['locked'], stats['unknowns'],
+                    stats['errors'], f"{stats['elapsed']:.1f}s",
+                    stats.get('proxies_used', 0)
+                ),
+                parse_mode='md',
+                force_document=True
+            )
         else:
             # Sin hits — mostrar resumen (sin botones)
             display_text = UI.text(
