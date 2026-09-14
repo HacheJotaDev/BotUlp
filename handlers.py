@@ -1043,33 +1043,34 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid):
                 zf.write(errors_path, 'errors.txt')
                 zf.write(summary_path, 'summary.txt')
 
-            # Enviar el ZIP
-            display_text = UI.text(
-                "hotmail_result", lang,
-                stats['total'], stats['hits'], stats['bads'],
-                stats['twofa'], stats['locked'], stats['unknowns'],
-                stats['errors'], f"{stats['elapsed']:.1f}s",
-                stats.get('proxies_used', 0)
+            # Editar el status_msg a un mensaje breve (sin botones)
+            await status_msg.edit(
+                UI.text("hotmail_done", lang, stats['hits']),
+                parse_mode='md'
             )
-            await status_msg.edit(display_text, parse_mode='md')
 
+            # Enviar el ZIP con el caption combinado elegante (sin botones)
             with open(zip_path, 'rb') as zf:
                 await event.reply(
-                    UI.text("hotmail_zip_caption", lang, stats['hits']),
+                    UI.text(
+                        "hotmail_zip_caption", lang,
+                        stats['total'], stats['hits'], stats['bads'],
+                        stats['twofa'], stats['locked'], stats['unknowns'],
+                        stats['errors'], f"{stats['elapsed']:.1f}s",
+                        stats.get('proxies_used', 0)
+                    ),
                     file=zf.read(),
-                    parse_mode='md',
-                    buttons=Keyboards.back()
+                    parse_mode='md'
                 )
         else:
-            # Sin hits — mostrar resumen
+            # Sin hits — mostrar resumen (sin botones)
             display_text = UI.text(
                 "hotmail_no_hits", lang,
                 stats['total'], stats['bads'], stats['twofa'],
                 stats['locked'], stats['unknowns'], stats['errors'],
                 f"{stats['elapsed']:.1f}s"
             )
-            await status_msg.edit(display_text, parse_mode='md',
-                                  buttons=Keyboards.back())
+            await status_msg.edit(display_text, parse_mode='md')
 
         try:
             shutil.rmtree(temp_dir, ignore_errors=True)
