@@ -34,7 +34,7 @@ from config import config
 from logger_setup import logger
 from database import db
 from roles import UserRole, SearchMode, get_user_role, can_search
-from locale import locale_manager
+from bot_locale import locale_manager
 from ui import UI, Keyboards
 from utils import (
     normalizar_url, get_file_counts, format_size, format_time,
@@ -147,7 +147,19 @@ class _FakeEvent:
 
 
 async def cmd_update_bot(event):
-    """Actualizar el bot desde GitHub sin entrar al VPS."""
+    """Actualizar el bot desde GitHub sin entrar al VPS.
+
+    Estrategia robusta:
+    1) git fetch origin main — traer refs sin tocar working tree
+    2) Verificar estado del working tree:
+       - Si está limpio → git pull directo
+       - Si hay cambios locales en archivos versionados → abortar con
+         diagnóstico útil (no hacer stash/reset automático)
+       - Si hay archivos untracked que colisionarían con el pull → abortar
+         con mensaje claro indicando qué archivo causa el conflicto
+    3) Solo si el pull fue exitoso → instalar deps + reiniciar PM2
+       Ante cualquier conflicto/error → abortar y mostrar diagnóstico
+    """
     uid = event.sender_id
     if uid not in config.ADMIN_IDS:
         return
@@ -157,56 +169,148 @@ async def cmd_update_bot(event):
 
     status_msg = await event.reply(UI.text("update_bot_start", lang), parse_mode='md')
 
-    try:
-        result = subprocess.run(
-            ['git', 'pull', 'origin', 'main'],
-            capture_output=True, text=True, timeout=60,
-            cwd=os.path.dirname(os.path.abspath(__file__))
-        )
+    repo_dir = os.path.dirname(os.path.abspath(__file__))
 
-        output = result.stdout.strip()
-        logger.info(f"git pull output: {output}")
-
-        if result.returncode != 0:
-            error_msg = result.stderr.strip()[:200] or "Error desconocido"
+    async def _edit(text_key, *args, fallback=None):
+        """Helper para editar el mensaje de status con manejo de errores."""
+        try:
             await status_msg.edit(
-                UI.text("update_bot_fail", lang, error_msg),
+                UI.text(text_key, lang, *args) if fallback is None else fallback,
                 parse_mode='md'
             )
+        except Exception:
+            pass
+
+    try:
+        # ── Paso 1: git fetch origin ──────────────────────────
+        fetch = subprocess.run(
+            ['git', 'fetch', 'origin', 'main'],
+            capture_output=True, text=True, timeout=60,
+            cwd=repo_dir
+        )
+        if fetch.returncode != 0:
+            err = fetch.stderr.strip()[:300] or fetch.stdout.strip()[:300]
+            await _edit('update_bot_fail', f"git fetch: {err}")
             return
 
-        if "Already up to date" in output or "Already up-to-date" in output:
-            await status_msg.edit(
-                UI.text("update_bot_uptodate", lang),
-                parse_mode='md'
+        # ── Paso 2: diagnóstico del working tree ───────────────
+        # Listar archivos modificados/eliminados/creados sin tracking
+        status = subprocess.run(
+            ['git', 'status', '--porcelain', '--untracked-files=all'],
+            capture_output=True, text=True, timeout=15,
+            cwd=repo_dir
+        )
+        local_changes = []
+        untracked_conflicts = []  # untracked que pisarían archivos del pull
+        if status.returncode == 0:
+            for line in status.stdout.splitlines():
+                if not line:
+                    continue
+                xy = line[:2]
+                fname = line[3:].strip().strip('"')
+                # ' M' = modified, ' D' = deleted, '??' = untracked
+                if xy.startswith('??'):
+                    # Verificar si este untracked colisionaría con un archivo del pull
+                    # (el pull traería un archivo con ese nombre)
+                    check = subprocess.run(
+                        ['git', 'ls-files', '--', fname],
+                        capture_output=True, text=True, timeout=5,
+                        cwd=repo_dir
+                    )
+                    # Si git ls-files no lo lista pero git show lo trae del remoto → conflicto
+                    check_remote = subprocess.run(
+                        ['git', 'show', f'origin/main:{fname}'],
+                        capture_output=True, timeout=5,
+                        cwd=repo_dir
+                    )
+                    if check_remote.returncode == 0:
+                        untracked_conflicts.append(fname)
+                else:
+                    # Cambio en archivo versionado — no se puede hacer pull sin conflicto
+                    local_changes.append(f"{xy} {fname}")
+
+        # ── Abortar si hay conflictos que requieren intervención ──
+        if local_changes or untracked_conflicts:
+            diagnostic_lines = []
+            if local_changes:
+                diagnostic_lines.append("Archivos locales modificados (no se pueden sobreescribir):")
+                for c in local_changes[:10]:
+                    diagnostic_lines.append(f"  • {c}")
+                if len(local_changes) > 10:
+                    diagnostic_lines.append(f"  … y {len(local_changes)-10} más")
+            if untracked_conflicts:
+                diagnostic_lines.append("\nArchivos sin tracking que colisionan con el pull:")
+                for c in untracked_conflicts[:10]:
+                    diagnostic_lines.append(f"  • {c}")
+                if len(untracked_conflicts) > 10:
+                    diagnostic_lines.append(f"  … y {len(untracked_conflicts)-10} más")
+
+            diagnostic = "\n".join(diagnostic_lines)
+            logger.error(f"/updateBot abortado por cambios locales:\n{diagnostic}")
+
+            # Mensaje de diagnóstico para el admin
+            msg = (
+                "⚠️ **Update abortado — hay cambios locales sin commitear**\n\n"
+                f"`{diagnostic[:1500]}`\n\n"
+                "Para sincronizar manualmente (SSH):\n"
+                "```\n"
+                "cd /root/BotUlp\n"
+                "git stash --include-untracked  # guarda TODO\n"
+                "git pull origin main\n"
+                "git stash drop                 # descarta el stash\n"
+                "pm2 restart botulp\n"
+                "```"
             )
-            # Instalar/actualizar dependencias
             try:
-                pip_result = subprocess.run(
+                await status_msg.edit(msg, parse_mode='md')
+            except Exception:
+                # Mensaje muy largo → mostrar versión corta
+                await status_msg.edit(
+                    f"⚠️ Update abortado — {len(local_changes)} cambios locales + "
+                    f"{len(untracked_conflicts)} conflictos. Mirá el log del bot.",
+                    parse_mode='md'
+                )
+            return
+
+        # ── Paso 3: git pull (working tree limpio) ────────────
+        pull = subprocess.run(
+            ['git', 'pull', 'origin', 'main'],
+            capture_output=True, text=True, timeout=60,
+            cwd=repo_dir
+        )
+
+        output = (pull.stdout or '').strip()
+        err_output = (pull.stderr or '').strip()
+        logger.info(f"git pull output: {output}")
+
+        if pull.returncode != 0:
+            # Abortar — NO reiniciar PM2
+            error_msg = err_output[:300] or output[:300] or "Error desconocido"
+            await _edit('update_bot_fail', error_msg)
+            return
+
+        # ── Si el pull no trajo cambios ────────────────────────
+        if "Already up to date" in output or "Already up-to-date" in output:
+            await _edit('update_bot_uptodate')
+            # Igual intentar instalar deps por si requirements cambió
+            try:
+                subprocess.run(
                     [sys.executable, '-m', 'pip', 'install', '-r',
-                     os.path.join(os.path.dirname(os.path.abspath(__file__)), 'requirements.txt'),
+                     os.path.join(repo_dir, 'requirements.txt'),
                      '--quiet'],
                     capture_output=True, text=True, timeout=120
                 )
-                if pip_result.returncode == 0:
-                    logger.info("Dependencias instaladas/actualizadas correctamente")
-                else:
-                    logger.warning(f"pip install: {pip_result.stderr[:200]}")
-            except Exception as pip_err:
-                logger.warning(f"Error instalando dependencias: {pip_err}")
-
+            except Exception:
+                pass
             return
 
-        await status_msg.edit(
-            UI.text("update_bot_success", lang),
-            parse_mode='md'
-        )
+        # ── Pull trajo cambios → instalar deps y reiniciar ─────
+        await _edit('update_bot_success')
 
-        # Instalar/actualizar dependencias nuevas
         try:
             pip_result = subprocess.run(
                 [sys.executable, '-m', 'pip', 'install', '-r',
-                 os.path.join(os.path.dirname(os.path.abspath(__file__)), 'requirements.txt'),
+                 os.path.join(repo_dir, 'requirements.txt'),
                  '--quiet'],
                 capture_output=True, text=True, timeout=120
             )
@@ -217,9 +321,9 @@ async def cmd_update_bot(event):
         except Exception as pip_err:
             logger.warning(f"Error instalando dependencias: {pip_err}")
 
-
         await asyncio.sleep(3)
 
+        # ── Reiniciar PM2 (solo porque el pull fue exitoso) ─────
         try:
             pm2_check = subprocess.run(
                 ['pm2', 'list'], capture_output=True, timeout=5
@@ -237,19 +341,14 @@ async def cmd_update_bot(event):
 
         os.execv(sys.executable, [sys.executable] + sys.argv)
 
-    except subprocess.TimeoutExpired:
-        await status_msg.edit(
-            UI.text("update_bot_fail", lang, "Timeout: git pull tardó demasiado"),
-            parse_mode='md'
-        )
+    except subprocess.TimeoutExpired as te:
+        cmd_str = ' '.join(te.cmd) if hasattr(te, 'cmd') else 'subprocess'
+        await _edit('update_bot_fail', f"Timeout: {cmd_str} tardó demasiado")
     except SystemExit:
         raise
     except Exception as e:
-        logger.error(f"Error en /updateBot: {e}")
-        await status_msg.edit(
-            UI.text("update_bot_fail", lang, str(e)[:100]),
-            parse_mode='md'
-        )
+        logger.error(f"Error en /updateBot: {e}", exc_info=True)
+        await _edit('update_bot_fail', str(e)[:200])
 
 # ═════════════════════════════════════════════════════════════
 # HELPERS

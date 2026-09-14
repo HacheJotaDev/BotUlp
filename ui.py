@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from telethon import Button
 
-from locale import locale_manager
+from bot_locale import locale_manager
 from roles import UserRole
 from config import config
 

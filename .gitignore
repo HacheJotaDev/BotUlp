@@ -5,12 +5,19 @@ __pycache__/
 SystemData/
 *.session
 *.session-journal
+*.session-bkp
 *.db-journal
 *.db-wal
 .env
+.env.*
 bot_activity.log
+*.log
 HJDescargas/
 Archivo_Historico/
 Cache_Resultados/
 Temp_Parts/
 venv/
+.venv/
+# Archivos runtime que NO deben ir al repo ni bloquear pulls
+.last_pull
+.update_lock

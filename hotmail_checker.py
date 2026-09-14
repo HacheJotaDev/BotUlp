@@ -247,6 +247,80 @@ def parse_proxy(proxy_str: str) -> Optional[str]:
     return f"http://{s}"
 
 
+# ═════════════════════════════════════════════════════════════
+#  DETECCIÓN DE PROXY ROTATIVA vs ESTÁTICA
+# ═════════════════════════════════════════════════════════════
+#  Una proxy ROTATIVA (ej: flameproxies) devuelve IPs distintas en
+#  cada request. Una ESTÁTICA siempre devuelve la misma IP.
+#  Hacemos 2 requests seguidas a httpbin.org/ip y comparamos.
+# ═════════════════════════════════════════════════════════════
+
+_IP_CHECK_URL = "https://httpbin.org/ip"
+_IP_CHECK_URLS = [
+    "https://httpbin.org/ip",
+    "https://api.ipify.org?format=json",
+    "https://ifconfig.me/all.json",
+]
+
+
+def _fetch_ip_via_proxy(proxy_url: str, timeout: int = 10) -> Optional[str]:
+    """Hacer un GET a httpbin.org/ip vía la proxy y devolver la IP de salida."""
+    session = _build_session(proxy_url)
+    try:
+        for url in _IP_CHECK_URLS:
+            try:
+                r = session.get(url, timeout=timeout, verify=False)
+                if r.status_code == 200:
+                    data = r.json()
+                    # httpbin.org/ip → {"origin": "1.2.3.4"}
+                    # ipify → {"ip": "1.2.3.4"}
+                    # ifconfig.me → {"ip_addr": "1.2.3.4"}
+                    ip = data.get("origin") or data.get("ip") or data.get("ip_addr")
+                    if ip:
+                        return ip.split(",")[0].strip()
+            except Exception:
+                continue
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
+    return None
+
+
+def detect_proxy_type(proxy_url: str) -> dict:
+    """Detectar si una proxy es rotativa o estática.
+
+    Hace 2 requests seguidas y compara las IPs de salida:
+      - Si las IPs son distintas → ROTATIVA (cambia IP en cada request)
+      - Si las IPs son iguales → ESTÁTICA (siempre misma IP)
+      - Si ninguna request funciona → ERROR
+
+    Returns:
+        {
+            'type': 'rotating' | 'static' | 'error',
+            'ip1': 'primera IP vista',
+            'ip2': 'segunda IP vista',
+            'error': 'mensaje si falla'  # solo si type='error'
+        }
+    """
+    ip1 = _fetch_ip_via_proxy(proxy_url)
+    if not ip1:
+        return {"type": "error", "ip1": None, "ip2": None,
+                "error": "no se pudo conectar a la proxy"}
+
+    ip2 = _fetch_ip_via_proxy(proxy_url)
+    if not ip2:
+        # La 2da falló pero la 1ra funcionó → asumimos estática
+        return {"type": "static", "ip1": ip1, "ip2": None,
+                "error": "segunda request falló"}
+
+    if ip1 != ip2:
+        return {"type": "rotating", "ip1": ip1, "ip2": ip2, "error": None}
+    else:
+        return {"type": "static", "ip1": ip1, "ip2": ip2, "error": None}
+
+
 def _build_session(proxy: Optional[str] = None) -> requests.Session:
     """Crear una sesión HTTP con headers de navegador y proxy opcional."""
     s = requests.Session()

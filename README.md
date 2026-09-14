@@ -153,7 +153,7 @@ BotUlp/
 ├── webhook_server.py   # Servidor IPN (HMAC-SHA512 verificado)
 ├── imap_checker.py     # Checker IMAP SSL con keywords y países
 ├── geoip_checker.py    # Geolocalización de emails (MX + IP)
-├── locale.py           # Sistema multi-idioma (design system Obsidian)
+├── bot_locale.py       # Sistema multi-idioma (design system Obsidian)
 ├── locales/*.json      # Traducciones ES / EN / PT
 ├── ui.py               # Teclados inline (botones URL, jerarquía visual)
 ├── roles.py            # Roles y permisos
