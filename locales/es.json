@@ -93,5 +93,12 @@
   "bonus_consumed": "🎁 Usaste una búsqueda de tu **bono de referidos**.",
   "free_remaining": "🎁 Te quedan **{0}** búsqueda(s) gratis.",
   "free_exhausted": "💎 Consigue VIP o invita amigos con «👥 Referidos» para seguir buscando.",
-  "imap_too_many_senders": "╭───✦ ⚠️ **IMAP CHECKER**\n├─ Máximo **10 remitentes** permitidos\n├─ Usaste: `{0}`\n╰───✦"
+  "imap_too_many_senders": "╭───✦ ⚠️ **IMAP CHECKER**\n├─ Máximo **10 remitentes** permitidos\n├─ Usaste: `{0}`\n╰───✦",
+  "hotmail_info": "╭───✦ 🔥 **HOTMAIL CHECKER**\n├─ Verifica combos **mail:pass** contra Microsoft\n├─ Clasifica: ✅ HIT · ❌ BAD · 🔐 2FA · 🚫 LOCKED\n╰───✦\n\n**Uso:**\n\n1️⃣ **Directo** (sin proxy):\n     Responde a un .txt + `/hotmail`\n\n2️⃣ **Con proxies** (cualquier formato):\n     Responde a un .txt + `/hotmail http://1.2.3.4:8080`\n     Responde a un .txt + `/hotmail socks5://user:pass@host:port`\n     Responde a un .txt + `/hotmail p1, p2, p3` (round-robin)\n\n📌 Formatos de proxy aceptados:\n     • `http://host:port`\n     • `https://host:port`\n     • `socks5://host:port`\n     • `socks5://user:pass@host:port`\n     • `host:port`\n     • `host:port:user:pass`\n     • `user:pass@host:port`\n\n📁 El ZIP incluye:\n     📄 `hits.txt` — solo HITs (con access_token si lo hay)\n     📄 `all_hits.txt` — todos los HITs\n     📄 `twofa.txt` — cuentas con 2FA\n     📄 `locked.txt` — cuentas bloqueadas\n     📄 `unknown.txt` — no clasificadas\n     📄 `errors.txt` — timeouts/red\n     📄 `summary.txt` — resumen completo",
+  "hotmail_no_file": "╭───✦ ❌ **HOTMAIL CHECKER**\n├─ Debes responder a un archivo **.txt** con combos `mail:pass`\n╰───✦\n\n💡 Uso: responde al archivo + `/hotmail` o `/hotmail proxy1, proxy2`",
+  "hotmail_processing": "╭───✦ 🔥 **HOTMAIL CHECKER**\n├─ 📊 Progreso: `{0}/{1}` · ✅ Hits: `{2}`\n╰───✦\n\n{3}",
+  "hotmail_proxies_waiting_file": "╭───✦ 🔥 **HOTMAIL CHECKER**\n├─ 🌐 Proxies guardados: `{0}`\n├─ ➡️ `{1}...`\n├─ ⏳ Esperando archivo **.txt** con combos\n╰───✦",
+  "hotmail_result": "╭───✦ 🔥 **HOTMAIL CHECKER — COMPLETADO**\n├─ 📊 Total: `{0}` · ✅ Hits: `{1}`\n├─ ❌ Bad: `{2}` · 🔐 2FA: `{3}`\n├─ 🚫 Locked: `{4}` · ❓ Unknown: `{5}`\n├─ ⚠️ Errors: `{6}`\n├─ ⏱️ Tiempo: `{7}` · 🌐 Proxies: `{8}`\n╰───✦",
+  "hotmail_no_hits": "╭───✦ 🔥 **HOTMAIL CHECKER — SIN HITS**\n├─ 📊 Total: `{0}` · ❌ Bad: `{1}`\n├─ 🔐 2FA: `{2}` · 🚫 Locked: `{3}`\n├─ ❓ Unknown: `{4}` · ⚠️ Errors: `{5}`\n├─ ⏱️ Tiempo: `{6}`\n╰───✦\n\n💡 Prueba con otros combos o agrega proxies para evitar rate-limit.",
+  "hotmail_zip_caption": "╭───✦ 🔥 **HOTMAIL RESULTS**\n├─ ✅ Hits: `{0}`\n├─ 📄 Incluye: hits / twofa / locked / errors / summary\n╰───✦"
 }
