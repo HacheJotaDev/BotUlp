@@ -152,7 +152,7 @@ def extract_ip_from_wlssc(wlssc_b64: str) -> Optional[str]:
 def parse_proxy(proxy_str: str) -> Optional[str]:
     """Convertir un string de proxy en formato URL estándar.
 
-    Acepta:
+    Acepta TODOS los formatos (rotativas y estáticas):
       - http://host:port
       - https://host:port
       - socks5://host:port
@@ -160,6 +160,14 @@ def parse_proxy(proxy_str: str) -> Optional[str]:
       - host:port
       - host:port:user:pass
       - user:pass@host:port
+      - host:port user:pass  (con espacio — caso típico de proxies rotativas)
+      - http://host:port user:pass  (URL + credenciales separadas por espacio)
+      - http://host:port -U user:pass  (formato curl)
+      - socks5://host:port user:pass
+      - "http://host:port" "user:pass"  (con comillas)
+
+    Si la proxy es rotativa (cambia IP en cada request) se usa igual;
+    requests/urllib3 resolverá IPs distintas automáticamente.
 
     Retorna:
       String URL lista para requests, o None si el input está vacío.
@@ -171,27 +179,71 @@ def parse_proxy(proxy_str: str) -> Optional[str]:
     if not s:
         return None
 
-    # Ya tiene esquema
-    if s.startswith(("http://", "https://", "socks5://", "socks4://", "socks://")):
+    # Quitar comillas externas
+    s = s.strip('"\'').strip()
+    if not s:
+        return None
+
+    # Quitar flags tipo -U, -x, --proxy que el usuario podría pegar del curl
+    # Ej: "http://host:port -U user:pass" → "http://host:port user:pass"
+    s = re.sub(r'\s+-[UxX]\s+', ' ', s)
+    s = re.sub(r'\s+--proxy\s+', ' ', s)
+    s = re.sub(r'\s+--proxy-user\s+', ' ', s)
+    s = s.strip()
+
+    # Detectar scheme
+    has_scheme = s.startswith((
+        'http://', 'https://', 'socks5://', 'socks4://', 'socks://'
+    ))
+
+    # Caso 1: hay un ESPACIO → URL/host por un lado, credenciales por otro
+    # Formato: "host:port user:pass" o "http://host:port user:pass"
+    if ' ' in s:
+        parts = s.split(None, 1)
+        url_part = parts[0].strip().strip('"\'')
+        creds_part = parts[1].strip().strip('"\'')
+
+        # Asegurar scheme en url_part
+        if not url_part.startswith((
+            'http://', 'https://', 'socks5://', 'socks4://', 'socks://'
+        )):
+            url_part = 'http://' + url_part
+
+        # Parsear scheme://host:port
+        m = re.match(r'^(https?|socks[45]?)://(.+)$', url_part)
+        if m:
+            scheme, host_part = m.group(1), m.group(2)
+            # Validar que creds_part parece "user:pass"
+            if ':' in creds_part:
+                user, _, pw = creds_part.partition(':')
+                return f"{scheme}://{quote(user, safe='')}:{quote(pw, safe='')}@{host_part}"
+            # Sin ':' → solo user sin pass
+            return f"{scheme}://{quote(creds_part, safe='')}@{host_part}"
+        # Fallback
+        return url_part
+
+    # Caso 2: "host:port:user:pass" (4 partes, 2da es número)
+    if s.count(':') == 3:
+        h, p, u, pw = s.split(':')
+        if p.isdigit():
+            return f"http://{quote(u, safe='')}:{quote(pw, safe='')}@{h}:{p}"
+
+    # Caso 3: "user:pass@host:port" (sin scheme)
+    if '@' in s and not has_scheme:
+        # Asumir HTTP
+        return f"http://{s}"
+
+    # Caso 4: "host:port" (1 solo ':' y port es número)
+    if s.count(':') == 1:
+        h, p = s.split(':', 1)
+        if p.isdigit():
+            return f"http://{s}"
+
+    # Caso 5: ya tiene scheme → usar tal cual
+    if has_scheme:
         return s
 
-    # Formato host:port:user:pass
-    parts = s.split(":")
-    if len(parts) == 4:
-        host, port, user, pw = parts
-        if port.isdigit():
-            return f"http://{quote(user)}:{quote(pw)}@{host}:{port}"
-
-    # Formato user:pass@host:port
-    if "@" in s:
-        # Asumir HTTP si no hay esquema
-        return f"http://{s}"
-
-    # Formato host:port
-    if len(parts) == 2 and parts[1].isdigit():
-        return f"http://{s}"
-
-    # Cualquier otra cosa: asumir HTTP
+    # Fallback: asumir HTTP
     return f"http://{s}"
 
 
