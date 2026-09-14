@@ -2330,6 +2330,14 @@ def register_handlers(bot_client):
                     parse_mode='md'
                 )
 
+            # ─── HOTMAIL INFO ───
+            elif data == "hotmail_info":
+                await e.edit(
+                    UI.text("hotmail_info", lang),
+                    buttons=Keyboards.hotmail_info(),
+                    parse_mode='md'
+                )
+
             # ─── MI CUENTA ───
             elif data == "my_account":
                 await e.edit(

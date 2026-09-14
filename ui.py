@@ -74,33 +74,36 @@ class Keyboards:
             return [
                 [Button.inline("🔍  Nueva búsqueda", b"search_init"),
                  Button.inline("📧  IMAP Checker", b"imap_info")],
-                [Button.inline("💎  Renovar VIP", b"buy_vip_info"),
+                [Button.inline("🔥  Hotmail Checker", b"hotmail_info"),
                  Button.inline("👤  Mi cuenta", b"my_account")],
-                [Button.inline("👥  Referidos", b"ref_info"),
-                 Button.inline("📋  Comandos", b"cmd_list")],
-                Keyboards.LANG_BTN,
+                [Button.inline("💎  Renovar VIP", b"buy_vip_info"),
+                 Button.inline("👥  Referidos", b"ref_info")],
+                [Button.inline("📋  Comandos", b"cmd_list"),
+                 Keyboards.LANG_BTN],
             ]
 
         elif role == UserRole.SELLER:
             return [
                 [Button.inline("🔍  Nueva búsqueda", b"search_init"),
                  Button.inline("📧  IMAP Checker", b"imap_info")],
-                [Button.inline("🔑  Generar key", b"seller_genkey"),
+                [Button.inline("🔥  Hotmail Checker", b"hotmail_info"),
                  Button.inline("👤  Mi cuenta", b"my_account")],
-                [Button.inline("👥  Referidos", b"ref_info"),
-                 Button.inline("📋  Comandos", b"cmd_list")],
-                Keyboards.LANG_BTN,
+                [Button.inline("🔑  Generar key", b"seller_genkey"),
+                 Button.inline("👥  Referidos", b"ref_info")],
+                [Button.inline("📋  Comandos", b"cmd_list"),
+                 Keyboards.LANG_BTN],
             ]
 
         elif role == UserRole.ADMIN:
             return [
                 [Button.inline("🔍  Nueva búsqueda", b"search_init"),
                  Button.inline("📧  IMAP Checker", b"imap_info")],
+                [Button.inline("🔥  Hotmail Checker", b"hotmail_info"),
+                 Button.inline("👤  Mi cuenta", b"my_account")],
                 [Button.inline("🔐  Panel admin", b"admin_enter"),
                  Button.inline("📂  Gestión archivos", b"adm_files")],
                 [Button.inline("👥  Referidos", b"ref_info"),
-                 Button.inline("👤  Mi cuenta", b"my_account")],
-                [Button.inline("📋  Comandos", b"cmd_list"),
+                 Button.inline("📋  Comandos", b"cmd_list"),
                  Keyboards.LANG_BUTTON],
             ]
 
@@ -227,6 +230,12 @@ class Keyboards:
 
     @staticmethod
     def imap_info():
+        return [
+            [Button.inline("«  Volver", b"back_main")]
+        ]
+
+    @staticmethod
+    def hotmail_info():
         return [
             [Button.inline("«  Volver", b"back_main")]
         ]
