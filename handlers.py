@@ -1175,6 +1175,30 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
                 for h in unknown_data:
                     f.write(h['combo'] + '\n')
 
+            # 5b) unknown_samples.txt — muestras de body para diagnóstico
+            # Hasta 5 muestras de HTML de Microsoft para entender qué
+            # páginas está sirviendo y poder ajustar el clasificador.
+            unknown_samples_path = os.path.join(temp_dir, 'unknown_samples.txt')
+            with open(unknown_samples_path, 'w', encoding='utf-8') as f:
+                f.write('# UNKNOWN SAMPLES — primeras 5 respuestas sin clasificar\n')
+                f.write('# (primeros 2000 chars de cada body crudo)\n')
+                f.write('# Usá esto para identificar qué páginas sirve Microsoft\n')
+                f.write('# y agregar los patrones correctos al clasificador.\n\n')
+                samples_written = 0
+                for h in unknown_data:
+                    if samples_written >= 5:
+                        break
+                    sample = h.get('unknown_sample')
+                    if not sample:
+                        continue
+                    samples_written += 1
+                    f.write('═' * 70 + '\n')
+                    f.write(f"# Sample {samples_written} — combo: {h['combo']}\n")
+                    f.write('═' * 70 + '\n')
+                    f.write(sample + '\n\n')
+                if samples_written == 0:
+                    f.write('(no hay samples disponibles)\n')
+
             # 6) errors.txt
             errors_path = os.path.join(temp_dir, 'errors.txt')
             with open(errors_path, 'w', encoding='utf-8') as f:
@@ -1230,6 +1254,7 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
                 zf.write(twofa_path, 'twofa.txt')
                 zf.write(locked_path, 'locked.txt')
                 zf.write(unknown_path, 'unknown.txt')
+                zf.write(unknown_samples_path, 'unknown_samples.txt')
                 zf.write(errors_path, 'errors.txt')
                 zf.write(summary_path, 'summary.txt')
                 # Agregar countries/ si modo country
@@ -1300,11 +1325,26 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
                     count=1
                 )
 
-            # Insertar línea de truncado antes de "📦 Contenido"
+            # Aviso de alto % de UNKNOWN → Microsoft rate-limitando
+            unknown_pct = (stats['unknowns'] / stats['total'] * 100) if stats['total'] > 0 else 0
+            unknown_warning = ""
+            if unknown_pct >= 50:
+                unknown_warning = (
+                    f"├─ ⚠️ **{unknown_pct:.0f}% UNKNOWN** — Microsoft puede estar "
+                    f"rate-limitando tus IPs. Mirá `unknown_samples.txt` en el ZIP.\n"
+                )
+
+            # Insertar línea de truncado y warning de UNKNOWN antes de "📦 Contenido"
+            pre_content_block = ""
             if trunc_line:
+                pre_content_block += trunc_line
+            if unknown_warning:
+                pre_content_block += unknown_warning
+
+            if pre_content_block:
                 marker = "├─ 📦"
                 if marker in caption:
-                    caption = caption.replace(marker, trunc_line + marker)
+                    caption = caption.replace(marker, pre_content_block + marker)
 
             await state.bot.send_file(
                 event.chat_id, zip_path,

