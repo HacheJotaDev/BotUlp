@@ -1262,7 +1262,8 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
             # Construir línea de truncado si pasó
             trunc_line = ""
             if was_truncated:
-                trunc_line = f"\n├─ ⚠️ Archivo tenía {total_original} combos — solo se procesaron {total_processed} (tope 2500)"
+                trunc_line = (f"├─ ⚠️ Archivo tenía {total_original} combos — "
+                               f"solo se procesaron {total_processed} (tope 2500)\n")
 
             # Enviar el ZIP con el caption combinado elegante (sin botones)
             # Pasamos el PATH (no bytes) para que Telegram muestre el nombre
@@ -1284,19 +1285,26 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
                     stats.get('proxies_used', 0)
                 )
 
-            # Añadir info de tipo de proxy + truncado antes de "📦 Contenido"
-            if proxy_info_line or trunc_line:
-                insert_block = (
-                    (f"├─ 🌐 Proxies: {proxy_info_line}\n" if proxy_info_line else "")
-                    + (trunc_line.lstrip("├─ ").strip() + "\n" if trunc_line else "")
+            # Insertar tipos de proxy y línea de truncado ANTES de "📦 Contenido"
+            # SIN duplicar la línea "🌐 Proxies" del template base.
+            # En vez de agregar una nueva línea "├─ 🌐 Proxies: tipos",
+            # modificamos la línea existente para que muestre "(🔄 1 rotativa)"
+            # después del count.
+            if proxy_info_line:
+                # Reemplazar "· 🌐 Proxies: N\n" por "· 🌐 Proxies: N (🔄 1 rotativa)\n"
+                import re as _re
+                caption = _re.sub(
+                    r'(· 🌐 Proxies: \d+)(\n)',
+                    rf'\1 ({proxy_info_line})\2',
+                    caption,
+                    count=1
                 )
-                # Insertar antes de "📦 Contenido"
+
+            # Insertar línea de truncado antes de "📦 Contenido"
+            if trunc_line:
                 marker = "├─ 📦"
                 if marker in caption:
-                    caption = caption.replace(
-                        marker,
-                        insert_block + marker
-                    )
+                    caption = caption.replace(marker, trunc_line + marker)
 
             await state.bot.send_file(
                 event.chat_id, zip_path,

