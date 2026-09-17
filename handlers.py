@@ -1202,10 +1202,12 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
             # 6) errors.txt
             errors_path = os.path.join(temp_dir, 'errors.txt')
             with open(errors_path, 'w', encoding='utf-8') as f:
-                f.write('# ERROR ACCOUNTS (timeout/red/proxy)\n\n')
+                f.write('# ERROR ACCOUNTS (timeout/red/proxy)\n')
+                f.write('# Formato: combo | error | proxy_usada\n\n')
                 for h in error_data:
                     err = h.get('error', 'unknown')
-                    f.write(f"{h['combo']} | err={err} | proxy={h.get('proxy', '?')}\n")
+                    proxy_used = h.get('proxy_used') or h.get('proxy', '?')
+                    f.write(f"{h['combo']} | err={err} | proxy={proxy_used}\n")
 
             # 7) summary.txt
             summary_path = os.path.join(temp_dir, 'summary.txt')
@@ -1334,12 +1336,24 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
                     f"rate-limitando tus IPs. Mirá `unknown_samples.txt` en el ZIP.\n"
                 )
 
-            # Insertar línea de truncado y warning de UNKNOWN antes de "📦 Contenido"
+            # Aviso de alto % de ERRORS → proxy rota o formato inválido
+            error_pct = (stats['errors'] / stats['total'] * 100) if stats['total'] > 0 else 0
+            error_warning = ""
+            if error_pct >= 50 and stats.get('proxies_used', 0) > 0:
+                error_warning = (
+                    f"├─ 🚫 **{error_pct:.0f}% ERRORES** — la proxy no está "
+                    f"respondiendo. Verificá el formato o probá sin proxy.\n"
+                    f"│   Mirá `errors.txt` en el ZIP para ver el error exacto.\n"
+                )
+
+            # Insertar línea de truncado + warnings antes de "📦 Contenido"
             pre_content_block = ""
             if trunc_line:
                 pre_content_block += trunc_line
             if unknown_warning:
                 pre_content_block += unknown_warning
+            if error_warning:
+                pre_content_block += error_warning
 
             if pre_content_block:
                 marker = "├─ 📦"

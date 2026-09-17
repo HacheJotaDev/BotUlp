@@ -396,10 +396,12 @@ def _build_session(proxy: Optional[str] = None) -> requests.Session:
     return s
 
 
-def _get_ppft(session: requests.Session, email: str) -> tuple:
-    """Hacer GET a authorize.srf y extraer (ppft, url_post).
+def _get_ppft(session, email: str) -> tuple:
+    """Hacer GET a authorize.srf y extraer (ppft, url_post, error_msg).
 
-    Retorna (None, None) si falla la red.
+    Si falla la red, retorna (None, None, error_msg) con el tipo de error
+    para diagnóstico (ConnectionError, Timeout, ProxyError, etc.).
+    Si todo OK, retorna (ppft, url_post, None).
     """
     url_auth = (
         "https://login.live.com/oauth20_authorize.srf"
@@ -414,9 +416,26 @@ def _get_ppft(session: requests.Session, email: str) -> tuple:
     try:
         r = session.get(url_auth, timeout=HOTMAIL_TIMEOUT,
                         verify=False, allow_redirects=True)
+    except requests.exceptions.ProxyError as e:
+        err = f"ProxyError: {str(e)[:200]}"
+        logger.debug(f"[HOTMAIL] GET authorize.srf ProxyError {email}: {err}")
+        return None, None, err
+    except requests.exceptions.ConnectTimeout as e:
+        err = f"ConnectTimeout: {str(e)[:200]}"
+        logger.debug(f"[HOTMAIL] GET authorize.srf ConnectTimeout {email}: {err}")
+        return None, None, err
+    except requests.exceptions.ReadTimeout as e:
+        err = f"ReadTimeout (>{HOTMAIL_TIMEOUT}s)"
+        logger.debug(f"[HOTMAIL] GET authorize.srf ReadTimeout {email}")
+        return None, None, err
+    except requests.exceptions.ConnectionError as e:
+        err = f"ConnectionError: {str(e)[:200]}"
+        logger.debug(f"[HOTMAIL] GET authorize.srf ConnectionError {email}: {err}")
+        return None, None, err
     except requests.exceptions.RequestException as e:
-        logger.debug(f"[HOTMAIL] GET authorize.srf error red {email}: {e}")
-        return None, None
+        err = f"{type(e).__name__}: {str(e)[:200]}"
+        logger.debug(f"[HOTMAIL] GET authorize.srf {type(e).__name__} {email}: {e}")
+        return None, None, err
 
     html = r.text or ""
 
@@ -453,7 +472,7 @@ def _get_ppft(session: requests.Session, email: str) -> tuple:
             f"&username={quote(email)}"
         )
 
-    return ppft, url_post
+    return ppft, url_post, None
 
 
 def _classify_result(r, session: requests.Session) -> tuple:
@@ -600,9 +619,13 @@ def _worker(combo: str, proxy: Optional[str] = None) -> Optional[dict]:
     session = _build_session(actual_proxy)
 
     try:
-        ppft, url_post = _get_ppft(session, user)
+        ppft, url_post, get_error = _get_ppft(session, user)
         if not ppft:
+            # El error viene de _get_ppft (GET falló)
+            err_msg = get_error or "no se pudo obtener PPFT"
             return {"combo": combo, "status": STATUS_ERROR,
+                    "error": err_msg,
+                    "proxy_used": actual_proxy or "direct",
                     "proxy": proxy or "direct"}
 
         payload = {
@@ -651,9 +674,31 @@ def _worker(combo: str, proxy: Optional[str] = None) -> Optional[dict]:
                 verify=False,
                 allow_redirects=True,
             )
+        except requests.exceptions.ProxyError as e:
+            return {"combo": combo, "status": STATUS_ERROR,
+                    "error": f"ProxyError: {str(e)[:200]}",
+                    "proxy_used": actual_proxy or "direct",
+                    "proxy": proxy or "direct"}
+        except requests.exceptions.ConnectTimeout as e:
+            return {"combo": combo, "status": STATUS_ERROR,
+                    "error": f"ConnectTimeout: {str(e)[:200]}",
+                    "proxy_used": actual_proxy or "direct",
+                    "proxy": proxy or "direct"}
+        except requests.exceptions.ReadTimeout:
+            return {"combo": combo, "status": STATUS_ERROR,
+                    "error": f"ReadTimeout (>{HOTMAIL_TIMEOUT}s)",
+                    "proxy_used": actual_proxy or "direct",
+                    "proxy": proxy or "direct"}
+        except requests.exceptions.ConnectionError as e:
+            return {"combo": combo, "status": STATUS_ERROR,
+                    "error": f"ConnectionError: {str(e)[:200]}",
+                    "proxy_used": actual_proxy or "direct",
+                    "proxy": proxy or "direct"}
         except requests.exceptions.RequestException as e:
             return {"combo": combo, "status": STATUS_ERROR,
-                    "error": str(e)[:200], "proxy": proxy or "direct"}
+                    "error": f"{type(e).__name__}: {str(e)[:200]}",
+                    "proxy_used": actual_proxy or "direct",
+                    "proxy": proxy or "direct"}
 
         status, access_token, unknown_sample = _classify_result(r, session)
 
