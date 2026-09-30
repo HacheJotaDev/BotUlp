@@ -294,7 +294,7 @@ def parse_order_id(order_id: str):
 #  POLLING LOOP — fallback para pagos legacy cada 30s
 # ═════════════════════════════════════════════════════════════
 
-POLLING_INTERVAL = 30  # segundos
+POLLING_INTERVAL = 900  # segundos
 ORDER_EXPIRY_MINUTES = 120
 
 
