@@ -50,8 +50,8 @@ class Database:
             self.pool = ConnectionPool(
                 conninfo=db_url,
                 min_size=0,
-                max_size=10,
-                timeout=60,
+                max_size=5,
+                timeout=10,
                 configure=self._configure_conn,
                 open=True,
             )
