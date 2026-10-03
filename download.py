@@ -241,8 +241,20 @@ class DownloadProgressTracker:
             logger.debug(f"Error en finish de progreso: {e}")
 
 
+# FASE B FIX: no borrar archivos .tmp en DIR_TEMP durante esta fase
+# de estabilización. Puede haber descargas interrumpidas que queremos
+# poder resumir. Cambiar a True cuando termine la fase de verificación.
+CLEANUP_TMP_ENABLED = False
+
+
 async def mover_y_limpiar_archivos():
-    """Auto-limpieza de archivos expirados."""
+    """Auto-limpieza de archivos expirados.
+
+    PURAMENTE FILESYSTEM — no toca PostgreSQL. Errores individuales
+    por archivo NO rompen el loop. Tags de log diferenciados:
+    CLEANUP_ARCHIVE_ERROR, CLEANUP_DELETE_ERROR, CLEANUP_CACHE_ERROR,
+    CLEANUP_TMP_ERROR.
+    """
     ahora = time.time()
     segundos_archive = config.ARCHIVE_AFTER_HOURS * 3600
     segundos_delete = config.DELETE_AFTER_HOURS * 3600
@@ -250,39 +262,55 @@ async def mover_y_limpiar_archivos():
     moved = 0
     deleted = 0
 
+    # ── Archivar descargas viejas (>24h) ──
     for f in config.DIR_DOWNLOADS.glob('*.txt'):
         try:
             if (ahora - f.stat().st_mtime) > segundos_archive:
                 dest = config.DIR_ARCHIVE / f.name
                 if dest.exists():
                     dest.unlink()
-                f.rename(dest)
+                os.replace(f, dest)  # atómico en mismo FS
                 moved += 1
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"CLEANUP_ARCHIVE_ERROR: {f.name}: {e}")
 
+    # ── Borrar archivados muy viejos (>120h) ──
     for f in config.DIR_ARCHIVE.glob('*.txt'):
         try:
             if (ahora - f.stat().st_mtime) > segundos_delete:
                 f.unlink()
                 deleted += 1
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"CLEANUP_DELETE_ERROR: {f.name}: {e}")
 
-    for f in config.DIR_TEMP.glob('*'):
+    # ── Temporales (.tmp) — SKIP durante fase de estabilización ──
+    # NO borramos para permitir resume de descargas interrumpidas.
+    # Reactivar poniendo CLEANUP_TMP_ENABLED = True cuando termine.
+    if CLEANUP_TMP_ENABLED:
+        for f in config.DIR_TEMP.glob('*'):
+            try:
+                if (ahora - f.stat().st_mtime) > 3600:
+                    f.unlink()
+                    deleted += 1
+            except Exception as e:
+                logger.warning(f"CLEANUP_TMP_ERROR: {f.name}: {e}")
+    else:
+        # Solo loguear cuántos hay, no borrar
         try:
-            if (ahora - f.stat().st_mtime) > 3600:
-                f.unlink()
-                deleted += 1
+            tmp_count = sum(1 for _ in config.DIR_TEMP.glob('*'))
+            if tmp_count > 0:
+                logger.info(f"CLEANUP_TMP_SKIP: {tmp_count} archivos en DIR_TEMP "
+                            f"(no se borran — fase estabilización)")
         except Exception:
             pass
 
+    # ── Cache de resultados viejos (>24h) ──
     for f in config.DIR_CACHE.glob('*.txt'):
         try:
             if (ahora - f.stat().st_mtime) > 86400:
                 f.unlink()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"CLEANUP_CACHE_ERROR: {f.name}: {e}")
 
     if moved or deleted:
         logger.info(f"Limpieza: {moved} archivados, {deleted} eliminados")
@@ -393,30 +421,85 @@ async def _download_with_progress(
                 progress_callback=_simple_progress if file_size > 10 * 1024 * 1024 else None
             )
 
-        # Verificar descarga
-        if temp_path.exists() and temp_path.stat().st_size > 0:
-            if dest_path.exists():
-                dest_path.unlink()
-            temp_path.rename(dest_path)
-
-            elapsed = time.time() - start_time
-            final_size = dest_path.stat().st_size
-            speed = final_size / elapsed if elapsed > 0 else 0
-
-            logger.info(
-                f"Descarga OK: {filename} "
-                f"({format_size(final_size)}) en {format_time(elapsed)} "
-                f"({format_size(speed)}/s)"
-            )
-
-            chat_id = getattr(event_or_msg, 'chat_id', 0)
-            db.log_download(filename, final_size, chat_id)
-            return True
-        else:
-            logger.warning(f"Descarga vacía: {filename}")
-            if temp_path.exists():
-                temp_path.unlink()
+        # Verificar descarga — NUEVA LÓGICA:
+        # 1) Validar que temp existe y tiene tamaño correcto
+        # 2) Reemplazo atómico con os.replace (mismo FS → atómico en Linux)
+        # 3) Solo DESPUÉS del rename exitoso: log DB (best-effort, no contagia)
+        if not temp_path.exists():
+            logger.error(f"DOWNLOAD_STREAM_ERROR: temp_path no existe para {filename}")
             return False
+
+        actual_size = temp_path.stat().st_size
+
+        # Si Telegram proporcionó file_size, validar tamaño real vs esperado
+        if file_size > 0 and actual_size != file_size:
+            logger.error(
+                f"DOWNLOAD_SIZE_MISMATCH: {filename} "
+                f"expected={file_size} ({format_size(file_size)}) "
+                f"actual={actual_size} ({format_size(actual_size)}) "
+                f"diff={file_size - actual_size}"
+            )
+            # NO borrar temp_path — preservación de parcial para diagnóstico.
+            # El path de detección (líneas 347-354) ve temp_path.exists() pero el
+            # streaming actual re-abre con .wb. (trunca) — NO resume byte-level real.
+            # Solo si el archivo está vacío lo descartamos (no hay nada
+            # útil para preservar).
+            if actual_size == 0:
+                try:
+                    temp_path.unlink()
+                except Exception:
+                    pass
+            else:
+                logger.info(
+                    f"DOWNLOAD_SIZE_PRESERVED: {filename} temp_path preservado "
+                    f"({actual_size} bytes) para diagnóstico/futura reanudación"
+                )
+            return False
+
+        if actual_size == 0:
+            logger.warning(f"DOWNLOAD_SIZE_MISMATCH: {filename} size=0 (vacío)")
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
+            return False
+
+        # Reemplazo atómico con os.replace — mismo filesystem → atómico en
+        # Linux. NO usamos unlink+rename (ventana peligrosa donde si rename
+        # falla, perdés tanto el anterior como el nuevo).
+        try:
+            os.replace(temp_path, dest_path)
+        except OSError as e:
+            logger.error(f"DOWNLOAD_RENAME_ERROR: {filename}: {e}")
+            # temp_path sigue existiendo, reintento puede resumir
+            return False
+
+        # ─────────────────────────────────────────────────────────
+        # A PARTIR DE ACÁ, LA DESCARGA ESTÁ COMPLETA Y EL ARCHIVO
+        # ESTÁ EN dest_path CON EL TAMAÑO CORRECTO.
+        # Cualquier error de telemetría DB NO debe convertir esto en False.
+        # ─────────────────────────────────────────────────────────
+        elapsed = time.time() - start_time
+        final_size = dest_path.stat().st_size
+        speed = final_size / elapsed if elapsed > 0 else 0
+
+        logger.info(
+            f"Descarga OK: {filename} "
+            f"({format_size(final_size)}) en {format_time(elapsed)} "
+            f"({format_size(speed)}/s)"
+        )
+
+        # Telemetría DB — best effort, NUNCA afecta el resultado.
+        # log_download tiene su propio try/except interno y NO propaga.
+        chat_id = getattr(event_or_msg, 'chat_id', 0)
+        try:
+            db.log_download(filename, final_size, chat_id)
+        except Exception as e:
+            # log_download ya loguea internamente, pero capturamos por
+            # si acaso el método cambia en el futuro.
+            logger.error(f"DB_LOG_DOWNLOAD_ERROR: descarga OK pero log falló: {filename}: {e}")
+
+        return True   # ← SIEMPRE True si el archivo está OK en disco
 
     except FloodWaitError as e:
         logger.warning(f"FloodWait {e.seconds}s en {filename} (intento {_retry_count+1}/{MAX_RETRIES})")
@@ -453,8 +536,11 @@ async def _download_with_progress(
             )
         return False
 
-    except ConnectionError:
-        logger.warning(f"Conexión perdida en {filename} - reintentando en 30s...")
+    except ConnectionError as e:
+        logger.warning(
+            f"DOWNLOAD_STREAM_ERROR: ConnectionError en {filename} "
+            f"(intento {_retry_count+1}/{MAX_RETRIES}): {e}"
+        )
         await asyncio.sleep(30)
         if _retry_count < MAX_RETRIES:
             return await _download_with_progress(
@@ -464,12 +550,25 @@ async def _download_with_progress(
         return False
 
     except Exception as e:
-        logger.error(f"Error en descarga {filename}: {e}", exc_info=True)
-        if temp_path.exists():
-            try:
-                temp_path.unlink()
-            except Exception:
-                pass
+        # Tag de log diferenciado para distinguir errores desconocidos de
+        # errores conocidos (FloodWait/Timeout/Connection/SSL arriba).
+        # NO borramos temp_path acá para permitir reintentos manuales
+        # posteriores (puede haber descarga parcial utilizable).
+        logger.error(
+            f"DOWNLOAD_UNKNOWN_ERROR: {filename} "
+            f"{type(e).__name__}: {e}",
+            exc_info=True
+        )
+        # Solo borramos temp_path si está vacío o claramente truncado.
+        # Si tiene tamaño razonable, lo dejamos para posible resume.
+        try:
+            if temp_path.exists():
+                temp_size = temp_path.stat().st_size
+                if temp_size == 0:
+                    temp_path.unlink()
+                # else: dejarlo, puede servir para resume
+        except Exception:
+            pass
         return False
 
     finally:

@@ -44,8 +44,12 @@ class Database:
         self._cache_lock = threading.Lock()
 
         # Pool de conexiones Postgres
-        # min_size=1, max_size=5: suficiente para un bot de Telegram
-        # (las llamadas DB son rápidas y la caché evita la mayoría)
+        # Configuración actual (preservada de 6d448c9 + 403b039):
+        #   min_size=0 (lazy)  max_size=5  timeout=10s
+        # check=ConnectionPool.check_connection: ejecuta SELECT 1 antes de
+        # entregar cada conn al caller. Si la conn está stale (Neon cerró
+        # el socket SSL por idle/scale-to-zero), el pool la descarta y
+        # prueba otra → el caller nunca recibe una conn muerta.
         try:
             self.pool = ConnectionPool(
                 conninfo=db_url,
@@ -53,6 +57,7 @@ class Database:
                 max_size=5,
                 timeout=10,
                 configure=self._configure_conn,
+                check=ConnectionPool.check_connection,
                 open=True,
             )
             logger.info("Pool de PostgreSQL conectado correctamente")
@@ -532,14 +537,31 @@ class Database:
     # ── Download log ───────────────────────────────────────
 
     def log_download(self, filename: str, file_size: int, chat_id: int):
-        with self.pool.connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO download_log (filename, file_size, chat_id) "
-                    "VALUES (%s, %s, %s)",
-                    (filename, file_size, chat_id)
-                )
-            conn.commit()
+        """Telemetría de descarga. NUNCA contagia excepciones al caller.
+
+        La descarga YA ESTÁ COMPLETA cuando se llama a este método
+        (el archivo ya está en disco con el tamaño correcto). Si esto
+        falla (p.ej. conexión SSL cerrada por Neon), solo logueamos el
+        error y NO propagamos — el caller debe poder retornar True.
+
+        NO hacemos retry del INSERT porque download_log no tiene UNIQUE
+        constraint → un retry crearía filas duplicadas.
+        """
+        try:
+            with self.pool.connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO download_log (filename, file_size, chat_id) "
+                        "VALUES (%s, %s, %s)",
+                        (filename, file_size, chat_id)
+                    )
+                conn.commit()
+        except Exception as e:
+            logger.error(
+                f"DB_LOG_DOWNLOAD_ERROR: log_download falló para "
+                f"filename={filename!r} size={file_size} chat_id={chat_id}: {e}"
+            )
+            # NO raise — la descarga fue exitosa, el log es secundario
 
     # ── Pagos NOWPayments ──────────────────────────────────
 

@@ -2271,10 +2271,17 @@ def register_handlers(bot_client):
     # --- SIZEDISP: Disco de la VPS ---
     @bot_client.on(events.NewMessage(pattern=r"/sizedisp"))
     async def cmd_sizedisp(e):
-        """Admin: mostrar almacenamiento total y ocupado de la VPS."""
+        """Admin: mostrar almacenamiento total y ocupado de la VPS.
+
+        DESACOPLADO de PostgreSQL: el cálculo de disco SIEMPRE funciona
+        aunque Neon esté caído. El idioma se obtiene vía DB con fallback
+        a 'es' si la DB falla. Un error de DB NUNCA se etiqueta como
+        'error del disco'.
+        """
         if get_user_role(e.sender_id) != UserRole.ADMIN:
             return
 
+        # ── 1) BLOQUE FILESYSTEM — SIEMPRE funciona, sin DB ──
         try:
             stat = os.statvfs('/')
             total = stat.f_blocks * stat.f_frsize
@@ -2285,19 +2292,32 @@ def register_handlers(bot_client):
             total_str = format_size(total)
             used_str = format_size(used)
             free_str = format_size(free)
-
-            # Barra visual premium
             bar = progress_bar(pct, width=20)
-
-            user = db.get_user(e.sender_id)
-            lang = user.get('language', 'es')
+        except Exception as exc:
+            # Este SÍ es un error real de disco → etiqueta correcta
+            logger.error(f"SIZEDISP_FILESYSTEM_ERROR: {exc}", exc_info=True)
             await e.reply(
-                UI.text("sizedisp_info", lang, total_str, used_str, pct, free_str, bar),
+                f"❌ **Error obteniendo info del disco**\n\n`{str(exc)[:200]}`",
                 parse_mode='md'
             )
+            return
+
+        # ── 2) BLOQUE DB — best effort para idioma, fallback 'es' ──
+        # Un fallo de DB acá NO debe impedir mostrar el almacenamiento.
+        # El usuario tiene que ver el disco aunque Neon esté caído.
+        try:
+            user = db.get_user(e.sender_id)
+            lang = user.get('language', 'es')
         except Exception as exc:
-            logger.error(f"Error en /sizedisp: {exc}")
-            await e.reply(f"Error obteniendo info del disco: `{str(exc)[:200]}`", parse_mode='md')
+            # Etiqueta correcta: es un error de DB, NO de disco
+            logger.warning(f"SIZEDISP_DB_LANGUAGE_FALLBACK: usando lang=es: {exc}")
+            lang = 'es'
+
+        # ── 3) RESPONDER con los datos del disco (siempre disponibles) ──
+        await e.reply(
+            UI.text("sizedisp_info", lang, total_str, used_str, pct, free_str, bar),
+            parse_mode='md'
+        )
 
     # --- CONVERSATION HANDLER ---
     @bot_client.on(events.NewMessage(

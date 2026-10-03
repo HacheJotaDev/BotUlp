@@ -98,13 +98,25 @@ async def main():
     # Iniciar limpieza periodica
     async def cleanup_loop():
         while True:
+            # ── 1) Limpieza FILESYSTEM — puramente archivos, sin DB ──
+            # NO toca PostgreSQL. Si falla, logueamos con tag claro y
+            # seguimos con la limpieza de VIPs.
             try:
                 await mover_y_limpiar_archivos()
+            except Exception as e:
+                logger.error(f"CLEANUP_FILESYSTEM_ERROR: {e}", exc_info=True)
+
+            # ── 2) Limpieza VIPs en DB — toca PostgreSQL ──
+            # Si el pool entrega una conexión stale (Neon cerró SSL),
+            # el check_connection del pool debería descartarla antes.
+            # Si igual falla, lo logueamos con tag DB claro (NO "limpieza"
+            # genérico que confunde con filesystem).
+            try:
                 cleaned = _db.cleanup_expired_vips()
                 if cleaned > 0:
                     logger.info(f"Limpieza VIP: {cleaned} usuarios expirados removidos")
             except Exception as e:
-                logger.error(f"Error en limpieza: {e}")
+                logger.error(f"CLEANUP_VIPS_DB_ERROR: {e}", exc_info=True)
             await asyncio.sleep(3600)  # Cada hora
 
     state.cleanup_task = asyncio.create_task(cleanup_loop())
