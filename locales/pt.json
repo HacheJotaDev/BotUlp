@@ -49,7 +49,7 @@
   "imap_zip_caption_sender": "╭───✦ 📬 **IMAP + REMETENTES**\n├─ 📨 Remetentes: `{0}`\n├─ 📊 Total: `{1}` · 📬 Caixas com mensagens: `{2}` · ❌ Descartadas: `{3}`\n├─ ⏱️ Tempo: `{4:.1f}s`\n╰───✦\n\n📁 `sender/` — {5} caixas com mensagens desses remetentes\n📁 `bad_accounts.txt` — descartadas (login falhou ou sem mensagens)",
   "imap_zip_caption_country": "╭───✦ 🌍 **IMAP + PAÍSES**\n├─ 📊 Total: `{0}` · ✅ Hits: `{1}` · ❌ Bads: `{2}`\n├─ ⏱️ Tempo: `{3:.1f}s`\n├─ 🌍 Países detectados: `{4}`\n╰───✦\n\n📁 `all_hits.txt` — todos os hits\n📁 `bad_accounts.txt` — contas falhadas\n📁 `domains/` — agrupados por domínio\n📁 `countries/` — por país com resumo",
   "imap_zip_caption_country_kw": "╭───✦ 🌍 **IMAP + KEYWORDS + PAÍSES**\n├─ 📊 Total: `{0}` · ✅ Hits: `{1}` · ❌ Bads: `{2}`\n├─ ⏱️ Tempo: `{3:.1f}s`\n├─ 🔎 Keywords: `{4}`\n├─ 🌍 Países detectados: `{6}`\n╰───✦\n\n📁 `all_hits.txt` — {5} hits totais\n📁 `bad_accounts.txt` — contas falhadas\n📁 `domains/` — agrupados por domínio\n📁 `keywords/` — por keyword com detalhes\n📁 `countries/` — por país com resumo",
-  "key_generated": "╭───✦ ✅ **KEY GERADA**\n├─ 🔑 Código: `{0}`\n├─ 🔗 Resgate: {1}\n├─ 📅 Duração: **{2} dias**\n╰───✦\n\n📤 Compartilhe o link com seu cliente para ativá-lo.",
+  "key_generated": "╭───✦ ✅ **KEY GERADA**\n├─ 🔑 Código:  `{0}`\n├─ 🔗 Resgate: {1}\n├─ 📅 Duração: **{2} dias**\n Ou use o comando `/canjear  {0}`\n╰───✦\n\nVocê já sabe\n\n📤 Compartilhe o link com seu cliente para ativá-lo.",
   "language_selected": "🌐 Idioma atualizado com sucesso.",
   "list_footer": "╰───✦",
   "list_more": "├─ … e mais **{0}**",
@@ -72,7 +72,7 @@
   "phase_processing": "⚡ Processando correspondências...",
   "phase_scanning": "📂 Escaneando bases de dados...",
   "ping_info": "╭───✦ 📶 **PONG**\n├─ ⚡ Latência: `{0:.0f} ms`\n├─ ⏱️ Uptime: `{1}`\n├─ 🧩 Versão: `{2}`\n╰───✦",
-  "redeem_success": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ 🎉 **VIP ATIVADO!**\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n✅ Sua conta VIP foi ativada com sucesso.\n🚀 Aproveite todos os recursos premium.",
+  "redeem_success": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ 🎉 **VIP ATIVADO!**\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n✅ Sua conta VIP foi ativada com sucesso.\n⏳ Expira: **{0}**\n🚀 Aproveite todos os recursos premium.",
   "report_received": "╭───✦ ⚠️ **RELATÓRIO DE URL**\n├─ 👤 Usuário: `{0}`\n├─ 🔍 URL: `{1}`\n╰───✦",
   "search_already_running": "⏳ **Busca em andamento** — será executada automaticamente quando a atual terminar.",
   "url_usage": "╭───✦ ⚠️ **FALTA O LINK**\n├─ Digite `/url` seguido do domínio a buscar\n├─ ✍️ Exemplo: `/url exemplo.com`\n╰───✦",
@@ -136,5 +136,6 @@
   "imap_extract_already": "⏳ Já existe uma extração imap em curso. Aguarda que termine.",
   "im_period_24h": "Novos · últimas 24h",
   "im_period_old": "Somente antigos",
-  "im_period_all": "Novos + Antigos"
+  "im_period_all": "Novos + Antigos",
+  "canjear_error": "╭───✦ ⚠️ ERRO AO RESGATAR\n├─ Não consegui verificar sua key neste momento\n├─ (falha temporária de conexão com o banco)\n├─ 🔁 Aguarde alguns segundos e tente novamente:\n├─ ➡️ /canjear SEU-CODIGO\n╰───✦"
 }

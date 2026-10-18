@@ -2,6 +2,41 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.19] — Sistema de keys: el bot SIEMPRE responde al canje + tarjeta KEY GENERADA con link de canje
+
+### 🐛 Fix real: canjeaba la key y el bot se quedaba MUDO
+- **Causa raíz 1 — `/canjear` sin código**: el patrón era `r"/canjear(?:@\w+)? (.+)"` (argumento OBLIGATORIO). Un `/canjear` a secas (o con espacio de más) no matcheaba NINGÚN handler → silencio total. Ahora el argumento es opcional: `/canjear` solo muestra la guía de canje (🔑 CANJEAR KEY VIP).
+- **Causa raíz 2 — sin try/except**: `cmd_canjear` no tenía manejo de errores. Cualquier fallo de BD (Neon frío, `PoolTimeout`, corte SSL) moría en el dispatcher de Telethon → solo log interno, el usuario NUNCA recibía respuesta. Ahora todo el cuerpo está envuelto en anti-mudez: si algo falla responde la tarjeta **⚠️ ERROR AL CANJEAR** pidiendo reintentar en unos segundos (la key queda intacta).
+- **Causa raíz 3 — deep link fallido**: en `/start HJ-XXX`, si `db.redeem()` lanzaba excepción caía al `start_error` genérico y si la key era inválida el bot mostraba la bienvenida normal sin decir nada de la key. Ahora hay 3 respuestas garantizadas: **éxito** (🎉 VIP ACTIVADO), **key inválida** (❌ KEY INVÁLIDA si el parámetro empieza con `HJ-`) y **error de BD** (⚠️ ERROR AL CANJEAR). Si el parámetro no parece key, sigue cayendo a la bienvenida normal.
+- **Red de seguridad de teclado** en ambos canjes: si el teclado falla al serializar, se reenvía la confirmación SIN botones (patrón v4.2.4) — el teclado roto nunca vuelve a callar la activación del VIP.
+
+### 🛡️ db.redeem blindado
+- **Normalización del código**: `strip().upper()` antes de tocar la BD — canjear `hj-abc...` en minúsculas o con espacios de más (doble espacio al pegar) funciona igual que el código exacto.
+- **Canje idempotente**: si la key ya fue usada por el MISMO usuario (doble tap, reintento tras corte de red), responde éxito otra vez en lugar de un falso "KEY INVÁLIDA". Para otro usuario sigue dando inválida.
+
+### ✨ Tarjeta KEY GENERADA con formato nuevo (mockup del vendedor)
+- Ahora incluye el **link de canje directo** y el comando alternativo, exactamente así:
+```
+╭───✦ ✅ KEY GENERADA
+├─ 🔑 Código:  HJ-KOEJ6UM8UKGJ
+├─ 🔗 Canje: https://t.me/UlpHJBot?start=HJ-KOEJ6UM8UKGJ
+├─ 📅 Duración: 3 días
+ O usa el comando `/canjear  HJ-KOEJ6UM8UKGJ`
+╰───✦
+
+Ya tu sabes
+
+📤 Comparte el link con tu cliente para activarlo.
+```
+- El cliente puede activarse tocando el link (botón START de Telegram) **o** copiando el comando — dos caminos, cero confusión.
+
+### ✨ Confirmación de canje con vencimiento
+- **🎉 ¡VIP ACTIVADO!** ahora muestra la fecha exacta: `⏳ Vence: 2026-10-22` (fecha en la que expira el VIP tras sumar los días de la key, acumulativa si ya era VIP). Traducido a ES/EN/PT (Vence/Expires/Expira).
+
+### 🧪 Tests
+- `scripts/test_v4219_keys.py` — **83 checks**: fuente (normalización + idempotencia + patrón opcional + anti-mudez), regex de 7 variantes de `/canjear`, render de locales x3 (formato mockup completo, markdown balanceado), `bot_locale` base sincronizado, y **9 pruebas funcionales** con cliente Telethon fake (éxito, inválida, BD caída → error, `/canjear` a secas → guía, teclado roto → reintento sin botones, deep-link x4) + **BD real Neon**: minúsculas/espacios → True, re-canje mismo usuario → True, uso ajeno → False, inexistente → False, vip_expiry fijado, con limpieza total de datos de prueba.
+- Regresión completa verde: test_v4218 79/79 · test_v4217 36/36 · test_v4216 138/138 · test_v4215 39/39 · test_v4212 63/63 · test_v4211 TODO OK · e2e TODO OK.
+
 ## [4.2.18] — Menú con 🧭 COMANDOS descritos por rol + fix: VIP/SELLER veían su menú sin botones
 
 ### 🐛 Fix real: el menú de VIP y SELLER salía SIN botones

@@ -266,12 +266,21 @@ class LocaleManager:
                 "╰━━━━━━━━━━━━━━━━━━━━╯\n"
                 "\n"
                 "✅ Tu cuenta VIP se activó correctamente.\n"
+                "⏳ Vence: **{0}**\n"
                 "🚀 Disfruta de todas las funciones premium."
             ),
             "canjear_invalid": (
                 "╭───✦ ❌ **KEY INVÁLIDA**\n"
                 "├─ El código no existe o ya fue utilizado\n"
                 "├─ 📌 Formato: `/canjear HJ-XXXXXXXXXXXX`\n"
+                "╰───✦"
+            ),
+            "canjear_error": (
+                "╭───✦ ⚠️ ERROR AL CANJEAR\n"
+                "├─ No pude verificar tu key en este momento\n"
+                "├─ (falla temporal de conexión con la base)\n"
+                "├─ 🔁 Espera unos segundos y reintenta:\n"
+                "├─ ➡️ /canjear TU-CODIGO\n"
                 "╰───✦"
             ),
             "canjear_info": (
@@ -287,10 +296,13 @@ class LocaleManager:
             ),
             "key_generated": (
                 "╭───✦ ✅ **KEY GENERADA**\n"
-                "├─ 🔑 Código: `{0}`\n"
+                "├─ 🔑 Código:  `{0}`\n"
                 "├─ 🔗 Canje: {1}\n"
                 "├─ 📅 Duración: **{2} días**\n"
+                " O usa el comando `/canjear  {0}`\n"
                 "╰───✦\n"
+                "\n"
+                "Ya tu sabes\n"
                 "\n"
                 "📤 Comparte el link con tu cliente para activarlo."
             ),

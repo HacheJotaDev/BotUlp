@@ -1961,6 +1961,17 @@ def register_handlers(bot_client):
             except Exception:
                 pass
 
+    def _vip_expiry_str(uid: int) -> str:
+        """Fecha de expiración VIP (YYYY-MM-DD) del usuario, para mostrarla
+        justo después de canjear una key. Nunca lanza (fallback '—')."""
+        try:
+            exp = db.get_user(uid).get('vip_expiry')
+            if exp:
+                return str(exp)[:10]
+        except Exception:
+            pass
+        return "—"
+
     @bot_client.on(events.NewMessage(pattern=r"/(start|cmds)(@\w+)?(\s|$)"))
     async def start(e):
         """Bienvenida + menú principal. /start y /cmds son el mismo comando
@@ -2011,15 +2022,47 @@ def register_handlers(bot_client):
                         except Exception:
                             pass
             elif param:
-                # Deep link para canjear key VIP
-                if db.redeem(uid, param):
+                # Deep link para canjear key VIP (v4.2.19):
+                # https://t.me/UlpHJBot?start=HJ-XXXXXXXXXXXX
+                # Respuesta GARANTIZADA en los 3 escenarios: éxito, key
+                # inválida y error de BD (antes: fallo de BD = mudez total).
+                key_param = param.strip()
+                looks_like_key = key_param.upper().startswith("HJ-")
+                try:
+                    redeemed = db.redeem(uid, key_param)
+                except Exception as redeem_err:
+                    logger.error(f"Canje por deep link falló para {uid}: {redeem_err}")
+                    redeemed = None  # estado desconocido → pedir reintento
+
+                if redeemed is True:
                     role = get_user_role(uid)
+                    success_txt = UI.text("redeem_success", lang, _vip_expiry_str(uid))
+                    try:
+                        await e.reply(
+                            success_txt,
+                            buttons=Keyboards.main(role, lang, 0),
+                            parse_mode='md'
+                        )
+                    except Exception as kb_err:
+                        # Red de seguridad v4.2.4: teclado roto nunca debe
+                        # callar la confirmación del canje.
+                        logger.error(f"/start canje reintento sin botones: {kb_err}")
+                        await e.reply(success_txt, parse_mode='md')
+                    return
+
+                if redeemed is None:
+                    # Fallo de BD (Neon frío / PoolTimeout): avisar y dar
+                    # la key por intacta para que reintente en un rato.
+                    await e.reply(UI.text("canjear_error", lang), parse_mode=None)
+                    return
+
+                if redeemed is False and looks_like_key:
                     await e.reply(
-                        locale_manager.get("redeem_success", lang),
-                        buttons=Keyboards.main(role, lang, 0),
+                        UI.text("canjear_invalid", lang),
                         parse_mode='md'
                     )
                     return
+                # Param no parecido a key → cae a la bienvenida normal.
 
             # Elegir texto de bienvenida
             if has_free:
@@ -2179,30 +2222,61 @@ def register_handlers(bot_client):
         else:
             await e.reply("⚠️ Este grupo no esta en la lista permitida.")
 
-    @bot_client.on(events.NewMessage(pattern=r"/canjear(?:@\w+)? (.+)"))
+    @bot_client.on(events.NewMessage(pattern=r"/canjear(?:@\w+)?(?:\s+(.+))?\s*$"))
     async def cmd_canjear(e):
-        """Canjear una key VIP directamente con /canjear <codigo>."""
-        uid = e.sender_id
-        user = db.get_user(uid)
-        lang = user.get('language', 'es')
-        code = e.pattern_match.group(1).strip()
+        """Canjear una key VIP directamente con /canjear <codigo>.
 
-        if e.is_group and e.chat_id not in state.allowed_groups:
-            return
+        v4.2.19: patrón con argumento OPCIONAL — antes "/canjear" a secas no
+        matcheaba nada y el bot se quedaba mudo. Todo el cuerpo va envuelto en
+        try/except anti-mudez: cualquier fallo (BD fría, teclado roto, etc.)
+        recibe respuesta, NUNCA silencio."""
+        lang = 'es'
+        try:
+            uid = e.sender_id
+            user = db.get_user(uid)
+            lang = user.get('language', 'es')
+            code = (e.pattern_match.group(1) or "").strip()
 
-        if db.redeem(uid, code):
-            role = get_user_role(uid)
-            await e.reply(
-                UI.text("redeem_success", lang),
-                buttons=Keyboards.main(role, lang, False),
-                parse_mode='md'
-            )
-        else:
-            await e.reply(
-                UI.text("canjear_invalid", lang),
-                buttons=Keyboards.back(),
-                parse_mode='md'
-            )
+            if e.is_group and e.chat_id not in state.allowed_groups:
+                return
+
+            if not code:
+                # /canjear sin código → guía de canje (antes: silencio total)
+                await e.reply(
+                    UI.text("canjear_info", lang),
+                    buttons=Keyboards.back() if e.is_private else None,
+                    parse_mode='md'
+                )
+                return
+
+            if db.redeem(uid, code):
+                role = get_user_role(uid)
+                success_txt = UI.text("redeem_success", lang, _vip_expiry_str(uid))
+                try:
+                    await e.reply(
+                        success_txt,
+                        buttons=Keyboards.main(role, lang, False),
+                        parse_mode='md'
+                    )
+                except Exception as kb_err:
+                    # Teclado roto no puede callar la activación del VIP
+                    logger.error(f"/canjear reintento sin botones: {kb_err}")
+                    await e.reply(success_txt, parse_mode='md')
+            else:
+                await e.reply(
+                    UI.text("canjear_invalid", lang),
+                    buttons=Keyboards.back() if e.is_private else None,
+                    parse_mode='md'
+                )
+        except Exception as exc:
+            # v4.2.19 garantía anti-mudez: si algo falla tras un canje,
+            # responder SIEMPRE (antes: excepción → Telethon solo lo logueaba
+            # y el usuario no recibía NADA).
+            logger.exception("Error en /canjear")
+            try:
+                await e.reply(UI.text("canjear_error", lang), parse_mode=None)
+            except Exception:
+                pass
 
     @bot_client.on(events.NewMessage(pattern=r"/url(@\w+)?\s*$"))
     async def cmd_url_usage(e):

@@ -327,15 +327,25 @@ class Database:
         return code
 
     def redeem(self, uid: int, code: str) -> bool:
+        # v4.2.19: normalizar el código pegado (espacios de más, minúsculas)
+        # antes de tocar la BD — "hj-abc...  " debe canjear igual que "HJ-ABC...".
+        code = (code or "").strip().upper()
+        if not code:
+            return False
         with self.pool.connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT days FROM keys WHERE key_code = %s AND is_used = 0",
+                    "SELECT days, is_used, used_by FROM keys WHERE key_code = %s",
                     (code,)
                 )
                 row = cur.fetchone()
                 if not row:
                     return False
+                # v4.2.19: canje idempotente — si la key ya la usó ESTE MISMO
+                # usuario (doble tap / reintento tras corte de red), responder
+                # éxito otra vez en vez de un falso "KEY INVÁLIDA".
+                if row['is_used']:
+                    return row['used_by'] == uid
                 days = row['days']
                 now = datetime.now(timezone.utc)
                 cur.execute("SELECT vip_expiry FROM users WHERE user_id = %s", (uid,))

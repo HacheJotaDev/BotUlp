@@ -49,7 +49,7 @@
   "imap_too_many_keywords": "╭───✦ ⚠️ **IMAP CHECKER**\n├─ Máximo **10 keywords** permitidas\n├─ Usaste: `{0}`\n╰───✦",
   "imap_zip_caption_country": "╭───✦ 🌍 **IMAP + PAÍSES**\n├─ 📊 Total: `{0}` · ✅ Hits: `{1}` · ❌ Bads: `{2}`\n├─ ⏱️ Tiempo: `{3:.1f}s`\n├─ 🌍 Países detectados: `{4}`\n╰───✦\n\n📁 `all_hits.txt` — todos los hits\n📁 `bad_accounts.txt` — cuentas fallidas\n📁 `domains/` — agrupados por dominio\n📁 `countries/` — por país con resumen",
   "imap_zip_caption_country_kw": "╭───✦ 🌍 **IMAP + KEYWORDS + PAÍSES**\n├─ 📊 Total: `{0}` · ✅ Hits: `{1}` · ❌ Bads: `{2}`\n├─ ⏱️ Tiempo: `{3:.1f}s`\n├─ 🔎 Keywords: `{4}`\n├─ 🌍 Países detectados: `{6}`\n╰───✦\n\n📁 `all_hits.txt` — {5} hits totales\n📁 `bad_accounts.txt` — cuentas fallidas\n📁 `domains/` — agrupados por dominio\n📁 `keywords/` — por keyword con detalle\n📁 `countries/` — por país con resumen",
-  "key_generated": "╭───✦ ✅ **KEY GENERADA**\n├─ 🔑 Código: `{0}`\n├─ 🔗 Canje: {1}\n├─ 📅 Duración: **{2} días**\n╰───✦\n\n📤 Comparte el link con tu cliente para activarlo.",
+  "key_generated": "╭───✦ ✅ **KEY GENERADA**\n├─ 🔑 Código:  `{0}`\n├─ 🔗 Canje: {1}\n├─ 📅 Duración: **{2} días**\n O usa el comando `/canjear  {0}`\n╰───✦\n\nYa tu sabes\n\n📤 Comparte el link con tu cliente para activarlo.",
   "language_selected": "🌐 Idioma actualizado correctamente.",
   "list_footer": "╰───✦",
   "list_more": "├─ … y **{0}** más",
@@ -72,7 +72,7 @@
   "phase_processing": "⚡ Procesando coincidencias...",
   "phase_scanning": "📂 Escaneando bases de datos...",
   "ping_info": "╭───✦ 📶 **PONG**\n├─ ⚡ Latencia: `{0:.0f} ms`\n├─ ⏱️ Uptime: `{1}`\n├─ 🧩 Versión: `{2}`\n╰───✦",
-  "redeem_success": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ 🎉 **¡VIP ACTIVADO!**\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n✅ Tu cuenta VIP se activó correctamente.\n🚀 Disfruta de todas las funciones premium.",
+  "redeem_success": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ 🎉 **¡VIP ACTIVADO!**\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n✅ Tu cuenta VIP se activó correctamente.\n⏳ Vence: **{0}**\n🚀 Disfruta de todas las funciones premium.",
   "report_received": "╭───✦ ⚠️ **REPORTE DE URL**\n├─ 👤 Usuario: `{0}`\n├─ 🔍 URL: `{1}`\n╰───✦",
   "search_already_running": "⏳ **Búsqueda en curso** — se ejecutará automáticamente al terminar la actual.",
   "url_usage": "╭───✦ ⚠️ **FALTA EL ENLACE**\n├─ Escribe `/url` seguido del dominio a buscar\n├─ ✍️ Ejemplo: `/url ejemplo.com`\n╰───✦",
@@ -136,5 +136,6 @@
   "imap_extract_already": "⏳ Ya hay una extracción imap en curso. Espera a que termine.",
   "im_period_24h": "Nuevos · últimas 24h",
   "im_period_old": "Solo antiguos",
-  "im_period_all": "Nuevos + Antiguos"
+  "im_period_all": "Nuevos + Antiguos",
+  "canjear_error": "╭───✦ ⚠️ ERROR AL CANJEAR\n├─ No pude verificar tu key en este momento\n├─ (falla temporal de conexión con la base)\n├─ 🔁 Espera unos segundos y reintenta:\n├─ ➡️ /canjear TU-CODIGO\n╰───✦"
 }
