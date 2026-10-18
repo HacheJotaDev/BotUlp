@@ -1422,7 +1422,8 @@ _HM_PERIOD_KEYS = {
 
 
 async def _execute_hotmail_extract(uid: int, lang: str, t_opt: str, chat_id: int,
-                                   is_free_search=None, callback_event=None):
+                                   is_free_search=None, callback_event=None,
+                                   reply_to=None):
     """Ejecutar extracción HOTMAIL y enviar .txt con líneas únicas."""
     state.active_hotmail_extracts.add(uid)
 
@@ -1485,7 +1486,8 @@ async def _execute_hotmail_extract(uid: int, lang: str, t_opt: str, chat_id: int
             caption = UI.text("hotmail_extract_done", lang, period_label, count, elapsed)
 
             await _send_search_result(chat_id, result_file, caption,
-                                      e=callback_event, msg=loading_msg)
+                                      e=callback_event, msg=loading_msg,
+                                      reply_to=reply_to)
         else:
             empty_text = UI.text("hotmail_extract_empty", lang)
             try:
@@ -2333,11 +2335,13 @@ def register_handlers(bot_client):
                 parse_mode='md'
             )
 
-        # Guardar contexto para el callback del periodo (igual que /url)
+        # Guardar contexto para el callback del periodo (igual que /url:
+        # chat original, reply e is_free_search viajan juntos)
         state.temp_state[uid] = {
             'hotmail_extract': True,
             'chat_id': e.chat_id,
-            'reply_to': e.id
+            'reply_to': e.id,
+            'is_free_search': is_free_search
         }
 
         await e.reply(
@@ -2820,15 +2824,31 @@ def register_handlers(bot_client):
                     return await e.answer(
                         UI.text("hotmail_extract_already", lang), alert=True
                     )
-                # Re-validar acceso (el estado pudo cambiar desde que se envió /hotmail)
-                allowed, is_free_search = await _check_search_access(uid, lang, False, True)
-                if not allowed:
-                    return await e.answer(_get_access_denied_text(lang), alert=True)
+                # v4.2.14: MISMA lógica que /url — el chat original manda:
+                # · grupo permitido → todos pueden (no consume gratis)
+                # · privado → re-validar reglas FREE (inicial/bono) o VIP+
+                ts = state.temp_state.get(uid, {})
+                orig_chat = ts.get('chat_id', uid)
+                if orig_chat != uid:
+                    if orig_chat not in state.allowed_groups:
+                        return await e.answer(
+                            "Este grupo ya no está autorizado.", alert=True
+                        )
+                    is_free_search = None
+                else:
+                    allowed, is_free_search = await _check_search_access(
+                        uid, lang, False, True
+                    )
+                    if not allowed:
+                        return await e.answer(
+                            _get_access_denied_text(lang), alert=True
+                        )
                 if uid in state.temp_state:
                     state.temp_state.pop(uid, None)
                 await _execute_hotmail_extract(
-                    uid=uid, lang=lang, t_opt=t_opt, chat_id=uid,
-                    is_free_search=is_free_search, callback_event=e
+                    uid=uid, lang=lang, t_opt=t_opt, chat_id=orig_chat,
+                    is_free_search=is_free_search, callback_event=e,
+                    reply_to=ts.get('reply_to')
                 )
                 return
 

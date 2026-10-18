@@ -119,6 +119,53 @@ def destino_hotmail(filename: str) -> Path:
     return config.DIR_DOWNLOADS / filename
 
 
+# ═════════════════════════════════════════════════════════════
+# v4.2.14 — ANTI-DUPLICADOS: no re-descargar archivos ya bajados
+# Fuente persistente: download_log (DB). Fast-path: state.seen_downloads.
+# Criterio: mismo filename (+ mismo tamaño si se conoce). Fail-open:
+# si la DB falla, se permite la descarga (jamás bloquear por telemetría).
+# ═════════════════════════════════════════════════════════════
+
+def _dedup_key(filename: str, file_size: int) -> str:
+    """Clave de dedupe: nombre normalizado + tamaño (0 → solo nombre)."""
+    name = (filename or '').strip().lower()
+    return f"{name}|{file_size or 0}"
+
+
+def _is_duplicate_download(filename: str, file_size: int) -> bool:
+    """True si este archivo (nombre+tamaño) ya fue descargado antes.
+
+    1) Fast-path en memoria (state.seen_downloads) — cubre reposts
+       consecutivos y descargas ya en curso (anti-carrera).
+    2) Persistente en DB (download_log) — sobrevive reinicios.
+    Al consultar se cachea la clave en memoria para no golpear la DB
+    con el mismo repost una y otra vez.
+    """
+    key = _dedup_key(filename, file_size)
+
+    if key in state.seen_downloads:
+        return True
+
+    try:
+        if db.is_file_downloaded(filename, file_size):
+            state.seen_downloads.add(key)
+            return True
+    except Exception as e:
+        logger.error(f"DEDUP_DB_ERROR: {filename}: {e}")
+
+    return False
+
+
+def _reserve_download(filename: str, file_size: int):
+    """Reservar la clave en memoria (descarga aceptada / en curso)."""
+    state.seen_downloads.add(_dedup_key(filename, file_size))
+
+
+def _release_download(filename: str, file_size: int):
+    """Liberar la reserva si la descarga FALLÓ (permite reintento futuro)."""
+    state.seen_downloads.discard(_dedup_key(filename, file_size))
+
+
 class DownloadProgressTracker:
     """Gestor de progreso de descarga con actualizaciones en Telegram en tiempo real.
     
@@ -421,6 +468,14 @@ async def mover_y_limpiar_archivos():
         except Exception as e:
             logger.warning(f"CLEANUP_CACHE_ERROR: {f.name}: {e}")
 
+    # v4.2.14: acotar download_log (fuente del anti-duplicados) — best effort
+    try:
+        log_deleted = db.cleanup_download_log(30)
+        if log_deleted > 0:
+            logger.info(f"Limpieza: download_log recortado ({log_deleted} registros >30d)")
+    except Exception as e:
+        logger.warning(f"CLEANUP_DOWNLOAD_LOG_ERROR: {e}")
+
     if moved or deleted:
         logger.info(f"Limpieza: {moved} archivados, {deleted} eliminados")
 
@@ -697,9 +752,12 @@ async def _download_large_file_task(event, filename: str, dest_path: Path):
             'size': 0,
             'status': 'downloading'
         }
+        _file_size = event.document.size if getattr(event, 'document', None) else 0
         success = await _download_with_progress(event, filename, dest_path)
         if not success and filename in state.active_downloads:
             state.active_downloads[filename]['status'] = 'failed'
+            # v4.2.14: fallo → liberar reserva de dedupe (permite reintento)
+            _release_download(filename, _file_size or 0)
         if success:
             logger.info(f"Esperando {config.DOWNLOAD_DELAY_BETWEEN}s antes de siguiente descarga...")
             await asyncio.sleep(config.DOWNLOAD_DELAY_BETWEEN)
@@ -762,6 +820,8 @@ async def _auto_dl_worker():
                 tracker.stats['new'] += 1
             else:
                 tracker.stats['errors'] += 1
+                # v4.2.14: fallo → liberar reserva de dedupe (permite reintento)
+                _release_download(filename, file_size)
 
             await tracker.finish(success, dl_elapsed)
 
@@ -836,10 +896,20 @@ async def realtime_listener(event):
         if dest_path.exists() and dest_path.stat().st_size > 0:
             return
 
+        # v4.2.14: anti-duplicados — ya descargado antes (nombre+tamaño,
+        # persistente en download_log) o en curso → no re-bajar
+        if _is_duplicate_download(filename, file_size):
+            logger.info(
+                f"DUPLICADO omitido (ya descargado antes): {filename} "
+                f"({format_size(file_size)})"
+            )
+            return
+
         if filename in state.active_downloads:
             return
 
         if state.auto_download_enabled:
+            _reserve_download(filename, file_size)
             if state.auto_dl_queue is not None:
                 await state.auto_dl_queue.put({
                     'event': event,
@@ -858,6 +928,7 @@ async def realtime_listener(event):
                 asyncio.create_task(_download_large_file_task(event, filename, dest_path))
         else:
             if not any(p['msg_id'] == event.id for p in state.pending_downloads):
+                _reserve_download(filename, file_size)
                 try:
                     chat = await event.get_chat()
                     chat_name = getattr(chat, 'title', f"Chat {event.chat_id}")
@@ -868,7 +939,9 @@ async def realtime_listener(event):
                     'msg_id': event.id,
                     'filename': filename,
                     'chat_name': chat_name,
-                    'size': file_size
+                    'size': file_size,
+                    'dest_path': str(dest_path),
+                    'is_hotmail': is_hotmail
                 })
                 logger.info(f"Pendiente detectado: {filename} ({format_size(file_size)})")
 
@@ -884,7 +957,7 @@ async def process_pending_downloads(status_msg=None):
         return
 
     total = len(state.pending_downloads)
-    stats = {'new': 0, 'existing': 0, 'errors': 0}
+    stats = {'new': 0, 'existing': 0, 'duplicates': 0, 'errors': 0}
     start_time = time.time()
 
     if status_msg:
@@ -909,7 +982,9 @@ async def process_pending_downloads(status_msg=None):
                 stats['errors'] += 1
                 continue
 
-            dest_path = config.DIR_DOWNLOADS / item['filename']
+            # v4.2.11-fix: usar el destino correcto (hotmail → silo hotmail)
+            dest_path = Path(item['dest_path']) if item.get('dest_path') \
+                else config.DIR_DOWNLOADS / item['filename']
 
             if dest_path.exists() and dest_path.stat().st_size > 0:
                 stats['existing'] += 1
@@ -918,13 +993,27 @@ async def process_pending_downloads(status_msg=None):
             file_size = item.get('size', 0) or (msg.document.size if msg.document else 0)
 
             # v4.2.10: Red de seguridad — omitir .txt menores a MIN_DOWNLOAD_SIZE_MB (5MB)
-            if file_size and file_size < config.MIN_DOWNLOAD_SIZE_MB * 1024 * 1024:
+            # v4.2.11-fix: los HOTMAIL pasan sin importar el peso
+            if not item.get('is_hotmail') and file_size and \
+                    file_size < config.MIN_DOWNLOAD_SIZE_MB * 1024 * 1024:
                 logger.info(
                     f"Pendiente omitido por tamaño mínimo: {item['filename']} "
                     f"({format_size(file_size)} < {config.MIN_DOWNLOAD_SIZE_MB}MB)"
                 )
                 stats['existing'] += 1
                 continue
+
+            # v4.2.14: anti-duplicados — soltar la reserva propia (hecha al
+            # encolar) y re-chequear contra el histórico persistente
+            _release_download(item['filename'], file_size)
+            if _is_duplicate_download(item['filename'], file_size):
+                logger.info(
+                    f"DUPLICADO omitido (pendiente): {item['filename']} "
+                    f"({format_size(file_size)})"
+                )
+                stats['duplicates'] += 1
+                continue
+            _reserve_download(item['filename'], file_size)
 
             tracker = DownloadProgressTracker(
                 chat_id=config.ADMIN_IDS[0],
@@ -947,6 +1036,8 @@ async def process_pending_downloads(status_msg=None):
                 stats['new'] += 1
             else:
                 stats['errors'] += 1
+                # v4.2.14: fallo → liberar reserva de dedupe (permite reintento)
+                _release_download(item['filename'], file_size)
 
             await tracker.finish(success, dl_elapsed)
             await asyncio.sleep(0.3)
@@ -963,6 +1054,7 @@ async def process_pending_downloads(status_msg=None):
             "╭───✦ ✅ **DESCARGAS COMPLETADAS**\n"
             f"├─ 📥 Nuevos: `{stats['new']}`\n"
             f"├─ 💾 Existentes: `{stats['existing']}`\n"
+            f"├─ ♻️ Duplicados: `{stats['duplicates']}`\n"
             f"├─ ❌ Errores: `{stats['errors']}`\n"
             f"├─ ⏱️ Tiempo total: `{format_time(elapsed)}`\n"
             "╰───✦"

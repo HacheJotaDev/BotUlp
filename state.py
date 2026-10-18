@@ -24,6 +24,10 @@ download_semaphore: Optional[asyncio.Semaphore] = None
 auto_dl_queue: Optional[asyncio.Queue] = None
 auto_dl_worker_running: bool = False
 
+# v4.2.14: Anti-duplicados de descarga — claves "filename|size" ya vistas o
+# en curso (fast-path en memoria; la fuente persistente es download_log en DB)
+seen_downloads: Set[str] = set()
+
 # Estado temporal de usuarios (para conversaciones)
 temp_state: Dict[int, dict] = {}
 

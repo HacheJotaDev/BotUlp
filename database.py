@@ -563,6 +563,60 @@ class Database:
             )
             # NO raise — la descarga fue exitosa, el log es secundario
 
+    def is_file_downloaded(self, filename: str, file_size: int = 0) -> bool:
+        """v4.2.14: ¿Ya se descargó este archivo antes? (anti-duplicados)
+
+        Criterio: mismo filename en download_log. Si hay file_size > 0 se
+        exige también el MISMO tamaño — mismo nombre con tamaño distinto
+        se considera una versión nueva y SÍ se descarga.
+
+        Fail-open: si la DB falla retorna False (se permite la descarga —
+        nunca bloqueamos descargas por un problema de telemetría).
+        """
+        try:
+            with self.pool.connection() as conn:
+                with conn.cursor() as cur:
+                    if file_size and file_size > 0:
+                        cur.execute(
+                            "SELECT 1 FROM download_log "
+                            "WHERE filename = %s AND file_size = %s LIMIT 1",
+                            (filename, file_size)
+                        )
+                    else:
+                        cur.execute(
+                            "SELECT 1 FROM download_log WHERE filename = %s LIMIT 1",
+                            (filename,)
+                        )
+                    return cur.fetchone() is not None
+        except Exception as e:
+            logger.error(
+                f"DB_IS_FILE_DOWNLOADED_ERROR: filename={filename!r}: {e}"
+            )
+            return False
+
+    def cleanup_download_log(self, days: int = 30) -> int:
+        """v4.2.14: Borrar registros de download_log más viejos que `days` días.
+
+        Mantiene la tabla acotada sin perder la ventana útil de dedupe.
+        Fail-open: retorna -1 si la DB falla.
+        """
+        try:
+            with self.pool.connection() as conn:
+                with conn.cursor() as cur:
+                    # downloaded_at es TEXT (CURRENT_TIMESTAMP) → comparamos
+                    # texto a texto con el mismo formato que genera Postgres
+                    cur.execute(
+                        "DELETE FROM download_log "
+                        "WHERE downloaded_at < (NOW() - (%s * interval '1 day'))::text",
+                        (days,)
+                    )
+                    deleted = cur.rowcount
+                conn.commit()
+                return deleted
+        except Exception as e:
+            logger.error(f"DB_CLEANUP_DOWNLOAD_LOG_ERROR: {e}")
+            return -1
+
     # ── Pagos NOWPayments ──────────────────────────────────
 
     def create_payment(self, user_id: int, invoice_id: str, order_id: str,

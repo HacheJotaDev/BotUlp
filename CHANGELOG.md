@@ -2,6 +2,24 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.14] — /hotmail con lógica idéntica a /url (FREE incluido) + anti-duplicados de descargas
+
+### 🆓 /hotmail ahora es 1:1 con /url (incluye usuarios FREE)
+- **Corregido**: el callback del periodo re-validaba SIEMPRE como chat privado → un FREE que usaba /hotmail en un grupo permitido recibía "acceso denegado" al elegir periodo, y el resultado siempre iba al chat privado.
+- Ahora el **chat original manda** (misma lógica que /url): si la extracción se pidió en un grupo permitido, todos pueden ejecutarla y el resultado responde **en el grupo**; si fue en privado, se re-validan las reglas FREE (búsqueda inicial gratis / bono de referidos) o VIP+.
+- `cmd_hotmail` guarda `is_free_search` en el contexto (paridad total con /url) y `_execute_hotmail_extract` soporta `reply_to`.
+
+### ♻️ Anti-duplicados: el bot NO vuelve a descargar el mismo archivo
+- **Criterio: mismo filename + mismo tamaño** — los reposts de canales (mismo .txt reenviado) se omiten automáticamente.
+- Dos capas: **fast-path en memoria** (`state.seen_downloads`, anti-carrera para reposts consecutivos) + **persistente en DB** (tabla `download_log`, sobrevive reinicios) vía `db.is_file_downloaded()`.
+- Fail-open: si la DB falla, la descarga se permite (jamás se bloquea por telemetría). Si una descarga FALLA, se libera la reserva para permitir reintento.
+- Aplica en las 3 vías: `realtime_listener` (auto-DL y pendientes) y `process_pending_downloads` — el reporte de descargas ahora muestra línea **♻️ Duplicados**.
+- Mismo nombre con tamaño distinto = versión nueva → SÍ se descarga.
+- `mover_y_limpiar_archivos` recorta `download_log` a 30 días (best effort) para mantener la tabla acotada.
+
+### 🐛 Fixes heredados (vía pendientes con Auto-DL OFF)
+- Los .txt **hotmail** en cola pendiente ahora van a `HJDescargas_Hotmail` (antes iban a la carpeta general) y quedan **exentos del mínimo de 5MB** (antes el safety-net los bloqueaba).
+
 ## [4.2.13] — /hotmail: menú limpio + "sin datos" discreto
 
 ### 🧹 Textos ajustados (ES/EN/PT)
