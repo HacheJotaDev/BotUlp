@@ -931,12 +931,23 @@ async def realtime_listener(event):
         # y se guardan en su propia carpeta (HJDescargas_Hotmail).
         # v4.2.16: SILO IMAP/MIX — ídem para variantes de mix/mail/mailaccess
         # (HJDescargas_Imap). Prioridad: hotmail primero (silos separados).
+        # v4.2.17: ambos silos aceptan de 0 KB a 100 MB (SILO_MAX_SIZE_MB).
         is_hotmail = es_nombre_hotmail(filename)
         is_imap = (not is_hotmail) and es_nombre_imap(filename)
 
+        # v4.2.17: TOPE de los silos hotmail/imap — 0 KB pasa, pero por
+        # encima de 100MB el .txt se ignora (no se baja, no se encola).
+        if (is_hotmail or is_imap) \
+                and file_size > config.SILO_MAX_SIZE_MB * 1024 * 1024:
+            logger.info(
+                f"Archivo demasiado grande para silo hotmail/imap, ignorado: "
+                f"{filename} ({format_size(file_size)} > {config.SILO_MAX_SIZE_MB}MB)"
+            )
+            return
+
         if not (is_hotmail or is_imap):
             # v4.2.10: Filtro de tamaño MÍNIMO (solo archivos NORMALES) —
-            # los hotmail/imap pasan sin importar el peso.
+            # los hotmail/imap bajan desde 0 KB (tope 100MB ya aplicado arriba).
             if file_size < config.MIN_DOWNLOAD_SIZE_MB * 1024 * 1024:
                 logger.info(
                     f"Archivo demasiado pequeño, ignorado: {filename} "
@@ -958,13 +969,13 @@ async def realtime_listener(event):
             dest_path = config.DIR_HOTMAIL / filename
             logger.info(
                 f"HOTMAIL detectado en nombre: {filename} "
-                f"({format_size(file_size)}) → {config.DIR_HOTMAIL} (sin peso mínimo)"
+                f"({format_size(file_size)}) → {config.DIR_HOTMAIL} (0 KB–{config.SILO_MAX_SIZE_MB}MB)"
             )
         elif is_imap:
             dest_path = config.DIR_IMAP / filename
             logger.info(
                 f"IMAP/MIX detectado en nombre: {filename} "
-                f"({format_size(file_size)}) → {config.DIR_IMAP} (sin peso mínimo)"
+                f"({format_size(file_size)}) → {config.DIR_IMAP} (0 KB–{config.SILO_MAX_SIZE_MB}MB)"
             )
         else:
             dest_path = config.DIR_DOWNLOADS / filename
@@ -1072,15 +1083,27 @@ async def process_pending_downloads(status_msg=None):
             # v4.2.10: Red de seguridad — omitir .txt menores a MIN_DOWNLOAD_SIZE_MB (5MB)
             # v4.2.11-fix: los HOTMAIL pasan sin importar el peso
             # v4.2.16: los IMAP/MIX también pasan sin importar el peso
-            if not item.get('is_hotmail') and not item.get('is_imap') \
-                    and file_size and \
-                    file_size < config.MIN_DOWNLOAD_SIZE_MB * 1024 * 1024:
-                logger.info(
-                    f"Pendiente omitido por tamaño mínimo: {item['filename']} "
-                    f"({format_size(file_size)} < {config.MIN_DOWNLOAD_SIZE_MB}MB)"
-                )
-                stats['existing'] += 1
-                continue
+            # v4.2.17: silos hotmail/imap — rango 0 KB a 100 MB (tope duro)
+            if not item.get('is_hotmail') and not item.get('is_imap'):
+                # Archivos NORMALES: mínimo 5MB
+                if file_size and \
+                        file_size < config.MIN_DOWNLOAD_SIZE_MB * 1024 * 1024:
+                    logger.info(
+                        f"Pendiente omitido por tamaño mínimo: {item['filename']} "
+                        f"({format_size(file_size)} < {config.MIN_DOWNLOAD_SIZE_MB}MB)"
+                    )
+                    stats['existing'] += 1
+                    continue
+            else:
+                # Silos hotmail/imap: sin mínimo (0 KB OK) pero TOPE 100MB
+                if file_size and \
+                        file_size > config.SILO_MAX_SIZE_MB * 1024 * 1024:
+                    logger.info(
+                        f"Pendiente omitido (supera tope de silo): {item['filename']} "
+                        f"({format_size(file_size)} > {config.SILO_MAX_SIZE_MB}MB)"
+                    )
+                    stats['existing'] += 1
+                    continue
 
             # v4.2.14: anti-duplicados — soltar la reserva propia (hecha al
             # encolar) y re-chequear contra el histórico persistente

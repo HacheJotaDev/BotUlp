@@ -150,7 +150,7 @@ class Config:
     BASE_DIR: Path = Path(__file__).resolve().parent
 
     # ── Version ──────────────────────────────────────────────
-    VERSION: str = "4.2.16"
+    VERSION: str = "4.2.17"
 
     # ── Telegram ─────────────────────────────────────────────
     API_ID: int = int(os.getenv("API_ID", "33426502"))
@@ -196,7 +196,10 @@ class Config:
 
     # ── Descargas ────────────────────────────────────────────
     MIN_DOWNLOAD_SIZE_MB: int = int(os.getenv("MIN_DOWNLOAD_SIZE_MB", "5"))  # Mínimo 5MB para descargar .txt
-    MAX_DOWNLOAD_SIZE_MB: int = 4096          # 4GB máximo
+    MAX_DOWNLOAD_SIZE_MB: int = 4096          # 4GB máximo (archivos normales)
+    # v4.2.17: SILOS hotmail/imap — rango de peso 0 KB a 100 MB (sin mínimo,
+    # pero tope duro: los .txt de más de 100MB se ignoran). Configurable.
+    SILO_MAX_SIZE_MB: int = int(os.getenv("SILO_MAX_SIZE_MB", "100"))
     DOWNLOAD_CHUNK_SIZE: int = 1024 * 1024    # 1MB chunks
     DOWNLOAD_TIMEOUT: int = 3600              # 1 hora timeout
     MAX_CONCURRENT_DOWNLOADS: int = 1         # 1 a la vez para evitar FloodWait

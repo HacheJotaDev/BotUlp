@@ -131,6 +131,8 @@ pm2 startup
 
 > 👻 `/hotmailchk` (Hotmail Checker) fue **desactivado** en v4.2.16 — el código queda en el repo sin registrar.
 
+> 📦 Desde v4.2.17 los silos **hotmail** (`HJDescargas_Hotmail`) e **imap** (`HJDescargas_Imap`) solo auto-descargan .txt de **0 KB a 100 MB** (`SILO_MAX_SIZE_MB`, configurable en `.env`); los .txt de más de 100 MB se ignoran. Los archivos normales mantienen su rango (mínimo 5 MB).
+
 ### 🔐 Admin
 | Comando | Descripción |
 |---------|-------------|

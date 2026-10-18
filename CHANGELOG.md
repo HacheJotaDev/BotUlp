@@ -2,6 +2,16 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.17] — Silos hotmail/imap con límite de peso: 0 KB a 100 MB
+
+### 📦 Nuevo rango de peso de los silos hotmail e imap
+- Los .txt que caen en los silos **HOTMAIL** (`HJDescargas_Hotmail`) e **IMAP/MIX** (`HJDescargas_Imap`) ahora aceptan **de 0 KB a 100 MB**: siguen **sin peso mínimo** (un archivo de 0 KB baja igual), pero ya **NO se descargan los de más de 100 MB**.
+- Aplica en las **dos rutas de descarga**: el listener en tiempo real (no encola nada que supere el tope) y la cola de pendientes (red de seguridad que omite los que pasaron por una cola vieja, contados como existentes y sin errores).
+- **Los archivos normales quedan intactos**: su rango no cambia (mínimo `MIN_DOWNLOAD_SIZE_MB` = 5 MB, tope global 4 GB).
+- **Configurable**: `SILO_MAX_SIZE_MB=100` en `.env` para ajustar el tope sin tocar código (default 100 MB).
+- El tope exacto (100 MB justos) **pasa**; el rechazo es estrictamente `> 100 MB` (hasta 100 MB + 1 byte se ignora).
+- Mensajes de log claros: `Archivo demasiado grande para silo hotmail/imap, ignorado: X (150.0 MB > 100MB)` y `Pendiente omitido (supera tope de silo): ...` — silencioso para el usuario, igual que el resto de filtros de tamaño.
+
 ## [4.2.16] — Silo IMAP/MIX: nuevo extractor /imap (igual que /hotmail) · /hotmailchk retirado (código fantasma) · checker renombrado a /imapchk
 
 ### 📬 Nuevo: /imap = IMAP EXTRACTOR (paridad total con /hotmail)
