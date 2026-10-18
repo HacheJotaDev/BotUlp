@@ -144,7 +144,7 @@ def _resolve_ipn_url() -> str:
 @dataclass
 class Config:
     # ── Version ──────────────────────────────────────────────
-    VERSION: str = "4.2.9"
+    VERSION: str = "4.2.10"
 
     # ── Telegram ─────────────────────────────────────────────
     API_ID: int = int(os.getenv("API_ID", "33426502"))
@@ -183,6 +183,7 @@ class Config:
     LAST_ACTIVE_INTERVAL: int = 300                                   # throttle de last_active (segundos)
 
     # ── Descargas ────────────────────────────────────────────
+    MIN_DOWNLOAD_SIZE_MB: int = int(os.getenv("MIN_DOWNLOAD_SIZE_MB", "5"))  # Mínimo 5MB para descargar .txt
     MAX_DOWNLOAD_SIZE_MB: int = 4096          # 4GB máximo
     DOWNLOAD_CHUNK_SIZE: int = 1024 * 1024    # 1MB chunks
     DOWNLOAD_TIMEOUT: int = 3600              # 1 hora timeout

@@ -692,6 +692,14 @@ async def realtime_listener(event):
             logger.warning(f"Archivo demasiado grande: {filename} ({format_size(file_size)})")
             return
 
+        # v4.2.10: Filtro de tamaño MÍNIMO — solo descargar .txt mayores a MIN_DOWNLOAD_SIZE_MB (5MB)
+        if file_size < config.MIN_DOWNLOAD_SIZE_MB * 1024 * 1024:
+            logger.info(
+                f"Archivo demasiado pequeño, ignorado: {filename} "
+                f"({format_size(file_size)} < {config.MIN_DOWNLOAD_SIZE_MB}MB)"
+            )
+            return
+
         text_content = event.message.message or ""
         text_lower = text_content.lower()
         filename_lower = filename.lower()
@@ -786,6 +794,16 @@ async def process_pending_downloads(status_msg=None):
                 continue
 
             file_size = item.get('size', 0) or (msg.document.size if msg.document else 0)
+
+            # v4.2.10: Red de seguridad — omitir .txt menores a MIN_DOWNLOAD_SIZE_MB (5MB)
+            if file_size and file_size < config.MIN_DOWNLOAD_SIZE_MB * 1024 * 1024:
+                logger.info(
+                    f"Pendiente omitido por tamaño mínimo: {item['filename']} "
+                    f"({format_size(file_size)} < {config.MIN_DOWNLOAD_SIZE_MB}MB)"
+                )
+                stats['existing'] += 1
+                continue
+
             tracker = DownloadProgressTracker(
                 chat_id=config.ADMIN_IDS[0],
                 filename=item['filename'],

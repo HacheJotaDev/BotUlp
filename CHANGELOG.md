@@ -2,6 +2,16 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.10] — Descargas: tamaño MÍNIMO de 5MB para archivos .txt
+
+### 📥 Nuevo filtro de tamaño mínimo (download.py + config.py)
+- **Solo se descargan .txt mayores a 5MB**: los archivos .txt de menos de `MIN_DOWNLOAD_SIZE_MB` (5MB por defecto) **ya no se descargan** (ej: un .txt de 1MB se ignora).
+- Aplica en los 2 puntos de entrada de descargas:
+  - `realtime_listener` — detección automática en canales/grupos: los .txt pequeños se ignoran antes de encolar (log: «Archivo demasiado pequeño, ignorado»).
+  - `process_pending_downloads` — red de seguridad: los pendientes pequeños ya en cola también se omiten (log: «Pendiente omitido por tamaño mínimo»).
+- **Configurable por variable de entorno**: `MIN_DOWNLOAD_SIZE_MB=5` en `.env` para cambiar el mínimo sin tocar código.
+- El filtro de tamaño MÁXIMO (4GB) sigue intacto y funciona igual que antes.
+
 ## [4.2.9] — /imap <remitentes>: hasta 10 correos remitentes por comando (como keywords)
 
 ### 🔧 Corrección según el OWNER (aclaración del «máximo 10»)
