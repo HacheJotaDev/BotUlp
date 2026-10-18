@@ -369,3 +369,200 @@ async def search_engine(kw: str, time_opt: str, modo: SearchMode) -> Optional[Pa
 
     state.search_memory_cache[cache_key] = out
     return out
+
+
+# ═════════════════════════════════════════════════════════════
+# v4.2.11 — Motor de EXTRACCIÓN HOTMAIL (líneas únicas, sin repetir)
+# ═════════════════════════════════════════════════════════════
+# Lee SOLO el silo hotmail (HJDescargas_Hotmail + Archivo_Hotmail)
+# y entrega cada línea UNA sola vez (set global), igual que /url.
+
+def _extract_lines_file(path: Path, cancel_event: threading.Event = None) -> List[str]:
+    """Extraer TODAS las líneas de un archivo por chunks (anti-bloqueo GIL).
+
+    Misma arquitectura que _search_file (v4.2.6): lecturas de 16MB que liberan
+    el GIL, límites duros por archivo y salto de líneas gigantes corruptas.
+    Sin keyword: toda línea válida entra al set (dedupe por archivo).
+    """
+    res_set = set()
+    start_time = time.time()
+    lines_processed = 0
+
+    try:
+        file_size = path.stat().st_size
+        if file_size == 0:
+            return []
+
+        carry = b''
+        done = False
+
+        with open(path, 'rb') as f:
+            while not done:
+                # === LÍMITES DUROS (por chunk) ===
+                if len(res_set) >= MAX_RESULTS_PER_FILE:
+                    break
+                if lines_processed >= MAX_MATCHES_PER_FILE:
+                    logger.info(f"HOTMAIL {path.name}: hard stop {MAX_MATCHES_PER_FILE} líneas")
+                    break
+                if time.time() - start_time > FILE_TIME_LIMIT:
+                    logger.info(f"HOTMAIL {path.name}: time limit {FILE_TIME_LIMIT}s")
+                    break
+                if cancel_event and cancel_event.is_set():
+                    break
+
+                chunk = f.read(READ_CHUNK)   # syscall: LIBERA el GIL
+                if not chunk:
+                    break
+
+                buf = (carry + chunk) if carry else chunk
+                start = 0
+                while True:
+                    nl = buf.find(b'\n', start)
+                    if nl == -1:
+                        break
+                    if nl > start:
+                        line = buf[start:nl]
+                        lines_processed += 1
+                        try:
+                            if len(line) <= LINE_LIMIT:
+                                decoded = line.decode('utf-8', 'ignore').strip()
+                            else:
+                                # Línea gigante (dump corrupto): inicio acotado
+                                decoded = line[:LINE_LIMIT].decode('utf-8', 'ignore').strip()
+                            if decoded:
+                                res_set.add(decoded)
+                        except Exception:
+                            pass
+                    start = nl + 1
+
+                carry = buf[start:]
+
+                # Línea gigante creciendo sin \n: guardar inicio y saltar el bloque
+                if len(carry) > GIANT_LINE_THRESHOLD:
+                    try:
+                        decoded = carry[:LINE_LIMIT].decode('utf-8', 'ignore').strip()
+                        if decoded:
+                            res_set.add(decoded)
+                            lines_processed += 1
+                    except Exception:
+                        pass
+                    while True:
+                        gc = f.read(GIANT_SKIP_CHUNK)
+                        if not gc:
+                            carry = b''
+                            done = True
+                            break
+                        nl2 = gc.find(b'\n')
+                        if nl2 != -1:
+                            carry = gc[nl2 + 1:]   # resto normal: se procesa después
+                            break
+                    if done:
+                        break
+
+                time.sleep(0)    # yield explícito del GIL entre chunks
+
+            # Última línea del archivo (sin \n final), acotada
+            if carry and not done:
+                try:
+                    decoded = carry[:LINE_LIMIT].decode('utf-8', 'ignore').strip()
+                    if decoded:
+                        res_set.add(decoded)
+                except Exception:
+                    pass
+
+    except Exception:
+        pass
+
+    elapsed = time.time() - start_time
+    if elapsed > 5 or len(res_set) > 0:
+        logger.info(f"HOTMAIL {path.name}: {len(res_set)} líneas únicas en {elapsed:.1f}s ({lines_processed} procesadas)")
+
+    return list(res_set)
+
+
+async def hotmail_extract_engine(time_opt: str) -> Optional[Path]:
+    """Extracción HOTMAIL — líneas ÚNICAS (sin repetir) del silo hotmail.
+
+    time_opt:
+      '24h' → solo NUEVOS   (HJDescargas_Hotmail)
+      'old' → solo ANTIGUOS (Archivo_Hotmail)
+      'all' → nuevos + antiguos
+    Retorna Path del .txt con las líneas deduplicadas, o None si no hay datos.
+    """
+    cache_key = f"hotmail:{time_opt}"
+    if cache_key in state.search_memory_cache:
+        cached_path = state.search_memory_cache[cache_key]
+        if cached_path and cached_path.exists():
+            logger.info(f"Cache HIT: {cache_key}")
+            return cached_path
+
+    loop = asyncio.get_running_loop()
+    dirs = []
+    if time_opt in ('24h', 'all'):
+        dirs.append(config.DIR_HOTMAIL)
+    if time_opt in ('old', 'all'):
+        dirs.append(config.DIR_HOTMAIL_ARCHIVE)
+
+    def _safe_size(f):
+        try:
+            return f.stat().st_size
+        except OSError:
+            return 0
+
+    files = [f for d in dirs for f in d.glob('*.txt') if _safe_size(f) > 0]
+    if not files:
+        return None
+
+    cancel_event = threading.Event()
+    logger.info(f"Extracción HOTMAIL '{time_opt}': {len(files)} archivos")
+
+    # PARALELO: todos los archivos a la vez (mismo executor que /url)
+    tasks = [
+        loop.run_in_executor(executor, _extract_lines_file, f, cancel_event)
+        for f in files
+    ]
+
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            timeout=600
+        )
+    except asyncio.TimeoutError:
+        cancel_event.set()
+        logger.warning("Extracción HOTMAIL: timeout global, usando resultados parciales")
+        await asyncio.sleep(2)
+        results = []
+        for t in tasks:
+            try:
+                if t.done() and not t.cancelled():
+                    r = t.result()
+                    if isinstance(r, list):
+                        results.append(r)
+            except Exception:
+                pass
+
+    # Combinar y DEDUPLICAR (líneas únicas globales, como /url)
+    final = set()
+    for r in results:
+        if isinstance(r, list):
+            final.update(r)
+
+    if not final:
+        return None
+
+    if len(final) > config.SEARCH_MAX_RESULTS:
+        logger.info(f"Resultados truncados: {len(final)} -> {config.SEARCH_MAX_RESULTS}")
+        final = set(list(final)[:config.SEARCH_MAX_RESULTS])
+
+    out = config.DIR_CACHE / f"hotmail_{int(time.time())}.txt"
+
+    def _write_results(data: set, out_path: Path):
+        with open(out_path, 'w', encoding='utf-8', buffering=1024 * 64) as f:
+            f.write('\n'.join(data))
+
+    await asyncio.to_thread(_write_results, final, out)
+
+    logger.info(f"Extracción HOTMAIL '{time_opt}' completada: {len(final)} líneas únicas")
+
+    state.search_memory_cache[cache_key] = out
+    return out

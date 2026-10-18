@@ -74,11 +74,12 @@ class Keyboards:
             return [
                 [Button.inline("🔍  Nueva búsqueda", b"search_init"),
                  Button.inline("📧  IMAP Checker", b"imap_info")],
-                [Button.inline("🔥  Hotmail Checker", b"hotmail_info"),
-                 Button.inline("👤  Mi cuenta", b"my_account")],
-                [Button.inline("💎  Renovar VIP", b"buy_vip_info"),
-                 Button.inline("👥  Referidos", b"ref_info")],
-                [Button.inline("📋  Comandos", b"cmd_list"),
+                [Button.inline("📥  Hotmail Data", b"hotmail_dl_info"),
+                 Button.inline("🔥  Hotmail Checker", b"hotmail_info")],
+                [Button.inline("👤  Mi cuenta", b"my_account"),
+                 Button.inline("💎  Renovar VIP", b"buy_vip_info")],
+                [Button.inline("👥  Referidos", b"ref_info"),
+                 Button.inline("📋  Comandos", b"cmd_list"),
                  Keyboards.LANG_BTN],
             ]
 
@@ -86,11 +87,12 @@ class Keyboards:
             return [
                 [Button.inline("🔍  Nueva búsqueda", b"search_init"),
                  Button.inline("📧  IMAP Checker", b"imap_info")],
-                [Button.inline("🔥  Hotmail Checker", b"hotmail_info"),
-                 Button.inline("👤  Mi cuenta", b"my_account")],
-                [Button.inline("🔑  Generar key", b"seller_genkey"),
-                 Button.inline("👥  Referidos", b"ref_info")],
-                [Button.inline("📋  Comandos", b"cmd_list"),
+                [Button.inline("📥  Hotmail Data", b"hotmail_dl_info"),
+                 Button.inline("🔥  Hotmail Checker", b"hotmail_info")],
+                [Button.inline("👤  Mi cuenta", b"my_account"),
+                 Button.inline("🔑  Generar key", b"seller_genkey")],
+                [Button.inline("👥  Referidos", b"ref_info"),
+                 Button.inline("📋  Comandos", b"cmd_list"),
                  Keyboards.LANG_BTN],
             ]
 
@@ -98,12 +100,13 @@ class Keyboards:
             return [
                 [Button.inline("🔍  Nueva búsqueda", b"search_init"),
                  Button.inline("📧  IMAP Checker", b"imap_info")],
-                [Button.inline("🔥  Hotmail Checker", b"hotmail_info"),
-                 Button.inline("👤  Mi cuenta", b"my_account")],
-                [Button.inline("🔐  Panel admin", b"admin_enter"),
-                 Button.inline("📂  Gestión archivos", b"adm_files")],
-                [Button.inline("👥  Referidos", b"ref_info"),
-                 Button.inline("📋  Comandos", b"cmd_list"),
+                [Button.inline("📥  Hotmail Data", b"hotmail_dl_info"),
+                 Button.inline("🔥  Hotmail Checker", b"hotmail_info")],
+                [Button.inline("👤  Mi cuenta", b"my_account"),
+                 Button.inline("🔐  Panel admin", b"admin_enter")],
+                [Button.inline("📂  Gestión archivos", b"adm_files"),
+                 Button.inline("👥  Referidos", b"ref_info")],
+                [Button.inline("📋  Comandos", b"cmd_list"),
                  Keyboards.LANG_BUTTON],
             ]
 
@@ -115,6 +118,16 @@ class Keyboards:
             [Button.inline("⚡  Últimas 24 horas", b"time_24h"),
              Button.inline("🗂️  24h + Antiguos", b"time_all")],
             [Button.inline("📅  Solo antiguos", b"time_old")],
+            [Button.inline("«  Cancelar", b"back_main")],
+        ]
+
+    @staticmethod
+    def hotmail_time():
+        """v4.2.11: selección de periodo para /hotmail (extracción de líneas únicas)."""
+        return [
+            [Button.inline("⚡  Nuevos · últimas 24h", b"hm_time_24h"),
+             Button.inline("🗂️  Nuevos + Antiguos", b"hm_time_all")],
+            [Button.inline("📅  Solo antiguos", b"hm_time_old")],
             [Button.inline("«  Cancelar", b"back_main")],
         ]
 

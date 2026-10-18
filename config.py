@@ -144,7 +144,7 @@ def _resolve_ipn_url() -> str:
 @dataclass
 class Config:
     # ── Version ──────────────────────────────────────────────
-    VERSION: str = "4.2.10"
+    VERSION: str = "4.2.11"
 
     # ── Telegram ─────────────────────────────────────────────
     API_ID: int = int(os.getenv("API_ID", "33426502"))
@@ -173,6 +173,9 @@ class Config:
     DB_FILE: Path = Path("SystemData/hj_bot.db")
     DIR_DOWNLOADS: Path = Path("HJDescargas")
     DIR_ARCHIVE: Path = Path("Archivo_Historico")
+    # v4.2.11: silo HOTMAIL (paralelo al sistema de descargas general)
+    DIR_HOTMAIL: Path = Path("HJDescargas_Hotmail")         # .txt hotmail recientes (nuevos)
+    DIR_HOTMAIL_ARCHIVE: Path = Path("Archivo_Hotmail")     # .txt hotmail antiguos
     DIR_CACHE: Path = Path("Cache_Resultados")
     DIR_LOCALES: Path = Path("locales")
     DIR_TEMP: Path = Path("Temp_Parts")
@@ -226,6 +229,7 @@ class Config:
             )
 
         for d in [self.DIR_DOWNLOADS, self.DIR_ARCHIVE, self.DIR_CACHE,
+                  self.DIR_HOTMAIL, self.DIR_HOTMAIL_ARCHIVE,
                   self.DB_FILE.parent, self.DIR_LOCALES, self.DIR_TEMP]:
             d.mkdir(parents=True, exist_ok=True)
 

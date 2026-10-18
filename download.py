@@ -11,6 +11,7 @@
 """
 
 import os
+import re
 import asyncio
 import time
 from pathlib import Path
@@ -29,6 +30,93 @@ from database import db
 
 # FIX: Usar `import state` en vez de `from state import X`
 import state
+
+
+# ═════════════════════════════════════════════════════════════
+# v4.2.11 — Detector de variantes HOTMAIL en el nombre del archivo
+# ═════════════════════════════════════════════════════════════
+# Detecta obfuscaciones típicas de "hotmail" en filenames:
+#   hotmail, hotmails, hotma1il, hotma¡l, h0tmail, hotm4il,
+#   hotmai1, hot__ma!l, HOTMAIL-2024.txt, etc.
+_LEET_TABLE = str.maketrans({
+    '0': 'o', '1': 'i', '4': 'a', '3': 'e', '5': 's', '7': 't', '8': 'b',
+    '@': 'a', '¡': 'i', '!': 'i', '|': 'l', '$': 's', '+': 't', '¢': 'c',
+    '€': 'e', '£': 'l', '¦': 'i', '·': '', '·': '',
+})
+
+
+def _levenshtein(a: str, b: str) -> int:
+    """Damerau-Levenshtein (con transposición de adyacentes) para strings cortos."""
+    if a == b:
+        return 0
+    la, lb = len(a), len(b)
+    if la == 0:
+        return lb
+    if lb == 0:
+        return la
+    d = [[0] * (lb + 1) for _ in range(la + 1)]
+    for i in range(la + 1):
+        d[i][0] = i
+    for j in range(lb + 1):
+        d[0][j] = j
+    for i in range(1, la + 1):
+        for j in range(1, lb + 1):
+            cost = 0 if a[i - 1] == b[j - 1] else 1
+            d[i][j] = min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost)
+            if i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1]:
+                d[i][j] = min(d[i][j], d[i - 2][j - 2] + 1)
+    return d[la][lb]
+
+
+def _fuzzy_hotmail(norm: str) -> bool:
+    """Busca una ventana de 7-9 letras con distancia <=1 de 'hotmail'.
+
+    Cubre inserciones/duplicados tipo hotma1il → hotmaiil (dist 1).
+    """
+    target = "hotmail"
+    n = len(norm)
+    if n < 7:
+        return False
+    for size in (7, 8, 9):
+        if size > n:
+            break
+        for i in range(n - size + 1):
+            if _levenshtein(norm[i:i + size], target) <= 1:
+                return True
+    return False
+
+
+def es_nombre_hotmail(filename: str) -> bool:
+    """True si el nombre del archivo contiene 'hotmail' (aunque esté ofuscado).
+
+    Normaliza en 2 pasadas para cubrir ambas ambigüedades del '1' y aplica
+    matching fuzzy (distancia <=1) para obfuscaciones con letras extra:
+      • hotma1il, hotma¡l, h0tma!l, hotm4il, hotmai1, hot__mails, ...
+    Ignora separadores ( _ - . espacio ) y mayúsculas.
+    """
+    if not filename:
+        return False
+    base = filename.lower()
+
+    # Pasada 1: leet estándar (1→i) + solo letras
+    norm = base.translate(_LEET_TABLE)
+    norm = re.sub(r'[^a-z]', '', norm)
+    if 'hotmail' in norm or _fuzzy_hotmail(norm):
+        return True
+
+    # Pasada 2: variante 1→l (hotmai1 → hotmail)
+    norm2 = re.sub(r'[^a-z0-9]', '', base).replace('1', 'l')
+    if 'hotmail' in norm2 or _fuzzy_hotmail(norm2):
+        return True
+
+    return False
+
+
+def destino_hotmail(filename: str) -> Path:
+    """Destino correcto para un .txt: carpeta HOTMAIL (sin mínimo) o descargas generales."""
+    if es_nombre_hotmail(filename):
+        return config.DIR_HOTMAIL / filename
+    return config.DIR_DOWNLOADS / filename
 
 
 class DownloadProgressTracker:
@@ -274,6 +362,18 @@ async def mover_y_limpiar_archivos():
         except Exception as e:
             logger.warning(f"CLEANUP_ARCHIVE_ERROR: {f.name}: {e}")
 
+    # v4.2.11: mismo ciclo de vida para el silo HOTMAIL (nuevos → antiguos)
+    for f in config.DIR_HOTMAIL.glob('*.txt'):
+        try:
+            if (ahora - f.stat().st_mtime) > segundos_archive:
+                dest = config.DIR_HOTMAIL_ARCHIVE / f.name
+                if dest.exists():
+                    dest.unlink()
+                os.replace(f, dest)
+                moved += 1
+        except Exception as e:
+            logger.warning(f"CLEANUP_HOTMAIL_ARCHIVE_ERROR: {f.name}: {e}")
+
     # ── Borrar archivados muy viejos (>120h) ──
     for f in config.DIR_ARCHIVE.glob('*.txt'):
         try:
@@ -282,6 +382,15 @@ async def mover_y_limpiar_archivos():
                 deleted += 1
         except Exception as e:
             logger.warning(f"CLEANUP_DELETE_ERROR: {f.name}: {e}")
+
+    # v4.2.11: borrar hotmail antiguos muy viejos (mismo ciclo 120h)
+    for f in config.DIR_HOTMAIL_ARCHIVE.glob('*.txt'):
+        try:
+            if (ahora - f.stat().st_mtime) > segundos_delete:
+                f.unlink()
+                deleted += 1
+        except Exception as e:
+            logger.warning(f"CLEANUP_HOTMAIL_DELETE_ERROR: {f.name}: {e}")
 
     # ── Temporales (.tmp) — SKIP durante fase de estabilización ──
     # NO borramos para permitir resume de descargas interrumpidas.
@@ -692,24 +801,37 @@ async def realtime_listener(event):
             logger.warning(f"Archivo demasiado grande: {filename} ({format_size(file_size)})")
             return
 
-        # v4.2.10: Filtro de tamaño MÍNIMO — solo descargar .txt mayores a MIN_DOWNLOAD_SIZE_MB (5MB)
-        if file_size < config.MIN_DOWNLOAD_SIZE_MB * 1024 * 1024:
-            logger.info(
-                f"Archivo demasiado pequeño, ignorado: {filename} "
-                f"({format_size(file_size)} < {config.MIN_DOWNLOAD_SIZE_MB}MB)"
-            )
-            return
+        # v4.2.11: SILO HOTMAIL — los .txt con variantes de 'hotmail' en el NOMBRE
+        # (hotmail, hotmails, hotma1il, hotma¡l, h0tmail...) NO tienen peso mínimo
+        # y se guardan en su propia carpeta (HJDescargas_Hotmail).
+        is_hotmail = es_nombre_hotmail(filename)
 
-        text_content = event.message.message or ""
-        text_lower = text_content.lower()
-        filename_lower = filename.lower()
-
-        keywords = ["ulp", "url:log:pass", "url:pass", "combo", "database", "leak", "db"]
-        if not any(k in filename_lower for k in keywords):
-            if not any(k in text_lower for k in keywords):
+        if not is_hotmail:
+            # v4.2.10: Filtro de tamaño MÍNIMO (solo archivos NORMALES) —
+            # los hotmail pasan sin importar el peso.
+            if file_size < config.MIN_DOWNLOAD_SIZE_MB * 1024 * 1024:
+                logger.info(
+                    f"Archivo demasiado pequeño, ignorado: {filename} "
+                    f"({format_size(file_size)} < {config.MIN_DOWNLOAD_SIZE_MB}MB)"
+                )
                 return
 
-        dest_path = config.DIR_DOWNLOADS / filename
+            text_content = event.message.message or ""
+            text_lower = text_content.lower()
+            filename_lower = filename.lower()
+
+            keywords = ["ulp", "url:log:pass", "url:pass", "combo", "database", "leak", "db"]
+            if not any(k in filename_lower for k in keywords):
+                if not any(k in text_lower for k in keywords):
+                    return
+
+        # v4.2.11: hotmail → carpeta propia; resto → descargas generales
+        dest_path = (config.DIR_HOTMAIL if is_hotmail else config.DIR_DOWNLOADS) / filename
+        if is_hotmail:
+            logger.info(
+                f"HOTMAIL detectado en nombre: {filename} "
+                f"({format_size(file_size)}) → {config.DIR_HOTMAIL} (sin peso mínimo)"
+            )
 
         if dest_path.exists() and dest_path.stat().st_size > 0:
             return

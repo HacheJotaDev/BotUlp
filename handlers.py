@@ -40,7 +40,7 @@ from utils import (
     normalizar_url, get_file_counts, format_size, format_time,
     format_uptime, sanitize_md, progress_bar
 )
-from search import search_engine
+from search import search_engine, hotmail_extract_engine
 from nowpayments import (
     create_invoice, VIP_PLANS, get_payment_status,
     SUCCESS_STATUSES, WAITING_STATUSES, FAIL_STATUSES, _deliver_vip
@@ -362,11 +362,11 @@ def _get_commands_by_role(role: UserRole, has_free: bool = False) -> str:
             cmds += " • /url"
         return cmds
     elif role == UserRole.VIP:
-        return "/start • /url • /imap • /hotmail • /ping • /canjear"
+        return "/start • /url • /imap • /hotmail • /hotmailchk • /ping • /canjear"
     elif role == UserRole.SELLER:
-        return "/start • /url • /imap • /hotmail • /ping"
+        return "/start • /url • /imap • /hotmail • /hotmailchk • /ping"
     elif role == UserRole.ADMIN:
-        return ("/start • /url • /imap • /hotmail • /vip • /unvip • /seller • /unseller"
+        return ("/start • /url • /imap • /hotmail • /hotmailchk • /vip • /unvip • /seller • /unseller"
                 " • /gp • /ungp • /bc • /bcvip • /sizedisp • /ping • /updateBot")
     return "/start • /canjear"
 
@@ -979,7 +979,7 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
     # ── Anti-superposición: 1 check por usuario a la vez ──
     if uid in state.active_hotmail_checks:
         await event.reply(
-            "⚠️ Ya tenés una verificación /hotmail en curso.\n"
+            "⚠️ Ya tenés una verificación /hotmailchk en curso.\n"
             "Esperá a que termine antes de iniciar otra.",
             parse_mode='md'
         )
@@ -1388,7 +1388,7 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
             pass
 
     except Exception as exc:
-        logger.error(f"Error en /hotmail: {exc}")
+        logger.error(f"Error en /hotmailchk: {exc}")
         import traceback
         traceback.print_exc()
         try:
@@ -1406,6 +1406,108 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
     finally:
         # ── Anti-superposición: liberar al usuario SIEMPRE ──
         state.active_hotmail_checks.discard(uid)
+
+
+# ═════════════════════════════════════════════════════════════
+# v4.2.11 — EXTRACCIÓN HOTMAIL (/hotmail)
+# Entrega líneas ÚNICAS (sin repetir) de los .txt hotmail descargados,
+# igual que /url: nuevos (24h), antiguos, o ambos.
+# ═════════════════════════════════════════════════════════════
+
+_HM_PERIOD_KEYS = {
+    '24h': 'hm_period_24h',
+    'old': 'hm_period_old',
+    'all': 'hm_period_all',
+}
+
+
+async def _execute_hotmail_extract(uid: int, lang: str, t_opt: str, chat_id: int,
+                                   is_free_search=None, callback_event=None):
+    """Ejecutar extracción HOTMAIL y enviar .txt con líneas únicas."""
+    state.active_hotmail_extracts.add(uid)
+
+    loading_text = UI.text("hotmail_extract_loading", lang, LOADING_FRAMES[0], 0)
+
+    if callback_event:
+        try:
+            await callback_event.answer()
+        except Exception:
+            pass
+        try:
+            loading_msg = await callback_event.edit(loading_text, buttons=None, parse_mode='md')
+        except Exception:
+            loading_msg = await state.bot.send_message(chat_id, loading_text, parse_mode='md')
+    else:
+        loading_msg = await state.bot.send_message(chat_id, loading_text, parse_mode='md')
+
+    try:
+        start_time = time.time()
+        task = asyncio.create_task(hotmail_extract_engine(t_opt))
+
+        # Animación de carga simple (anti-FloodWait: intervalo suave)
+        i = 0
+        while not task.done():
+            frame = LOADING_FRAMES[i % len(LOADING_FRAMES)]
+            elapsed = int(time.time() - start_time)
+            try:
+                await loading_msg.edit(
+                    UI.text("hotmail_extract_loading", lang, frame, elapsed),
+                    parse_mode='md'
+                )
+            except Exception:
+                pass
+            await asyncio.sleep(config.SEARCH_ANIM_INTERVAL)
+            i += 1
+
+        result_file = await task
+        elapsed = time.time() - start_time
+
+        if result_file:
+            # Consumir acceso igual que /url (gratis inicial / bono / VIP)
+            if is_free_search == 'bonus':
+                db.consume_bonus_search(uid)
+            elif is_free_search == 'initial':
+                db.mark_free_search_used(uid)
+            else:
+                db.add_search(uid)
+
+            # Conteo de líneas en thread (no bloquea el loop)
+            def _count_lines(p):
+                n = 0
+                with open(p, 'rb') as f:
+                    for _ in f:
+                        n += 1
+                return n
+
+            count = await asyncio.to_thread(_count_lines, result_file)
+
+            period_label = UI.text(_HM_PERIOD_KEYS.get(t_opt, 'hm_period_all'), lang)
+            caption = UI.text("hotmail_extract_done", lang, period_label, count, elapsed)
+
+            await _send_search_result(chat_id, result_file, caption,
+                                      e=callback_event, msg=loading_msg)
+        else:
+            empty_text = UI.text("hotmail_extract_empty", lang)
+            try:
+                await loading_msg.edit(
+                    empty_text,
+                    buttons=Keyboards.back() if chat_id == uid else None,
+                    parse_mode='md'
+                )
+            except Exception:
+                pass
+
+    except Exception as exc:
+        logger.error(f"Error en /hotmail (extracción) de {uid}: {exc}")
+        try:
+            await loading_msg.edit(
+                UI.text("error_generic", lang, str(exc)[:120]),
+                parse_mode='md'
+            )
+        except Exception:
+            pass
+    finally:
+        state.active_hotmail_extracts.discard(uid)
 
 
 
@@ -2063,20 +2165,21 @@ def register_handlers(bot_client):
         )
 
     # ═════════════════════════════════════════════════════════════
-    # COMANDO /hotmail — Hotmail/Microsoft Account Checker
+    # COMANDO /hotmailchk — Hotmail/Microsoft Account Checker (v4.2.11)
     # (login OAuth RPS, clasifica HIT/BAD/2FA/LOCKED, genera ZIP)
+    # (antes era /hotmail; ahora /hotmail es el extractor de líneas únicas)
     # ═════════════════════════════════════════════════════════════
 
-    @bot_client.on(events.NewMessage(pattern=r"/hotmail(.*)"))
-    async def cmd_hotmail(e):
+    @bot_client.on(events.NewMessage(pattern=r"/hotmailchk(?:@\w+)?(.*)"))
+    async def cmd_hotmailchk(e):
         """Hotmail/Microsoft Account Checker.
 
         Uso:
-          /hotmail                          → directo (sin proxy)
-          /hotmail country                  → detecta país desde cookie WLSSC
-          /hotmail proxy1                   → 1 proxy
-          /hotmail country, http://1.2.3.4  → modo country + proxy
-          /hotmail proxy1, proxy2, proxy3   → varios proxies (round-robin)
+          /hotmailchk                          → directo (sin proxy)
+          /hotmailchk country                  → detecta país desde cookie WLSSC
+          /hotmailchk proxy1                   → 1 proxy
+          /hotmailchk country, http://1.2.3.4  → modo country + proxy
+          /hotmailchk proxy1, proxy2, proxy3   → varios proxies (round-robin)
 
         Formatos de proxy aceptados (cualquiera):
           - http://host:port
@@ -2196,6 +2299,52 @@ def register_handlers(bot_client):
         mode_country = ts.get('hotmail_mode_country', False)
         await _execute_hotmail_check(e, e, proxies_raw, lang, uid,
                                       mode_country=mode_country)
+
+    # ═════════════════════════════════════════════════════════════
+    # COMANDO /hotmail — Extracción HOTMAIL (v4.2.11)
+    # El bot descarga AUTOMÁTICAMENTE los .txt que traen variantes de
+    # "hotmail" en el nombre (hotmail, hotmails, hotma1il, hotma¡l,
+    # h0tmail...) SIN peso mínimo → carpeta HJDescargas_Hotmail
+    # (24h) y Archivo_Hotmail (antiguos). Este comando entrega las
+    # LÍNEAS ÚNICAS sin repetir, igual que /url.
+    # (el checker de cuentas ahora es /hotmailchk)
+    # ═════════════════════════════════════════════════════════════
+
+    # (?!chk) evita capturar /hotmailchk — que es el CHECKER de cuentas
+    @bot_client.on(events.NewMessage(pattern=r"/hotmail(?:@\w+)?(?!chk)(.*)"))
+    async def cmd_hotmail(e):
+        """Extracción HOTMAIL — líneas únicas sin repetir (nuevos/antiguos)."""
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        is_group_allowed = e.is_group and e.chat_id in state.allowed_groups
+
+        if e.is_group and not is_group_allowed:
+            return
+
+        allowed, is_free_search = await _check_search_access(
+            uid, lang, is_group_allowed, e.is_private
+        )
+
+        if not allowed:
+            return await e.reply(
+                _get_access_denied_text(lang),
+                buttons=Keyboards.back() if e.is_private else None,
+                parse_mode='md'
+            )
+
+        # Guardar contexto para el callback del periodo (igual que /url)
+        state.temp_state[uid] = {
+            'hotmail_extract': True,
+            'chat_id': e.chat_id,
+            'reply_to': e.id
+        }
+
+        await e.reply(
+            UI.text("hotmail_dl_info", lang),
+            buttons=Keyboards.hotmail_time(),
+            parse_mode='md'
+        )
 
     # --- BROADCAST ---
 
@@ -2651,6 +2800,34 @@ def register_handlers(bot_client):
                     buttons=Keyboards.back(),
                     parse_mode='md'
                 )
+
+            # ─── HOTMAIL EXTRACT (v4.2.11: /hotmail) ───
+            elif data == "hotmail_dl_info":
+                await e.answer()
+                await e.edit(
+                    UI.text("hotmail_dl_info", lang),
+                    buttons=Keyboards.hotmail_time(),
+                    parse_mode='md'
+                )
+
+            elif data.startswith("hm_time_"):
+                # hm_time_24h → nuevos · hm_time_old → antiguos · hm_time_all → todos
+                t_opt = data.split("_")[2]
+                if uid in state.active_hotmail_extracts:
+                    return await e.answer(
+                        UI.text("hotmail_extract_already", lang), alert=True
+                    )
+                # Re-validar acceso (el estado pudo cambiar desde que se envió /hotmail)
+                allowed, is_free_search = await _check_search_access(uid, lang, False, True)
+                if not allowed:
+                    return await e.answer(_get_access_denied_text(lang), alert=True)
+                if uid in state.temp_state:
+                    state.temp_state.pop(uid, None)
+                await _execute_hotmail_extract(
+                    uid=uid, lang=lang, t_opt=t_opt, chat_id=uid,
+                    is_free_search=is_free_search, callback_event=e
+                )
+                return
 
             elif data.startswith("time_"):
                 t_opt = data.split("_")[1]

@@ -126,6 +126,8 @@ pm2 startup
 | `/imap` | IMAP Checker (responde a un .txt con mail:pass) |
 | `/imap kw1, kw2` | Con keywords → ZIP agrupado |
 | `/imap country` | Agrupar hits por país → ZIP |
+| `/hotmail` | Hotmail Data — líneas ÚNICAS de los .txt hotmail (nuevos / antiguos) |
+| `/hotmailchk` | Hotmail Checker — verifica cuentas (responde a un .txt con mail:pass) |
 
 ### 🔐 Admin
 | Comando | Descripción |

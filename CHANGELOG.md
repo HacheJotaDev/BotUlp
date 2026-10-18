@@ -2,6 +2,26 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.11] — /hotmail: extracción HOTMAIL + /hotmailchk (checker renombrado)
+
+### 📥 NUEVO comando `/hotmail` — Hotmail Data (líneas únicas)
+- **Descarga automática de .txt hotmail**: el listener ahora detecta variantes de `hotmail` en el **NOMBRE** del archivo — `hotmail`, `hotmails`, `hotma1il`, `hotma¡l`, `h0tmail`, `hotm4il`, `hotmai1`, etc. (normalizador anti-ofuscación con 2 pasadas leet).
+- **SIN peso mínimo**: los .txt hotmail se descargan sin importar su tamaño (el mínimo de 5MB de v4.2.10 solo aplica a los archivos NORMALES).
+- **Carpeta propia**: se guardan en `HJDescargas_Hotmail` (nuevos, 24h) y pasan a `Archivo_Hotmail` (antiguos) con el mismo ciclo de vida del resto (archivado 24h / borrado 120h). Silo separado del sistema general.
+- **`/hotmail` entrega líneas ÚNICAS sin repetir**, igual que /url:
+  - ⚡ Nuevos · últimas 24h
+  - 📅 Solo antiguos
+  - 🗂️ Nuevos + Antiguos
+- Motor de extracción nuevo (`hotmail_extract_engine` en `search.py`): lectura por chunks anti-GIL (misma arquitectura v4.2.6), límites duros por archivo, paralelo con el mismo executor de búsquedas, caché LRU y dedupe global con `set` — cada línea aparece UNA sola vez en el .txt entregado.
+- Acceso igual que `/url`: VIP/SELLER/ADMIN, grupo permitido, o búsqueda gratis inicial/bono de los FREE (consume igual).
+- Nuevo botón de menú **«📥 Hotmail Data»** para VIP/SELLER/ADMIN + tarjeta de info con el periodo.
+- Anti-superposición propio (`active_hotmail_extracts`): no pisa a las búsquedas ni al checker.
+
+### 🔥 `/hotmail` (checker) → ahora es `/hotmailchk`
+- El **Hotmail Checker** (verificación de cuentas OAuth RPS + ZIP) pasa a invocarse **`/hotmailchk`** (patrón `(?@\w+)?` soporta `/hotmailchk@MiBot`).
+- El nuevo `/hotmail` usa un patrón con *negative lookahead* `(?!chk)` → **cero interferencia** entre ambos comandos.
+- Actualizados: textos `hotmail_info` en ES/EN/PT, aviso «verificación en curso», logs de error, lista de comandos por rol y README.
+
 ## [4.2.10] — Descargas: tamaño MÍNIMO de 5MB para archivos .txt
 
 ### 📥 Nuevo filtro de tamaño mínimo (download.py + config.py)
