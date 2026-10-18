@@ -123,11 +123,11 @@ class Keyboards:
 
     @staticmethod
     def hotmail_time():
-        """v4.2.11: selección de periodo para /hotmail (extracción de líneas únicas)."""
+        """v4.2.12: selección de periodo para /hotmail (estilo HOTMAIL EXTRACTOR)."""
         return [
-            [Button.inline("⚡  Nuevos · últimas 24h", b"hm_time_24h"),
-             Button.inline("🗂️  Nuevos + Antiguos", b"hm_time_all")],
-            [Button.inline("📅  Solo antiguos", b"hm_time_old")],
+            [Button.inline("⚡  Nuevos — últimos archivos (24h)", b"hm_time_24h")],
+            [Button.inline("📅  Antiguos — histórico hotmail", b"hm_time_old")],
+            [Button.inline("🗂️  Todos — nuevos + antiguos", b"hm_time_all")],
             [Button.inline("«  Cancelar", b"back_main")],
         ]
 

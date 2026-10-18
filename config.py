@@ -144,7 +144,7 @@ def _resolve_ipn_url() -> str:
 @dataclass
 class Config:
     # ── Version ──────────────────────────────────────────────
-    VERSION: str = "4.2.11"
+    VERSION: str = "4.2.12"
 
     # ── Telegram ─────────────────────────────────────────────
     API_ID: int = int(os.getenv("API_ID", "33426502"))

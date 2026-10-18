@@ -2716,7 +2716,8 @@ def register_handlers(bot_client):
                 await e.edit(
                     UI.text("file_management", lang,
                             counts['total'], counts['24h'], counts['old'],
-                            auto_status, total_pending, active_count),
+                            auto_status, total_pending, active_count,
+                            counts['hm_total'], counts['hm_24h'], counts['hm_old']),
                     buttons=Keyboards.files_control(
                         state.auto_download_enabled, total_pending, active_count
                     ),
@@ -2732,7 +2733,8 @@ def register_handlers(bot_client):
                 await e.edit(
                     UI.text("file_management", lang,
                             counts['total'], counts['24h'], counts['old'],
-                            "ON", total_pending, active_count),
+                            "ON", total_pending, active_count,
+                            counts['hm_total'], counts['hm_24h'], counts['hm_old']),
                     buttons=Keyboards.files_control(True, total_pending, active_count),
                     parse_mode='md'
                 )
@@ -2746,7 +2748,8 @@ def register_handlers(bot_client):
                 await e.edit(
                     UI.text("file_management", lang,
                             counts['total'], counts['24h'], counts['old'],
-                            "OFF", total_pending, active_count),
+                            "OFF", total_pending, active_count,
+                            counts['hm_total'], counts['hm_24h'], counts['hm_old']),
                     buttons=Keyboards.files_control(False, total_pending, active_count),
                     parse_mode='md'
                 )

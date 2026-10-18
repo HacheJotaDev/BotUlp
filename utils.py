@@ -67,14 +67,34 @@ def progress_bar(pct: float, width: int = 12) -> str:
     return f"{bar} {pct:.1f}%"
 
 
+def _count_txt(directory: Path) -> int:
+    """Contar *.txt de un directorio de forma segura (0 si no existe)."""
+    try:
+        return sum(1 for _ in directory.glob('*.txt'))
+    except OSError:
+        return 0
+
+
 def get_file_counts() -> Dict[str, int]:
     """Contar archivos en directorios de descarga y archivo.
 
+    Incluye el silo HOTMAIL (v4.2.12) para el panel de GESTIÓN DE ARCHIVOS:
+      hm_24h  → HJDescargas_Hotmail (nuevos)
+      hm_old  → Archivo_Hotmail     (histórico)
     Usa sum() con generador para no cargar miles de Path en memoria.
     """
-    count_24h = sum(1 for _ in config.DIR_DOWNLOADS.glob('*.txt'))
-    count_old = sum(1 for _ in config.DIR_ARCHIVE.glob('*.txt'))
-    return {'total': count_24h + count_old, '24h': count_24h, 'old': count_old}
+    count_24h = _count_txt(config.DIR_DOWNLOADS)
+    count_old = _count_txt(config.DIR_ARCHIVE)
+    hm_24h = _count_txt(config.DIR_HOTMAIL)
+    hm_old = _count_txt(config.DIR_HOTMAIL_ARCHIVE)
+    return {
+        'total': count_24h + count_old,
+        '24h': count_24h,
+        'old': count_old,
+        'hm_total': hm_24h + hm_old,
+        'hm_24h': hm_24h,
+        'hm_old': hm_old,
+    }
 
 
 def normalizar_url(url: str) -> str:

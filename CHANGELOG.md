@@ -2,6 +2,18 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.12] — /hotmail: menú HOTMAIL EXTRACTOR + HOTMAIL en Gestión de Archivos
+
+### 📥 Menú «HOTMAIL EXTRACTOR» rediseñado
+- `hotmail_dl_info` (ES/EN/PT) ahora abre con la tarjeta **「📥 HOTMAIL EXTRACTOR」** y el selector de periodo tal cual: ⚡ **Nuevos** — últimos archivos (24h) · 📅 **Antiguos** — histórico hotmail · 🗂️ **Todos** — nuevos + antiguos.
+- Botones de `Keyboards.hotmail_time()` renombrados a ese mismo formato (uno por fila, orden Nuevos → Antiguos → Todos), manteniendo los mismos callbacks `hm_time_24h/old/all` (cero cambios de lógica).
+- La tarjeta INFO conserva el detalle: líneas únicas sin repetir, variantes detectadas (hotmail, hotmails, hotma1il, hotma¡l, h0tmail...), **sin peso mínimo**, carpeta `HJDescargas_Hotmail` y paso al histórico `Archivo_Hotmail`.
+
+### 📊 HOTMAIL dentro de GESTIÓN DE ARCHIVOS
+- El panel admin ahora muestra un bloque dedicado **「📥 HOTMAIL」** con Total / Últimas 24h / Histórico del silo hotmail, debajo de GESTIÓN DE ARCHIVOS y encima de DESCARGAS.
+- `get_file_counts()` (utils.py) ampliado con `hm_total`, `hm_24h` y `hm_old` contando `HJDescargas_Hotmail` y `Archivo_Hotmail` (helper seguro `_count_txt`: directorio inexistente → 0, nunca explota).
+- `file_management` en ES/EN/PT + base de `bot_locale.py` con placeholders `{6} {7} {8}`; los 3 puntos de emisión del panel (abrir, toggle ON, toggle OFF) pasan los nuevos conteos.
+
 ## [4.2.11] — /hotmail: extracción HOTMAIL + /hotmailchk (checker renombrado)
 
 ### 📥 NUEVO comando `/hotmail` — Hotmail Data (líneas únicas)
