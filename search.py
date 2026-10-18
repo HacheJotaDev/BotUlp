@@ -480,16 +480,20 @@ def _extract_lines_file(path: Path, cancel_event: threading.Event = None) -> Lis
     return list(res_set)
 
 
-async def hotmail_extract_engine(time_opt: str) -> Optional[Path]:
-    """Extracción HOTMAIL — líneas ÚNICAS (sin repetir) del silo hotmail.
+async def _silo_extract_engine(time_opt: str, dir_new: Path, dir_old: Path,
+                               tag: str) -> Optional[Path]:
+    """Motor genérico de EXTRACCIÓN por silo (líneas únicas, sin repetir).
+
+    v4.2.16: refactor de hotmail_extract_engine — mismo comportamiento,
+    parametrizado por carpetas (nuevos/antiguos) y tag (hotmail/imap).
 
     time_opt:
-      '24h' → solo NUEVOS   (HJDescargas_Hotmail)
-      'old' → solo ANTIGUOS (Archivo_Hotmail)
+      '24h' → solo NUEVOS   (dir_new)
+      'old' → solo ANTIGUOS (dir_old)
       'all' → nuevos + antiguos
     Retorna Path del .txt con las líneas deduplicadas, o None si no hay datos.
     """
-    cache_key = f"hotmail:{time_opt}"
+    cache_key = f"{tag}:{time_opt}"
     if cache_key in state.search_memory_cache:
         cached_path = state.search_memory_cache[cache_key]
         if cached_path and cached_path.exists():
@@ -499,9 +503,9 @@ async def hotmail_extract_engine(time_opt: str) -> Optional[Path]:
     loop = asyncio.get_running_loop()
     dirs = []
     if time_opt in ('24h', 'all'):
-        dirs.append(config.DIR_HOTMAIL)
+        dirs.append(dir_new)
     if time_opt in ('old', 'all'):
-        dirs.append(config.DIR_HOTMAIL_ARCHIVE)
+        dirs.append(dir_old)
 
     def _safe_size(f):
         try:
@@ -514,7 +518,7 @@ async def hotmail_extract_engine(time_opt: str) -> Optional[Path]:
         return None
 
     cancel_event = threading.Event()
-    logger.info(f"Extracción HOTMAIL '{time_opt}': {len(files)} archivos")
+    logger.info(f"Extracción {tag.upper()} '{time_opt}': {len(files)} archivos")
 
     # PARALELO: todos los archivos a la vez (mismo executor que /url)
     tasks = [
@@ -554,7 +558,7 @@ async def hotmail_extract_engine(time_opt: str) -> Optional[Path]:
         logger.info(f"Resultados truncados: {len(final)} -> {config.SEARCH_MAX_RESULTS}")
         final = set(list(final)[:config.SEARCH_MAX_RESULTS])
 
-    out = config.DIR_CACHE / f"hotmail_{int(time.time())}.txt"
+    out = config.DIR_CACHE / f"{tag}_{int(time.time())}.txt"
 
     def _write_results(data: set, out_path: Path):
         with open(out_path, 'w', encoding='utf-8', buffering=1024 * 64) as f:
@@ -562,7 +566,25 @@ async def hotmail_extract_engine(time_opt: str) -> Optional[Path]:
 
     await asyncio.to_thread(_write_results, final, out)
 
-    logger.info(f"Extracción HOTMAIL '{time_opt}' completada: {len(final)} líneas únicas")
+    logger.info(f"Extracción {tag.upper()} '{time_opt}' completada: {len(final)} líneas únicas")
 
     state.search_memory_cache[cache_key] = out
     return out
+
+
+async def hotmail_extract_engine(time_opt: str) -> Optional[Path]:
+    """Extracción HOTMAIL (v4.2.11) — líneas únicas del silo hotmail."""
+    return await _silo_extract_engine(
+        time_opt, config.DIR_HOTMAIL, config.DIR_HOTMAIL_ARCHIVE, 'hotmail'
+    )
+
+
+async def imap_extract_engine(time_opt: str) -> Optional[Path]:
+    """Extracción IMAP/MIX (v4.2.16) — líneas únicas del silo imap.
+
+    Lee HJDescargas_Imap (nuevos) + Archivo_Imap (antiguos) según el
+    periodo, igual que /hotmail con su silo.
+    """
+    return await _silo_extract_engine(
+        time_opt, config.DIR_IMAP, config.DIR_IMAP_ARCHIVE, 'imap'
+    )

@@ -78,15 +78,20 @@ def _count_txt(directory: Path) -> int:
 def get_file_counts() -> Dict[str, int]:
     """Contar archivos en directorios de descarga y archivo.
 
-    Incluye el silo HOTMAIL (v4.2.12) para el panel de GESTIÓN DE ARCHIVOS:
+    Incluye el silo HOTMAIL (v4.2.12) y el silo IMAP/MIX (v4.2.16) para el
+    panel de GESTIÓN DE ARCHIVOS:
       hm_24h  → HJDescargas_Hotmail (nuevos)
       hm_old  → Archivo_Hotmail     (histórico)
+      im_24h  → HJDescargas_Imap    (nuevos)
+      im_old  → Archivo_Imap        (histórico)
     Usa sum() con generador para no cargar miles de Path en memoria.
     """
     count_24h = _count_txt(config.DIR_DOWNLOADS)
     count_old = _count_txt(config.DIR_ARCHIVE)
     hm_24h = _count_txt(config.DIR_HOTMAIL)
     hm_old = _count_txt(config.DIR_HOTMAIL_ARCHIVE)
+    im_24h = _count_txt(config.DIR_IMAP)
+    im_old = _count_txt(config.DIR_IMAP_ARCHIVE)
     return {
         'total': count_24h + count_old,
         '24h': count_24h,
@@ -94,6 +99,9 @@ def get_file_counts() -> Dict[str, int]:
         'hm_total': hm_24h + hm_old,
         'hm_24h': hm_24h,
         'hm_old': hm_old,
+        'im_total': im_24h + im_old,
+        'im_24h': im_24h,
+        'im_old': im_old,
     }
 
 

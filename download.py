@@ -120,6 +120,50 @@ def destino_hotmail(filename: str) -> Path:
 
 
 # ═════════════════════════════════════════════════════════════
+# v4.2.16 — Detector de variantes IMAP/MIX/MAIL en el nombre
+# ═════════════════════════════════════════════════════════════
+# Silo "mail access" (paralelo al silo hotmail). Detecta ofuscaciones de:
+#   mix · m1x · m¡x · m!x · mixs
+#   mail · m4il · ma¡l · ma1l · ma!l · mails
+#   mailaccess · ma¡l4access · mail4access · mail acces(s)
+# Prioridad: si el nombre ya es HOTMAIL (v4.2.11), NO cuenta como imap
+# (los silos quedan separados: "hotmail mix.txt" → silo hotmail).
+
+# Tokens que identificación EXACTA tras normalizar leet
+_IMAP_TOKENS_EXACT = {'mix', 'mixs', 'mail', 'mails', 'mailacces', 'mailaccess'}
+
+# Fuzzy (distancia <=1) solo contra estas palabras, y solo para tokens que
+# empiezan por 'm' (evita falsos positivos tipo nail/bail/email/gmail)
+_IMAP_FUZZY_TARGETS = ('mail', 'mails', 'mailaccess')
+
+
+def es_nombre_imap(filename: str) -> bool:
+    """True si el nombre del archivo es de una base MIX/MAIL (mail access).
+
+    Normaliza leet (1/!/¡→i, 4→a, 0→o, 3→e, 5→s...) y parte el nombre en
+    tokens alfanuméricos. Un token cuenta si:
+      • es exactamente una variante conocida (mix, mail, mailaccess...), o
+      • empieza por 'm', tiene longitud ±1 de un target y distancia
+        Damerau-Levenshtein <=1 (typos tipo maill, mailz, mailacces).
+    Los nombres HOTMAIL devuelven False (tienen su propio silo).
+    """
+    if not filename:
+        return False
+    if es_nombre_hotmail(filename):
+        return False
+
+    norm = filename.lower().translate(_LEET_TABLE)
+    for tok in re.findall(r'[a-z]+', norm):
+        if tok in _IMAP_TOKENS_EXACT:
+            return True
+        if len(tok) >= 4 and tok.startswith('m'):
+            for target in _IMAP_FUZZY_TARGETS:
+                if abs(len(tok) - len(target)) <= 1 and _levenshtein(tok, target) <= 1:
+                    return True
+    return False
+
+
+# ═════════════════════════════════════════════════════════════
 # v4.2.14 — ANTI-DUPLICADOS: no re-descargar archivos ya bajados
 # Fuente persistente: download_log (DB). Fast-path: state.seen_downloads.
 # Criterio: mismo filename (+ mismo tamaño si se conoce). Fail-open:
@@ -421,6 +465,18 @@ async def mover_y_limpiar_archivos():
         except Exception as e:
             logger.warning(f"CLEANUP_HOTMAIL_ARCHIVE_ERROR: {f.name}: {e}")
 
+    # v4.2.16: mismo ciclo de vida para el silo IMAP/MIX (nuevos → antiguos)
+    for f in config.DIR_IMAP.glob('*.txt'):
+        try:
+            if (ahora - f.stat().st_mtime) > segundos_archive:
+                dest = config.DIR_IMAP_ARCHIVE / f.name
+                if dest.exists():
+                    dest.unlink()
+                os.replace(f, dest)
+                moved += 1
+        except Exception as e:
+            logger.warning(f"CLEANUP_IMAP_ARCHIVE_ERROR: {f.name}: {e}")
+
     # ── Borrar archivados muy viejos (>120h) ──
     for f in config.DIR_ARCHIVE.glob('*.txt'):
         try:
@@ -438,6 +494,15 @@ async def mover_y_limpiar_archivos():
                 deleted += 1
         except Exception as e:
             logger.warning(f"CLEANUP_HOTMAIL_DELETE_ERROR: {f.name}: {e}")
+
+    # v4.2.16: borrar imap antiguos muy viejos (mismo ciclo 120h)
+    for f in config.DIR_IMAP_ARCHIVE.glob('*.txt'):
+        try:
+            if (ahora - f.stat().st_mtime) > segundos_delete:
+                f.unlink()
+                deleted += 1
+        except Exception as e:
+            logger.warning(f"CLEANUP_IMAP_DELETE_ERROR: {f.name}: {e}")
 
     # ── Temporales (.tmp) — SKIP durante fase de estabilización ──
     # NO borramos para permitir resume de descargas interrumpidas.
@@ -864,11 +929,14 @@ async def realtime_listener(event):
         # v4.2.11: SILO HOTMAIL — los .txt con variantes de 'hotmail' en el NOMBRE
         # (hotmail, hotmails, hotma1il, hotma¡l, h0tmail...) NO tienen peso mínimo
         # y se guardan en su propia carpeta (HJDescargas_Hotmail).
+        # v4.2.16: SILO IMAP/MIX — ídem para variantes de mix/mail/mailaccess
+        # (HJDescargas_Imap). Prioridad: hotmail primero (silos separados).
         is_hotmail = es_nombre_hotmail(filename)
+        is_imap = (not is_hotmail) and es_nombre_imap(filename)
 
-        if not is_hotmail:
+        if not (is_hotmail or is_imap):
             # v4.2.10: Filtro de tamaño MÍNIMO (solo archivos NORMALES) —
-            # los hotmail pasan sin importar el peso.
+            # los hotmail/imap pasan sin importar el peso.
             if file_size < config.MIN_DOWNLOAD_SIZE_MB * 1024 * 1024:
                 logger.info(
                     f"Archivo demasiado pequeño, ignorado: {filename} "
@@ -885,13 +953,21 @@ async def realtime_listener(event):
                 if not any(k in text_lower for k in keywords):
                     return
 
-        # v4.2.11: hotmail → carpeta propia; resto → descargas generales
-        dest_path = (config.DIR_HOTMAIL if is_hotmail else config.DIR_DOWNLOADS) / filename
+        # v4.2.11: hotmail → silo hotmail · v4.2.16: imap → silo imap · resto → general
         if is_hotmail:
+            dest_path = config.DIR_HOTMAIL / filename
             logger.info(
                 f"HOTMAIL detectado en nombre: {filename} "
                 f"({format_size(file_size)}) → {config.DIR_HOTMAIL} (sin peso mínimo)"
             )
+        elif is_imap:
+            dest_path = config.DIR_IMAP / filename
+            logger.info(
+                f"IMAP/MIX detectado en nombre: {filename} "
+                f"({format_size(file_size)}) → {config.DIR_IMAP} (sin peso mínimo)"
+            )
+        else:
+            dest_path = config.DIR_DOWNLOADS / filename
 
         if dest_path.exists() and dest_path.stat().st_size > 0:
             return
@@ -941,7 +1017,8 @@ async def realtime_listener(event):
                     'chat_name': chat_name,
                     'size': file_size,
                     'dest_path': str(dest_path),
-                    'is_hotmail': is_hotmail
+                    'is_hotmail': is_hotmail,
+                    'is_imap': is_imap
                 })
                 logger.info(f"Pendiente detectado: {filename} ({format_size(file_size)})")
 
@@ -994,7 +1071,9 @@ async def process_pending_downloads(status_msg=None):
 
             # v4.2.10: Red de seguridad — omitir .txt menores a MIN_DOWNLOAD_SIZE_MB (5MB)
             # v4.2.11-fix: los HOTMAIL pasan sin importar el peso
-            if not item.get('is_hotmail') and file_size and \
+            # v4.2.16: los IMAP/MIX también pasan sin importar el peso
+            if not item.get('is_hotmail') and not item.get('is_imap') \
+                    and file_size and \
                     file_size < config.MIN_DOWNLOAD_SIZE_MB * 1024 * 1024:
                 logger.info(
                     f"Pendiente omitido por tamaño mínimo: {item['filename']} "

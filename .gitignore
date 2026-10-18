@@ -14,8 +14,10 @@ bot_activity.log
 *.log
 HJDescargas/
 HJDescargas_Hotmail/
+HJDescargas_Imap/
 Archivo_Historico/
 Archivo_Hotmail/
+Archivo_Imap/
 Cache_Resultados/
 Temp_Parts/
 venv/

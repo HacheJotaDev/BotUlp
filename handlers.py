@@ -40,7 +40,7 @@ from utils import (
     normalizar_url, get_file_counts, format_size, format_time,
     format_uptime, sanitize_md, progress_bar
 )
-from search import search_engine, hotmail_extract_engine
+from search import search_engine, hotmail_extract_engine, imap_extract_engine
 from nowpayments import (
     create_invoice, VIP_PLANS, get_payment_status,
     SUCCESS_STATUSES, WAITING_STATUSES, FAIL_STATUSES, _deliver_vip
@@ -446,11 +446,11 @@ def _get_commands_by_role(role: UserRole, has_free: bool = False) -> str:
             cmds += " • /url"
         return cmds
     elif role == UserRole.VIP:
-        return "/start • /url • /imap • /hotmail • /hotmailchk • /ping • /canjear"
+        return "/start • /url • /imap • /hotmail • /imapchk • /ping • /canjear"
     elif role == UserRole.SELLER:
-        return "/start • /url • /imap • /hotmail • /hotmailchk • /ping"
+        return "/start • /url • /imap • /hotmail • /imapchk • /ping"
     elif role == UserRole.ADMIN:
-        return ("/start • /url • /imap • /hotmail • /hotmailchk • /vip • /unvip • /seller • /unseller"
+        return ("/start • /url • /imap • /hotmail • /imapchk • /vip • /unvip • /seller • /unseller"
                 " • /gp • /ungp • /bc • /bcvip • /sizedisp • /ping • /updateBot")
     return "/start • /canjear"
 
@@ -1596,6 +1596,108 @@ async def _execute_hotmail_extract(uid: int, lang: str, t_opt: str, chat_id: int
         state.active_hotmail_extracts.discard(uid)
 
 
+_IM_PERIOD_KEYS = {
+    '24h': 'im_period_24h',
+    'old': 'im_period_old',
+    'all': 'im_period_all',
+}
+
+
+async def _execute_imap_extract(uid: int, lang: str, t_opt: str, chat_id: int,
+                                is_free_search=None, callback_event=None,
+                                reply_to=None):
+    """Ejecutar extracción IMAP/MIX y enviar .txt con líneas únicas (v4.2.16).
+
+    Espejo 1:1 de _execute_hotmail_extract: mismo consumo de acceso
+    (gratis inicial / bono / VIP), misma animación y mismo reply.
+    """
+    state.active_imap_extracts.add(uid)
+
+    loading_text = UI.text("imap_extract_loading", lang, LOADING_FRAMES[0], 0)
+
+    if callback_event:
+        try:
+            await callback_event.answer()
+        except Exception:
+            pass
+        try:
+            loading_msg = await callback_event.edit(loading_text, buttons=None, parse_mode='md')
+        except Exception:
+            loading_msg = await state.bot.send_message(chat_id, loading_text, parse_mode='md')
+    else:
+        loading_msg = await state.bot.send_message(chat_id, loading_text, parse_mode='md')
+
+    try:
+        start_time = time.time()
+        task = asyncio.create_task(imap_extract_engine(t_opt))
+
+        # Animación de carga simple (anti-FloodWait: intervalo suave)
+        i = 0
+        while not task.done():
+            frame = LOADING_FRAMES[i % len(LOADING_FRAMES)]
+            elapsed = int(time.time() - start_time)
+            try:
+                await loading_msg.edit(
+                    UI.text("imap_extract_loading", lang, frame, elapsed),
+                    parse_mode='md'
+                )
+            except Exception:
+                pass
+            await asyncio.sleep(config.SEARCH_ANIM_INTERVAL)
+            i += 1
+
+        result_file = await task
+        elapsed = time.time() - start_time
+
+        if result_file:
+            # Consumir acceso igual que /url (gratis inicial / bono / VIP)
+            if is_free_search == 'bonus':
+                db.consume_bonus_search(uid)
+            elif is_free_search == 'initial':
+                db.mark_free_search_used(uid)
+            else:
+                db.add_search(uid)
+
+            # Conteo de líneas en thread (no bloquea el loop)
+            def _count_lines_im(p):
+                n = 0
+                with open(p, 'rb') as f:
+                    for _ in f:
+                        n += 1
+                return n
+
+            count = await asyncio.to_thread(_count_lines_im, result_file)
+
+            period_label = UI.text(_IM_PERIOD_KEYS.get(t_opt, 'im_period_all'), lang)
+            caption = UI.text("imap_extract_done", lang, period_label, count, elapsed)
+
+            await _send_search_result(chat_id, result_file, caption,
+                                      e=callback_event, msg=loading_msg,
+                                      reply_to=reply_to)
+        else:
+            empty_text = UI.text("imap_extract_empty", lang)
+            try:
+                await loading_msg.edit(
+                    empty_text,
+                    buttons=Keyboards.back() if chat_id == uid else None,
+                    parse_mode='md'
+                )
+            except Exception:
+                pass
+
+    except Exception as exc:
+        logger.error(f"Error en /imap (extracción) de {uid}: {exc}")
+        try:
+            await loading_msg.edit(
+                UI.text("error_generic", lang, str(exc)[:120]),
+                parse_mode='md'
+            )
+        except Exception:
+            pass
+    finally:
+        state.active_imap_extracts.discard(uid)
+
+
 
 def register_handlers(bot_client):
     """Registrar todos los handlers en el bot client."""
@@ -2077,15 +2179,17 @@ def register_handlers(bot_client):
     # COMANDO /imap v2 — IMAP Checker con keywords + ZIP
     # ═════════════════════════════════════════════════════════════
 
-    @bot_client.on(events.NewMessage(pattern=r"/imap(.*)"))
-    async def cmd_imap(e):
+    @bot_client.on(events.NewMessage(pattern=r"/imapchk(?:@\w+)?(.*)"))
+    async def cmd_imapchk(e):
         """IMAP Checker v2 — soporta keywords, country, remitentes y genera ZIP.
 
+        (v4.2.16: antes era /imap; ahora /imap es el EXTRACTOR mix/mail)
+
         Uso:
-          /imap                      → sin keywords (modo clasico)
-          /imap kw1, kw2, kw3         → con keywords (genera ZIP)
-          /imap country              → agrupa hits por pais (genera ZIP)
-          /imap r1@dom, r2@dom, ...   → v4.2.9: buzones con mensajes de
+          /imapchk                       → sin keywords (modo clasico)
+          /imapchk kw1, kw2, kw3         → con keywords (genera ZIP)
+          /imapchk country               → agrupa hits por pais (genera ZIP)
+          /imapchk r1@dom, r2@dom, ...   → v4.2.9: buzones con mensajes de
                                         cualquiera de esos remitentes
                                         (máx. 10, igual que keywords; ZIP)
         Requiere responder a un archivo .txt con mail:pass.
@@ -2254,9 +2358,16 @@ def register_handlers(bot_client):
     # COMANDO /hotmailchk — Hotmail/Microsoft Account Checker (v4.2.11)
     # (login OAuth RPS, clasifica HIT/BAD/2FA/LOCKED, genera ZIP)
     # (antes era /hotmail; ahora /hotmail es el extractor de líneas únicas)
+    #
+    # 👻 CÓDIGO FANTOMA — DESACTIVADO EN v4.2.16
+    # El checker hotmail sale del bot: ya NO se registra ningún handler
+    # (el comando /hotmailchk no existe y no hace nada). El código queda
+    # en el repo "de decoración" — para revivirlo bastaría re-registrar
+    # los handlers comentados aquí abajo y re-agregar botón/comando.
     # ═════════════════════════════════════════════════════════════
 
-    @bot_client.on(events.NewMessage(pattern=r"/hotmailchk(?:@\w+)?(.*)"))
+    # (GHOST v4.2.16 — sin registro)
+    # @bot_client.on(events.NewMessage(pattern=r"/hotmailchk(?:@\w+)?(.*)"))
     async def cmd_hotmailchk(e):
         """Hotmail/Microsoft Account Checker.
 
@@ -2336,12 +2447,13 @@ def register_handlers(bot_client):
                                       mode_country=mode_country)
 
     # --- Conversación: usuario envía archivo después de poner proxies ---
-    @bot_client.on(events.NewMessage(
-        func=lambda ev: ev.is_private and
-                       ev.sender_id in state.temp_state and
-                       state.temp_state[ev.sender_id].get('step') == 'WAITING_HOTMAIL_FILE' and
-                       ev.document is not None
-    ))
+    # (GHOST v4.2.16 — sin registro: /hotmailchk desactivado)
+    # @bot_client.on(events.NewMessage(
+    #     func=lambda ev: ev.is_private and
+    #                    ev.sender_id in state.temp_state and
+    #                    state.temp_state[ev.sender_id].get('step') == 'WAITING_HOTMAIL_FILE' and
+    #                    ev.document is not None
+    # ))
     async def handle_hotmail_file(e):
         uid = e.sender_id
         user = db.get_user(uid)
@@ -2353,12 +2465,13 @@ def register_handlers(bot_client):
                                       mode_country=mode_country)
 
     # --- Si el usuario envía texto (no archivo) mientras espera hotmail file, cancelar ---
-    @bot_client.on(events.NewMessage(
-        func=lambda ev: ev.is_private and
-                       ev.sender_id in state.temp_state and
-                       state.temp_state[ev.sender_id].get('step') == 'WAITING_HOTMAIL_FILE' and
-                       ev.document is None
-    ))
+    # (GHOST v4.2.16 — sin registro: /hotmailchk desactivado)
+    # @bot_client.on(events.NewMessage(
+    #     func=lambda ev: ev.is_private and
+    #                    ev.sender_id in state.temp_state and
+    #                    state.temp_state[ev.sender_id].get('step') == 'WAITING_HOTMAIL_FILE' and
+    #                    ev.document is None
+    # ))
     async def handle_hotmail_cancel(e):
         uid = e.sender_id
         state.temp_state.pop(uid, None)
@@ -2369,13 +2482,14 @@ def register_handlers(bot_client):
         # normal del bot va a responder. Quitamos el temp_state.
 
     # --- Conversación: usuario envía archivo después de poner proxies en grupo ---
-    @bot_client.on(events.NewMessage(
-        func=lambda ev: ev.is_group and
-                       ev.chat_id in state.allowed_groups and
-                       ev.sender_id in state.temp_state and
-                       state.temp_state[ev.sender_id].get('step') == 'WAITING_HOTMAIL_FILE' and
-                       ev.document is not None
-    ))
+    # (GHOST v4.2.16 — sin registro: /hotmailchk desactivado)
+    # @bot_client.on(events.NewMessage(
+    #     func=lambda ev: ev.is_group and
+    #                    ev.chat_id in state.allowed_groups and
+    #                    ev.sender_id in state.temp_state and
+    #                    state.temp_state[ev.sender_id].get('step') == 'WAITING_HOTMAIL_FILE' and
+    #                    ev.document is not None
+    # ))
     async def handle_hotmail_file_group(e):
         uid = e.sender_id
         user = db.get_user(uid)
@@ -2431,6 +2545,52 @@ def register_handlers(bot_client):
         await e.reply(
             UI.text("hotmail_dl_info", lang),
             buttons=Keyboards.hotmail_time(),
+            parse_mode='md'
+        )
+
+    # COMANDO /imap — Extracción IMAP/MIX (v4.2.16)
+    # El bot descarga AUTOMÁTICAMENTE los .txt que traen variantes de
+    # mix/mail/mailaccess en el nombre (mix, m1x, m¡x, mail, m4il,
+    # ma¡l, mailaccess, ma¡l4access...) SIN peso mínimo → carpeta
+    # HJDescargas_Imap (24h) y Archivo_Imap (antiguos). Este comando
+    # entrega las LÍNEAS ÚNICAS sin repetir, igual que /hotmail.
+    # (el checker IMAP ahora es /imapchk)
+
+    # (?!chk) evita capturar /imapchk — que es el CHECKER de cuentas IMAP
+    @bot_client.on(events.NewMessage(pattern=r"/imap(?:@\w+)?(?!chk)(.*)"))
+    async def cmd_imap_extract(e):
+        """Extracción IMAP/MIX — líneas únicas sin repetir (nuevos/antiguos)."""
+        uid = e.sender_id
+        user = db.get_user(uid)
+        lang = user.get('language', 'es')
+        is_group_allowed = e.is_group and e.chat_id in state.allowed_groups
+
+        if e.is_group and not is_group_allowed:
+            return
+
+        allowed, is_free_search = await _check_search_access(
+            uid, lang, is_group_allowed, e.is_private
+        )
+
+        if not allowed:
+            return await e.reply(
+                _get_access_denied_text(lang),
+                buttons=Keyboards.back() if e.is_private else None,
+                parse_mode='md'
+            )
+
+        # Guardar contexto para el callback del periodo (igual que /url y
+        # /hotmail: chat original, reply e is_free_search viajan juntos)
+        state.temp_state[uid] = {
+            'imap_extract': True,
+            'chat_id': e.chat_id,
+            'reply_to': e.id,
+            'is_free_search': is_free_search
+        }
+
+        await e.reply(
+            UI.text("imap_dl_info", lang),
+            buttons=Keyboards.imap_time(),
             parse_mode='md'
         )
 
@@ -2805,7 +2965,8 @@ def register_handlers(bot_client):
                     UI.text("file_management", lang,
                             counts['total'], counts['24h'], counts['old'],
                             auto_status, total_pending, active_count,
-                            counts['hm_total'], counts['hm_24h'], counts['hm_old']),
+                            counts['hm_total'], counts['hm_24h'], counts['hm_old'],
+                            counts['im_total'], counts['im_24h'], counts['im_old']),
                     buttons=Keyboards.files_control(
                         state.auto_download_enabled, total_pending, active_count
                     ),
@@ -2822,7 +2983,8 @@ def register_handlers(bot_client):
                     UI.text("file_management", lang,
                             counts['total'], counts['24h'], counts['old'],
                             "ON", total_pending, active_count,
-                            counts['hm_total'], counts['hm_24h'], counts['hm_old']),
+                            counts['hm_total'], counts['hm_24h'], counts['hm_old'],
+                            counts['im_total'], counts['im_24h'], counts['im_old']),
                     buttons=Keyboards.files_control(True, total_pending, active_count),
                     parse_mode='md'
                 )
@@ -2837,7 +2999,8 @@ def register_handlers(bot_client):
                     UI.text("file_management", lang,
                             counts['total'], counts['24h'], counts['old'],
                             "OFF", total_pending, active_count,
-                            counts['hm_total'], counts['hm_24h'], counts['hm_old']),
+                            counts['hm_total'], counts['hm_24h'], counts['hm_old'],
+                            counts['im_total'], counts['im_24h'], counts['im_old']),
                     buttons=Keyboards.files_control(False, total_pending, active_count),
                     parse_mode='md'
                 )
@@ -2930,6 +3093,50 @@ def register_handlers(bot_client):
                 if uid in state.temp_state:
                     state.temp_state.pop(uid, None)
                 await _execute_hotmail_extract(
+                    uid=uid, lang=lang, t_opt=t_opt, chat_id=orig_chat,
+                    is_free_search=is_free_search, callback_event=e,
+                    reply_to=ts.get('reply_to')
+                )
+                return
+
+            # ─── IMAP EXTRACT (v4.2.16: /imap) ───
+            elif data == "imap_dl_info":
+                await e.answer()
+                await e.edit(
+                    UI.text("imap_dl_info", lang),
+                    buttons=Keyboards.imap_time(),
+                    parse_mode='md'
+                )
+
+            elif data.startswith("im_time_"):
+                # im_time_24h → nuevos · im_time_old → antiguos · im_time_all → todos
+                t_opt = data.split("_")[2]
+                if uid in state.active_imap_extracts:
+                    return await e.answer(
+                        UI.text("imap_extract_already", lang), alert=True
+                    )
+                # v4.2.16: MISMA lógica que /url y /hotmail — el chat original manda:
+                # · grupo permitido → todos pueden (no consume gratis)
+                # · privado → re-validar reglas FREE (inicial/bono) o VIP+
+                ts = state.temp_state.get(uid, {})
+                orig_chat = ts.get('chat_id', uid)
+                if orig_chat != uid:
+                    if orig_chat not in state.allowed_groups:
+                        return await e.answer(
+                            "Este grupo ya no está autorizado.", alert=True
+                        )
+                    is_free_search = None
+                else:
+                    allowed, is_free_search = await _check_search_access(
+                        uid, lang, False, True
+                    )
+                    if not allowed:
+                        return await e.answer(
+                            _get_access_denied_text(lang), alert=True
+                        )
+                if uid in state.temp_state:
+                    state.temp_state.pop(uid, None)
+                await _execute_imap_extract(
                     uid=uid, lang=lang, t_opt=t_opt, chat_id=orig_chat,
                     is_free_search=is_free_search, callback_event=e,
                     reply_to=ts.get('reply_to')

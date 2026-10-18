@@ -123,11 +123,13 @@ pm2 startup
 ### 👑 VIP
 | Comando | Descripción |
 |---------|-------------|
-| `/imap` | IMAP Checker (responde a un .txt con mail:pass) |
-| `/imap kw1, kw2` | Con keywords → ZIP agrupado |
-| `/imap country` | Agrupar hits por país → ZIP |
+| `/imap` | IMAP Data — líneas ÚNICAS de los .txt mix/mail (nuevos / antiguos) |
+| `/imapchk` | IMAP Checker (responde a un .txt con mail:pass) |
+| `/imapchk kw1, kw2` | Con keywords → ZIP agrupado |
+| `/imapchk country` | Agrupar hits por país → ZIP |
 | `/hotmail` | Hotmail Data — líneas ÚNICAS de los .txt hotmail (nuevos / antiguos) |
-| `/hotmailchk` | Hotmail Checker — verifica cuentas (responde a un .txt con mail:pass) |
+
+> 👻 `/hotmailchk` (Hotmail Checker) fue **desactivado** en v4.2.16 — el código queda en el repo sin registrar.
 
 ### 🔐 Admin
 | Comando | Descripción |

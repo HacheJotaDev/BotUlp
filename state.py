@@ -41,6 +41,9 @@ active_hotmail_checks: Set[int] = set()
 # v4.2.11: Control de /hotmail (extracción de líneas únicas) en curso
 active_hotmail_extracts: Set[int] = set()
 
+# v4.2.16: Control de /imap (extracción mix/mail de líneas únicas) en curso
+active_imap_extracts: Set[int] = set()
+
 # Ultima busqueda ejecutada por usuario (contexto para reintentos y reportes)
 last_search: Dict[int, dict] = {}
 

@@ -2,6 +2,24 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.16] — Silo IMAP/MIX: nuevo extractor /imap (igual que /hotmail) · /hotmailchk retirado (código fantasma) · checker renombrado a /imapchk
+
+### 📬 Nuevo: /imap = IMAP EXTRACTOR (paridad total con /hotmail)
+- **Silo propio**: los .txt cuyo nombre trae variantes de **mix / mail / mailaccess** se descargan SOLOS, **sin peso mínimo**, a `HJDescargas_Imap` (nuevos) con ciclo 24h → `Archivo_Imap` (histórico) → borrado, idéntico al silo hotmail.
+- **Detector** (`es_nombre_imap`): normaliza leet (1/!/¡→i, 4→a, 0→o, 3→e, 5→s...) y matchea tokens — cubre `mix, m1x, m¡x, m!x, mixs, mail, m4il, ma¡l, ma1l, ma!l, mails, mailaccess, ma¡l4access, mail4access, mail acces(s)` + typos con distancia ≤1 (maill, mailz...). Anti-falsos-positivos: **hotmail tiene prioridad** ("hotmail mix.txt" → silo hotmail) y el fuzzy solo acepta tokens que empiezan por "m" (nail/bail/email/gmail NO cuelan).
+- **`/imap`** abre el menú **「📬 IMAP EXTRACTOR」** (mismo formato limpio que HOTMAIL EXTRACTOR, sin tarjeta INFO) con ⚡ Nuevos (24h) / 📅 Antiguos / 🗂️ Todos y entrega **líneas únicas** del silo (dedupe global, motor compartido con hotmail).
+- **Acceso 1:1 con /url y /hotmail**: en grupo permitido todos pueden (resultado al grupo); en privado reglas FREE (búsqueda inicial gratis / bono) o VIP+.
+- Panel **GESTIÓN DE ARCHIVOS**: nuevo bloque 📬 IMAP (Total / Últimas 24h / Histórico) y botón **📬 IMAP Data** en el menú VIP/SELLER/ADMIN.
+- Anti-duplicados (v4.2.14) aplica también al silo imap (reposts no se re-bajan).
+
+### 👻 /hotmailchk retirado del bot (código fantasma)
+- El comando **ya no se registra**: escribir `/hotmailchk` no hace nada (no existe).
+- El código queda en el repo **"de decoración"** (handlers comentados con banner 👻 GHOST) — revivible re-registrando los handlers y el botón.
+- Botón "🔥 Hotmail Checker" eliminado de los menús; referencias quitadas de las listas de comandos por rol.
+
+### 🔁 /imap (checker) → /imapchk
+- El IMAP Checker (keywords/country/remitentes + ZIP) ahora es **/imapchk** — nombre liberado para el extractor. Textos de ayuda actualizados (ES/EN/PT).
+
 ## [4.2.15] — /updateBot: fin del aborto en falso (filenames con corchetes) + datos runtime fuera de git
 
 ### 🐛 Causa raíz del "Update abortado — hay cambios locales sin commitear" eterno
