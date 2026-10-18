@@ -203,6 +203,21 @@ class Database:
                         except Exception as e:
                             logger.error(f"Error migrando DB ({col_name}): {e}")
 
+                # ── Migración v4.2.20: expires_at en allowed_groups ──
+                # /gp <dias> autoriza un grupo por tiempo limitado.
+                # NULL = permanente (comportamiento clásico de /gp a secas).
+                cur.execute("""
+                    SELECT column_name FROM information_schema.columns
+                    WHERE table_name = 'allowed_groups'
+                """)
+                ag_cols = {row['column_name'] for row in cur.fetchall()}
+                if 'expires_at' not in ag_cols:
+                    try:
+                        cur.execute("ALTER TABLE allowed_groups ADD COLUMN expires_at TEXT")
+                        logger.info("Migrando DB: columna 'expires_at' agregada a allowed_groups")
+                    except Exception as e:
+                        logger.error(f"Error migrando allowed_groups.expires_at: {e}")
+
             conn.commit()
         logger.info("Schema de PostgreSQL verificado/creado correctamente")
 
@@ -363,7 +378,13 @@ class Database:
                         base = now
                 else:
                     base = now
-                expiry = (base + timedelta(days=days)).isoformat()
+                # v4.2.20: key ilimitada (days=0) → VIP permanente con la
+                # convención +36500 días (la misma de /vip sin dias). NO usar
+                # vip_expiry NULL: el role-check de roles.py lo trata como FREE.
+                if days and days > 0:
+                    expiry = (base + timedelta(days=days)).isoformat()
+                else:
+                    expiry = (base + timedelta(days=36500)).isoformat()
                 cur.execute(
                     "UPDATE keys SET is_used = 1, used_by = %s WHERE key_code = %s",
                     (uid, code)
@@ -522,13 +543,25 @@ class Database:
 
     # ── Grupos permitidos ──────────────────────────────────
 
-    def add_allowed_group(self, chat_id: int, added_by: int):
+    def add_allowed_group(self, chat_id: int, added_by: int, days: int = 0):
+        """Registrar/renovar un grupo permitido.
+
+        v4.2.20: days=0 → permanente (clásico /gp a secas); days>0 → el grupo
+        expira automáticamente (barrido horario + filtrado en carga).
+        Re-registrar un grupo existente RENUEVA/reemplaza su vigencia
+        (antes era DO NOTHING y un segundo /gp se ignoraba).
+        """
+        expires_at = None
+        if days and days > 0:
+            expires_at = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
         with self.pool.connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO allowed_groups (chat_id, added_by) "
-                    "VALUES (%s, %s) ON CONFLICT (chat_id) DO NOTHING",
-                    (chat_id, added_by)
+                    "INSERT INTO allowed_groups (chat_id, added_by, expires_at) "
+                    "VALUES (%s, %s, %s) "
+                    "ON CONFLICT (chat_id) DO UPDATE SET "
+                    "added_by = EXCLUDED.added_by, expires_at = EXCLUDED.expires_at",
+                    (chat_id, added_by, expires_at)
                 )
             conn.commit()
 
@@ -539,10 +572,48 @@ class Database:
             conn.commit()
 
     def get_allowed_groups(self) -> list:
+        """Grupos permitidos vigentes. v4.2.20: elimina de paso los que
+        ya expiraron (expires_at en el pasado); permanentes (NULL) siempre."""
+        now_iso = datetime.now(timezone.utc).isoformat()
         with self.pool.connection() as conn:
             with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM allowed_groups "
+                    "WHERE expires_at IS NOT NULL AND expires_at <= %s",
+                    (now_iso,)
+                )
                 cur.execute("SELECT chat_id FROM allowed_groups")
-                return [row['chat_id'] for row in cur.fetchall()]
+                groups = [row['chat_id'] for row in cur.fetchall()]
+            conn.commit()
+        return groups
+
+    def get_group_expiry(self, chat_id: int):
+        """expires_at (iso str) del grupo, o None si es permanente/no existe."""
+        with self.pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT expires_at FROM allowed_groups WHERE chat_id = %s",
+                    (chat_id,)
+                )
+                row = cur.fetchone()
+        return row['expires_at'] if row else None
+
+    def cleanup_expired_groups(self) -> int:
+        """v4.2.20: eliminar grupos permitidos cuya vigencia expiró.
+        Llamado por el cleanup_loop horario de bot.py. Devuelve cuántos."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self.pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM allowed_groups "
+                    "WHERE expires_at IS NOT NULL AND expires_at <= %s",
+                    (now_iso,)
+                )
+                count = cur.rowcount
+            if count > 0:
+                conn.commit()
+                logger.info(f"Grupos permitidos expirados eliminados: {count}")
+        return count
 
     # ── Download log ───────────────────────────────────────
 

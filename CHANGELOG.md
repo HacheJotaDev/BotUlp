@@ -2,6 +2,51 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.20] — /keygen, /vip y /gp con días (sin días = ilimitado) + tarjeta KEY GENERADA rediseñada
+
+### ✨ Nuevo: `/keygen [dias]` (solo ADMIN)
+- Genera una key al vuelo sin abrir el panel: `/keygen 30` → key de 30 días; `/keygen` a secas → **key ilimitada** (al canjearla el usuario recibe VIP permanente).
+- Responde con la tarjeta KEY GENERADA (la misma del panel de botones). Si el argumento no es numérico (`/keygen abc`) muestra guía de uso — nunca silencio. Anti-mudez con try/except (patrón v4.2.19).
+- El panel de botones 1/3/7/30 sigue intacto para ADMIN **y SELLER** (el botón ♾️ NO se añadió a propósito: los sellers no deben poder crear keys ilimitadas; eso queda exclusivo del admin vía `/keygen`).
+
+### ✨ Nuevo: `/vip [dias] [user_id]` (solo ADMIN)
+- `/vip 30` respondiendo a un mensaje → VIP de 30 días al usuario respondido.
+- `/vip 30 620123456` → VIP de 30 días a ese ID. `/vip` respondiendo → **VIP ilimitado** (permanente).
+- Compatibilidad preservada: `/vip <user_id>` (ID grande, > 10000) sigue otorgando VIP permanente como antes.
+- Confirmación elegante: `╭───✦ 💎 VIP ASIGNADO` con Usuario / Duración / Vence (fecha exacta o "Nunca").
+
+### ✨ Nuevo: `/gp [dias]` (solo ADMIN, dentro del grupo)
+- `/gp 30` → el grupo queda autorizado por 30 días; `/gp` a secas → permanente (comportamiento clásico intacto).
+- Re-registrar un grupo **renueva** su vigencia (antes un segundo `/gp` se ignoraba silenciosamente con DO NOTHING).
+- Confirmación: `╭───✦ 👥 GRUPO AUTORIZADO` con Grupo / Duración / Vence.
+
+### 🛡️ Infraestructura de expiración de grupos
+- Migración idempotente: columna `expires_at` en `allowed_groups` (NULL = permanente).
+- `db.add_allowed_group(chat_id, added_by, days)` calcula `expires_at`; `db.get_allowed_groups()` filtra y **borra de paso** los expirados (carga de arranque siempre limpia).
+- Nuevo `db.cleanup_expired_groups()` enganchado al cleanup_loop horario de bot.py: elimina grupos vencidos y refresca `state.allowed_groups` en caliente — el grupo autorizado "por 30 días" pierde el acceso solo, sin reiniciar el bot.
+- `db.get_group_expiry()` de apoyo.
+
+### ♾️ Keys ilimitadas (days = 0)
+- `db.gen_key(creator, 0)` crea la key con `days=0`; `db.redeem()` la interpreta como VIP permanente con la convención +36500 días (la misma de `/vip` sin dias — NO se usa `vip_expiry` NULL porque el role-check lo trataría como FREE).
+- `_vip_expiry_str` detecta la convención (año ≥ 2100) y muestra `♾️ Ilimitado` en la confirmación de canje en vez del año 2116. La lista de VIPs del panel admin también muestra `♾️` para permanentes.
+
+### ✨ Tarjeta KEY GENERADA rediseñada (mockup del vendedor)
+```
+╭───✦ ✅ KEY GENERADA
+├─ 🔑 Código:
+HJ-PI3XJUZ632QX
+├─ 🔗 Canje: https://t.me/UlpHJBot?start=HJ-PI3XJUZ632QX
+├─ 📅 Duración: 1 días
+├─ ☄️ También puedes canjear con:
+/canjear HJ-PI3XJUZ632QX
+╰───✦
+```
+- Código y comando `/canjear` en línea propia (monoespaciado, tap-to-copy); sin footer. Duración preformateada (`1 días` … `♾️ Ilimitado`). Traducido a ES/EN/PT + `bot_locale.py` base sincronizado.
+
+### 🧪 Tests
+- `scripts/test_v4220_keys_admin.py` — checks de fuente (patrones /keygen, /vip, /gp; migración; convención 36500), render x3 del mockup, y pruebas funcionales con cliente Telethon fake (cmd_keygen admin/no-admin/arg inválido; cmd_vip con días respondiendo, con ID, permanente legacy, hints; cmd_gp permanente/con días/no-grupo) + BD real Neon (key ilimitada canjeada → vip_expiry año 2100+, key de días → fecha correcta, grupos con expires_at renovado/expirado/filtrado) con limpieza total.
+- Regresión completa verde: test_v4219 83/83 · test_v4218 79/79 · test_v4217 36/36 · test_v4216 138/138 · test_v4215 39/39 · test_v4212 63/63 · test_v4211 TODO OK · e2e TODO OK.
+
 ## [4.2.19] — Sistema de keys: el bot SIEMPRE responde al canje + tarjeta KEY GENERADA con link de canje
 
 ### 🐛 Fix real: canjeaba la key y el bot se quedaba MUDO

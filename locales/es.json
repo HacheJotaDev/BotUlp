@@ -49,7 +49,7 @@
   "imap_too_many_keywords": "╭───✦ ⚠️ **IMAP CHECKER**\n├─ Máximo **10 keywords** permitidas\n├─ Usaste: `{0}`\n╰───✦",
   "imap_zip_caption_country": "╭───✦ 🌍 **IMAP + PAÍSES**\n├─ 📊 Total: `{0}` · ✅ Hits: `{1}` · ❌ Bads: `{2}`\n├─ ⏱️ Tiempo: `{3:.1f}s`\n├─ 🌍 Países detectados: `{4}`\n╰───✦\n\n📁 `all_hits.txt` — todos los hits\n📁 `bad_accounts.txt` — cuentas fallidas\n📁 `domains/` — agrupados por dominio\n📁 `countries/` — por país con resumen",
   "imap_zip_caption_country_kw": "╭───✦ 🌍 **IMAP + KEYWORDS + PAÍSES**\n├─ 📊 Total: `{0}` · ✅ Hits: `{1}` · ❌ Bads: `{2}`\n├─ ⏱️ Tiempo: `{3:.1f}s`\n├─ 🔎 Keywords: `{4}`\n├─ 🌍 Países detectados: `{6}`\n╰───✦\n\n📁 `all_hits.txt` — {5} hits totales\n📁 `bad_accounts.txt` — cuentas fallidas\n📁 `domains/` — agrupados por dominio\n📁 `keywords/` — por keyword con detalle\n📁 `countries/` — por país con resumen",
-  "key_generated": "╭───✦ ✅ **KEY GENERADA**\n├─ 🔑 Código:  `{0}`\n├─ 🔗 Canje: {1}\n├─ 📅 Duración: **{2} días**\n O usa el comando `/canjear  {0}`\n╰───✦\n\nYa tu sabes\n\n📤 Comparte el link con tu cliente para activarlo.",
+  "key_generated": "╭───✦ ✅ **KEY GENERADA**\n├─ 🔑 Código:\n`{0}`\n├─ 🔗 Canje: {1}\n├─ 📅 Duración: **{2}**\n├─ ☄️ También puedes canjear con:\n`/canjear {0}`\n╰───✦",
   "language_selected": "🌐 Idioma actualizado correctamente.",
   "list_footer": "╰───✦",
   "list_more": "├─ … y **{0}** más",

@@ -296,15 +296,13 @@ class LocaleManager:
             ),
             "key_generated": (
                 "╭───✦ ✅ **KEY GENERADA**\n"
-                "├─ 🔑 Código:  `{0}`\n"
+                "├─ 🔑 Código:\n"
+                "`{0}`\n"
                 "├─ 🔗 Canje: {1}\n"
-                "├─ 📅 Duración: **{2} días**\n"
-                " O usa el comando `/canjear  {0}`\n"
-                "╰───✦\n"
-                "\n"
-                "Ya tu sabes\n"
-                "\n"
-                "📤 Comparte el link con tu cliente para activarlo."
+                "├─ 📅 Duración: **{2}**\n"
+                "├─ ☄️ También puedes canjear con:\n"
+                "`/canjear {0}`\n"
+                "╰───✦"
             ),
 
             # ── Compra VIP ──────────────────────────────────

@@ -117,6 +117,17 @@ async def main():
                     logger.info(f"Limpieza VIP: {cleaned} usuarios expirados removidos")
             except Exception as e:
                 logger.error(f"CLEANUP_VIPS_DB_ERROR: {e}", exc_info=True)
+
+            # ── 3) Grupos permitidos expirados (v4.2.20: /gp <dias>) ──
+            # Elimina filas con expires_at vencido y refresca el set en memoria
+            # para que el grupo deje de tener acceso en caliente.
+            try:
+                removed = _db.cleanup_expired_groups()
+                if removed > 0:
+                    state.allowed_groups = set(_db.get_allowed_groups())
+                    logger.info(f"Limpieza grupos: {removed} grupos expirados removidos")
+            except Exception as e:
+                logger.error(f"CLEANUP_GROUPS_DB_ERROR: {e}", exc_info=True)
             await asyncio.sleep(3600)  # Cada hora
 
     state.cleanup_task = asyncio.create_task(cleanup_loop())

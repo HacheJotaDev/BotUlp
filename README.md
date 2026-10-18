@@ -136,9 +136,11 @@ pm2 startup
 ### 🔐 Admin
 | Comando | Descripción |
 |---------|-------------|
-| `/vip <id>` | VIP permanente · `/unvip <id>` remover |
+| `/keygen [dias]` | Generar key al vuelo · ♾️ sin dias = key ilimitada |
+| `/vip [dias] [id]` | VIP directo (responde a un mensaje o pasa ID) · ♾️ sin dias = permanente |
+| `/vip <id>` | VIP permanente (forma clásica) · `/unvip <id>` remover |
 | `/seller <id>` | Asignar seller · `/unseller <id>` remover |
-| `/gp` / `/ungp` | Permitir / bloquear grupo actual |
+| `/gp [dias]` / `/ungp` | Permitir grupo actual · con dias expira solo · ♾️ sin dias = permanente |
 | `/bc <texto>` · `/bcvip <texto>` | Broadcast global / solo VIPs |
 | `/sizedisp` | Uso de disco del VPS |
 | `/updateBot` | Actualizar desde GitHub y reiniciar |

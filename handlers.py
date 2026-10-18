@@ -21,7 +21,7 @@ import subprocess
 import time
 import tempfile
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from telethon import events
@@ -1963,14 +1963,28 @@ def register_handlers(bot_client):
 
     def _vip_expiry_str(uid: int) -> str:
         """Fecha de expiración VIP (YYYY-MM-DD) del usuario, para mostrarla
-        justo después de canjear una key. Nunca lanza (fallback '—')."""
+        justo después de canjear una key. Nunca lanza (fallback '—').
+        v4.2.20: VIP permanente (convención +36500 días) → '♾️ Ilimitado'
+        en vez del año 2116."""
         try:
             exp = db.get_user(uid).get('vip_expiry')
             if exp:
-                return str(exp)[:10]
+                s = str(exp)
+                if s[:4].isdigit() and int(s[:4]) >= 2100:
+                    return "♾️ Ilimitado"
+                return s[:10]
         except Exception:
             pass
         return "—"
+
+    def _dur_txt(days: int, lang: str = 'es') -> str:
+        """v4.2.20: duración legible para tarjetas de keys/VIP/grupo.
+        days <= 0 → ilimitado (sin dias). '📅 Duración: 1 días' según mockup."""
+        if not days or days <= 0:
+            return {'es': '♾️ Ilimitado', 'en': '♾️ Unlimited',
+                    'pt': '♾️ Ilimitado'}.get(lang, '♾️ Ilimitado')
+        unit = {'es': 'días', 'en': 'days', 'pt': 'dias'}.get(lang, 'días')
+        return f"{days} {unit}"
 
     @bot_client.on(events.NewMessage(pattern=r"/(start|cmds)(@\w+)?(\s|$)"))
     async def start(e):
@@ -2167,13 +2181,117 @@ def register_handlers(bot_client):
             parse_mode='md'
         )
 
-    @bot_client.on(events.NewMessage(pattern=r"/vip (\d+)"))
-    async def cmd_vip_perm(e):
+    @bot_client.on(events.NewMessage(pattern=r"/keygen(?:@\w+)?(?:\s+(\S+))?\s*$"))
+    async def cmd_keygen(e):
+        """v4.2.20: /keygen [dias] — generar una key al vuelo, sin menú.
+
+        • /keygen 30  → key de 30 días
+        • /keygen     → key ILIMITADA (VIP permanente al canjearla)
+        • /keygen abc → guía de uso (nunca silencio)
+        Solo ADMIN (los sellers conservan el panel de botones 1/3/7/30)."""
         if get_user_role(e.sender_id) != UserRole.ADMIN:
             return
-        uid = int(e.pattern_match.group(1))
-        db.set_role(uid, 'VIP', days=36500)
-        await e.reply(f"✅ Usuario `{uid}` ahora es **VIP Permanente**.", parse_mode='md')
+        lang = 'es'
+        try:
+            user = db.get_user(e.sender_id)
+            lang = user.get('language', 'es') if user else 'es'
+            arg = (e.pattern_match.group(1) or "").strip()
+            if arg and not arg.isdigit():
+                await e.reply(
+                    "╭───✦ 🔑 **GENERADOR DE KEYS**\n"
+                    "├─ Uso: `/keygen <dias>`\n"
+                    "├─ Ejemplo: `/keygen 30`\n"
+                    "├─ ♾️ Sin dias = key ilimitada\n"
+                    "╰───✦",
+                    parse_mode='md'
+                )
+                return
+            days = int(arg) if arg else 0
+            code = db.gen_key(e.sender_id, days)
+            link = f"https://t.me/{config.BOT_USERNAME}?start={code}"
+            await e.reply(
+                UI.text("key_generated", lang, code, link, _dur_txt(days, lang)),
+                parse_mode='md'
+            )
+        except Exception:
+            # Anti-mudez (patrón v4.2.19): el admin SIEMPRE recibe respuesta
+            logger.exception("Error en /keygen")
+            try:
+                await e.reply("⚠️ Error generando la key, intenta de nuevo.", parse_mode=None)
+            except Exception:
+                pass
+
+    @bot_client.on(events.NewMessage(pattern=r"/vip(?:@\w+)?(?:\s+(\S+))?(?:\s+(\S+))?\s*$"))
+    async def cmd_vip_perm(e):
+        """v4.2.20: /vip [dias] [user_id] — asignar VIP directo (solo ADMIN).
+
+        • /vip <user_id>              → VIP permanente (forma vieja, ID grande)
+        • /vip (respondiendo)         → VIP permanente (ilimitado) al respondido
+        • /vip <dias> (respondiendo)  → VIP con dias al usuario respondido
+        • /vip <dias> <user_id>       → VIP con dias a ese ID
+        Sin dias = ilimitado. Disambiguación: un solo número ≤ 10000 se
+        interpreta como DIAS (nadie pide 10000 días); mayor, como user_id."""
+        if get_user_role(e.sender_id) != UserRole.ADMIN:
+            return
+        g1 = (e.pattern_match.group(1) or "").strip()
+        g2 = (e.pattern_match.group(2) or "").strip()
+        target = None
+        try:
+            replied = await e.get_reply_message()
+            if replied and replied.sender_id:
+                target = replied.sender_id
+        except Exception:
+            target = None
+
+        if g1 and g1.isdigit():
+            n = int(g1)
+            if g2:
+                if not g2.isdigit():
+                    return await e.reply("⚠️ Uso: `/vip <dias> <user_id>`", parse_mode='md')
+                days, target = n, int(g2)
+            elif n > 10000:
+                days, target = 0, n        # compatibilidad: /vip <user_id> viejo
+            else:
+                days = n                   # dias al usuario respondido
+        elif g1:
+            return await e.reply(
+                "⚠️ Uso: `/vip <dias>` respondiendo a un mensaje, o `/vip <dias> <user_id>`",
+                parse_mode='md'
+            )
+        else:
+            days = 0                       # /vip a secas → permanente al respondido
+
+        if not target:
+            return await e.reply(
+                "╭───✦ 💎 **ASIGNAR VIP**\n"
+                "├─ Responde a un mensaje: `/vip <dias>`\n"
+                "├─ O directo: `/vip <dias> <user_id>`\n"
+                "├─ ♾️ Sin dias = VIP ilimitado\n"
+                "╰───✦",
+                parse_mode='md'
+            )
+
+        try:
+            if days > 0:
+                db.set_role(target, 'VIP', days=days)
+                vence = (datetime.now(timezone.utc) + timedelta(days=days)).strftime('%Y-%m-%d')
+                dur = f"{days} días"
+            else:
+                # Convención permanente del bot (rol-check exige fecha futura)
+                db.set_role(target, 'VIP', days=36500)
+                vence, dur = "Nunca", "♾️ Ilimitado"
+        except Exception:
+            logger.exception("Error en /vip")
+            return await e.reply("⚠️ Error asignando VIP, intenta de nuevo.", parse_mode=None)
+
+        await e.reply(
+            f"╭───✦ 💎 **VIP ASIGNADO**\n"
+            f"├─ 👤 Usuario: `{target}`\n"
+            f"├─ 📅 Duración: **{dur}**\n"
+            f"├─ ⏳ Vence: **{vence}**\n"
+            f"╰───✦",
+            parse_mode='md'
+        )
 
     @bot_client.on(events.NewMessage(pattern=r"/seller (\d+)"))
     async def cmd_seller(e):
@@ -2199,15 +2317,45 @@ def register_handlers(bot_client):
         db.remove_vip(uid)
         await e.reply(f"🗑 Usuario `{uid}` eliminado de VIP.", parse_mode='md')
 
-    @bot_client.on(events.NewMessage(pattern=r"/gp"))
+    @bot_client.on(events.NewMessage(pattern=r"/gp(?:@\w+)?(?:\s+(\S+))?\s*$"))
     async def cmd_gp(e):
+        """v4.2.20: /gp [dias] — autorizar el grupo actual (solo ADMIN).
+
+        • /gp      → permanente (comportamiento clásico intacto)
+        • /gp 30   → el grupo queda autorizado por 30 dias
+        • /gp abc  → guía de uso (nunca silencio)
+        Re-registrar RENUEVA la vigencia (antes se ignoraba)."""
         if get_user_role(e.sender_id) != UserRole.ADMIN:
             return
         if not e.is_group:
             return await e.reply("⚠️ Este comando solo funciona en grupos.")
+        arg = (e.pattern_match.group(1) or "").strip()
+        if arg and not arg.isdigit():
+            return await e.reply(
+                "⚠️ Uso: `/gp <dias>` · ♾️ Sin dias = permanente",
+                parse_mode=None
+            )
+        days = int(arg) if arg else 0
+        try:
+            db.add_allowed_group(e.chat_id, e.sender_id, days=days)
+        except Exception:
+            logger.exception("Error en /gp")
+            return await e.reply("⚠️ Error guardando el grupo, intenta de nuevo.", parse_mode=None)
         state.allowed_groups.add(e.chat_id)
-        db.add_allowed_group(e.chat_id, e.sender_id)
-        await e.reply("✅ Grupo añadido a la lista permitida y guardado en la base de datos.")
+        title = getattr(e.chat, 'title', None) or str(e.chat_id)
+        if days > 0:
+            vence = (datetime.now(timezone.utc) + timedelta(days=days)).strftime('%Y-%m-%d')
+            dur = f"{days} días"
+        else:
+            vence, dur = "Nunca", "♾️ Ilimitado"
+        await e.reply(
+            f"╭───✦ 👥 **GRUPO AUTORIZADO**\n"
+            f"├─ 🏷️ Grupo: {title}\n"
+            f"├─ 📅 Duración: **{dur}**\n"
+            f"├─ ⏳ Vence: **{vence}**\n"
+            f"╰───✦",
+            parse_mode='md'
+        )
 
     @bot_client.on(events.NewMessage(pattern=r"/ungp"))
     async def cmd_ungp(e):
@@ -3485,8 +3633,12 @@ def register_handlers(bot_client):
                     lines = [UI.text("vip_list_header", lang, len(vips))]
                     for v in vips[:50]:
                         exp = v.get('vip_expiry') or 'N/A'
-                        if exp != 'N/A' and len(exp) > 10:
-                            exp = exp[:10]
+                        if exp != 'N/A':
+                            # v4.2.20: VIP permanente (convención +36500d) → ♾️
+                            if len(exp) >= 4 and exp[:4].isdigit() and int(exp[:4]) >= 2100:
+                                exp = '♾️'
+                            elif len(exp) > 10:
+                                exp = exp[:10]
                         uname = await _lookup_username(v['user_id'])
                         lines.append(f"├─ 👤 `{v['user_id']}`{uname} · ⏳ `{exp}`")
                     if len(vips) > 50:
@@ -3512,7 +3664,7 @@ def register_handlers(bot_client):
 
                 back_data = "admin_enter" if role == UserRole.ADMIN else "back_main"
                 await e.edit(
-                    UI.text("key_generated", lang, code, link, days),
+                    UI.text("key_generated", lang, code, link, _dur_txt(days, lang)),
                     buttons=Keyboards.back(back_data),
                     parse_mode='md'
                 )
