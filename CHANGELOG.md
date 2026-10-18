@@ -2,6 +2,12 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.13] — /hotmail: menú limpio + "sin datos" discreto
+
+### 🧹 Textos ajustados (ES/EN/PT)
+- `hotmail_dl_info`: **eliminada la tarjeta ℹ️ INFO** — el menú ahora es solo la tarjeta **「📥 HOTMAIL EXTRACTOR」** con el selector de periodo (⚡ Nuevos · 📅 Antiguos · 🗂️ Todos) y los botones.
+- `hotmail_extract_empty`: **sin mención de canales ni archivos** — el aviso queda en una sola línea discreta ("Todavía no hay nada en ese periodo"), manteniendo el botón de volver.
+
 ## [4.2.12] — /hotmail: menú HOTMAIL EXTRACTOR + HOTMAIL en Gestión de Archivos
 
 ### 📥 Menú «HOTMAIL EXTRACTOR» rediseñado
