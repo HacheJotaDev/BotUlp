@@ -2,6 +2,18 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.15] — /updateBot: fin del aborto en falso (filenames con corchetes) + datos runtime fuera de git
+
+### 🐛 Causa raíz del "Update abortado — hay cambios locales sin commitear" eterno
+- **Bug**: el pre-check del `/updateBot` hacía `git show origin/main:<archivo>` por cada archivo untracked. Con nombres que llevan **[corchetes]** — p.ej. `[2541] MK2 CLOUD HOTMA!LS.txt` — git interpreta el path como **wildcard** y responde rc=0 aunque el archivo **no exista en el remoto** → el bot creía que las descargas hotmail colisionaban con el pull y abortaba **siempre**. Bucle muerto: sin update no llegaba el arreglo del propio updater.
+- **Fix**: comparación **exacta** contra `git ls-tree -r origin/main --name-only` (una sola llamada). Si el path no está literalmente en el remoto → no hay colisión y el pull sigue. Los corchetes ya no pueden provocar falsos positivos.
+
+### 🛡️ Blindaje adicional
+- `.gitignore`: añadidas `HJDescargas_Hotmail/` y `Archivo_Hotmail/` — las descargas del bot (datos runtime) **jamás** vuelven a aparecer como untracked ni pueden bloquear un update.
+- Si algún dato runtime colisionara igualmente con el pull → se **respalda automáticamente** en `SystemData/update_backup/<timestamp>/` y la actualización continúa (no se pierde nada).
+- El aborto con diagnóstico SSH ahora solo ocurre ante conflictos reales en **código fuente**.
+- **Rutas ancladas al repo** (`BASE_DIR` en config.py): descargas, caché y `locales/` resuelven siempre respecto a la carpeta del bot y no del cwd del proceso (pm2, manual, tests — mismo resultado siempre).
+
 ## [4.2.14] — /hotmail con lógica idéntica a /url (FREE incluido) + anti-duplicados de descargas
 
 ### 🆓 /hotmail ahora es 1:1 con /url (incluye usuarios FREE)

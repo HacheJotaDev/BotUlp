@@ -13,7 +13,9 @@ SystemData/
 bot_activity.log
 *.log
 HJDescargas/
+HJDescargas_Hotmail/
 Archivo_Historico/
+Archivo_Hotmail/
 Cache_Resultados/
 Temp_Parts/
 venv/

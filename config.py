@@ -143,8 +143,14 @@ def _resolve_ipn_url() -> str:
 
 @dataclass
 class Config:
+    # Raíz del repo (donde vive config.py). Ancla TODAS las rutas runtime para
+    # que el bot funcione igual sin importar el cwd desde el que se lance
+    # (pm2, manual, tests) — evita p.ej. que locales/ no cargue si el cwd no
+    # es el repo.
+    BASE_DIR: Path = Path(__file__).resolve().parent
+
     # ── Version ──────────────────────────────────────────────
-    VERSION: str = "4.2.14"
+    VERSION: str = "4.2.15"
 
     # ── Telegram ─────────────────────────────────────────────
     API_ID: int = int(os.getenv("API_ID", "33426502"))
@@ -170,15 +176,15 @@ class Config:
     # ── Directorios ──────────────────────────────────────────
     # (Solo para archivos locales: descargas, caché de resultados, etc.)
     # La base de datos ahora es PostgreSQL (ver DATABASE_URL).
-    DB_FILE: Path = Path("SystemData/hj_bot.db")
-    DIR_DOWNLOADS: Path = Path("HJDescargas")
-    DIR_ARCHIVE: Path = Path("Archivo_Historico")
+    DB_FILE: Path = BASE_DIR / "SystemData/hj_bot.db"
+    DIR_DOWNLOADS: Path = BASE_DIR / "HJDescargas"
+    DIR_ARCHIVE: Path = BASE_DIR / "Archivo_Historico"
     # v4.2.11: silo HOTMAIL (paralelo al sistema de descargas general)
-    DIR_HOTMAIL: Path = Path("HJDescargas_Hotmail")         # .txt hotmail recientes (nuevos)
-    DIR_HOTMAIL_ARCHIVE: Path = Path("Archivo_Hotmail")     # .txt hotmail antiguos
-    DIR_CACHE: Path = Path("Cache_Resultados")
-    DIR_LOCALES: Path = Path("locales")
-    DIR_TEMP: Path = Path("Temp_Parts")
+    DIR_HOTMAIL: Path = BASE_DIR / "HJDescargas_Hotmail"         # .txt hotmail recientes (nuevos)
+    DIR_HOTMAIL_ARCHIVE: Path = BASE_DIR / "Archivo_Hotmail"     # .txt hotmail antiguos
+    DIR_CACHE: Path = BASE_DIR / "Cache_Resultados"
+    DIR_LOCALES: Path = BASE_DIR / "locales"
+    DIR_TEMP: Path = BASE_DIR / "Temp_Parts"
 
     # ── Rendimiento ──────────────────────────────────────────
     MAX_WORKERS: int = min(os.cpu_count() or 8, 16)

@@ -137,6 +137,51 @@ async def _lookup_username(uid: int) -> str:
 # COMANDO /updateBot
 # ═════════════════════════════════════════════════════════════
 
+# Carpetas de datos que genera el bot en runtime (descargas, caché, etc.).
+# Un archivo sin tracking dentro de estas carpetas NUNCA debe bloquear una
+# actualización: son datos re-descargables, no código.
+RUNTIME_DATA_PREFIXES = (
+    'HJDescargas',
+    'HJDescargas_Hotmail',
+    'Archivo_Historico',
+    'Archivo_Hotmail',
+    'Cache_Resultados',
+    'Temp_Parts',
+    'SystemData',
+    'logs',
+)
+
+
+def _is_runtime_data_path(path: str) -> bool:
+    """True si el path vive dentro de una carpeta de datos runtime del bot."""
+    norm = path.replace('\\', '/').lstrip('./')
+    return any(norm.startswith(prefix + '/') for prefix in RUNTIME_DATA_PREFIXES)
+
+
+def _classify_untracked(untracked_paths, remote_paths):
+    """Clasificar untracked respecto a lo que realmente trae origin/main.
+
+    Devuelve (hard_conflicts, data_conflicts):
+    - hard_conflicts: untracked cuyo path existe EXACTAMENTE en origin/main y
+      NO es dato runtime → el pull lo pisaría → abortar.
+    - data_conflicts: ídem pero bajo carpetas runtime → respaldar y seguir.
+
+    ⚠️ Comparación EXACTA por nombre completo. Los paths con [corchetes] hacen
+    que `git show rev:path` devuelva rc=0 (git los trata como wildcard) aunque
+    el archivo NO exista en el remoto — eso abortaba el /updateBot en falso
+    SIEMPRE que hubiera un .txt hotmail con corchetes en el nombre.
+    """
+    hard, data = [], []
+    for path in untracked_paths or []:
+        if path not in remote_paths:
+            continue
+        if _is_runtime_data_path(path):
+            data.append(path)
+        else:
+            hard.append(path)
+    return hard, data
+
+
 class _FakeEvent:
     __slots__ = ('sender_id', '_reply')
     def __init__(self, sender_id, reply_func):
@@ -155,8 +200,11 @@ async def cmd_update_bot(event):
        - Si está limpio → git pull directo
        - Si hay cambios locales en archivos versionados → abortar con
          diagnóstico útil (no hacer stash/reset automático)
-       - Si hay archivos untracked que colisionarían con el pull → abortar
-         con mensaje claro indicando qué archivo causa el conflicto
+       - Si hay untracked cuyo path existe EXACTAMENTE en origin/main:
+           • dato runtime (descargas, caché) → respaldar y continuar
+           • código fuente → abortar con diagnóstico claro
+       (la comparación es exacta contra ls-tree; los paths con [corchetes]
+       ya NO generan falsos conflictos como con `git show rev:path`)
     3) Solo si el pull fue exitoso → instalar deps + reiniciar PM2
        Ante cualquier conflicto/error → abortar y mostrar diagnóstico
     """
@@ -201,7 +249,7 @@ async def cmd_update_bot(event):
             cwd=repo_dir
         )
         local_changes = []
-        untracked_conflicts = []  # untracked que pisarían archivos del pull
+        untracked_paths = []
         if status.returncode == 0:
             for line in status.stdout.splitlines():
                 if not line:
@@ -210,27 +258,54 @@ async def cmd_update_bot(event):
                 fname = line[3:].strip().strip('"')
                 # ' M' = modified, ' D' = deleted, '??' = untracked
                 if xy.startswith('??'):
-                    # Verificar si este untracked colisionaría con un archivo del pull
-                    # (el pull traería un archivo con ese nombre)
-                    check = subprocess.run(
-                        ['git', 'ls-files', '--', fname],
-                        capture_output=True, text=True, timeout=5,
-                        cwd=repo_dir
-                    )
-                    # Si git ls-files no lo lista pero git show lo trae del remoto → conflicto
-                    check_remote = subprocess.run(
-                        ['git', 'show', f'origin/main:{fname}'],
-                        capture_output=True, timeout=5,
-                        cwd=repo_dir
-                    )
-                    if check_remote.returncode == 0:
-                        untracked_conflicts.append(fname)
+                    untracked_paths.append(fname)
                 else:
                     # Cambio en archivo versionado — no se puede hacer pull sin conflicto
                     local_changes.append(f"{xy} {fname}")
 
+        # Set EXACTO de paths que trae origin/main (una sola llamada).
+        # ⚠️ NUNCA usar `git show origin/main:<path>` por archivo: si el nombre
+        # lleva [corchetes] git lo interpreta como wildcard y responde rc=0
+        # aunque el archivo NO exista en el remoto → falsos conflictos que
+        # abortaban el update SIEMPRE.
+        remote_paths = set()
+        ls_tree = subprocess.run(
+            ['git', 'ls-tree', '-r', 'origin/main', '--name-only'],
+            capture_output=True, text=True, timeout=15,
+            cwd=repo_dir
+        )
+        if ls_tree.returncode == 0:
+            remote_paths = set(ls_tree.stdout.splitlines())
+
+        hard_conflicts, data_conflicts = _classify_untracked(
+            untracked_paths, remote_paths
+        )
+
+        # ── Untracked en carpetas runtime → respaldar y continuar ──
+        # Son datos que generó el bot (descargas, caché, logs): jamás deben
+        # bloquear una actualización. Van a SystemData/update_backup/<ts>/
+        backed_up = []
+        if data_conflicts:
+            backup_root = os.path.join(
+                repo_dir, 'SystemData', 'update_backup',
+                time.strftime('%Y%m%d_%H%M%S')
+            )
+            for rel in data_conflicts:
+                try:
+                    src = os.path.join(repo_dir, rel)
+                    dst = os.path.join(backup_root, rel)
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.move(src, dst)
+                    backed_up.append(rel)
+                    logger.info(f"/updateBot: dato runtime respaldado: {rel}")
+                except Exception as move_err:
+                    logger.warning(
+                        f"/updateBot: no se pudo respaldar {rel}: {move_err}"
+                    )
+                    hard_conflicts.append(rel)
+
         # ── Abortar si hay conflictos que requieren intervención ──
-        if local_changes or untracked_conflicts:
+        if local_changes or hard_conflicts:
             diagnostic_lines = []
             if local_changes:
                 diagnostic_lines.append("Archivos locales modificados (no se pueden sobreescribir):")
@@ -238,12 +313,12 @@ async def cmd_update_bot(event):
                     diagnostic_lines.append(f"  • {c}")
                 if len(local_changes) > 10:
                     diagnostic_lines.append(f"  … y {len(local_changes)-10} más")
-            if untracked_conflicts:
+            if hard_conflicts:
                 diagnostic_lines.append("\nArchivos sin tracking que colisionan con el pull:")
-                for c in untracked_conflicts[:10]:
+                for c in hard_conflicts[:10]:
                     diagnostic_lines.append(f"  • {c}")
-                if len(untracked_conflicts) > 10:
-                    diagnostic_lines.append(f"  … y {len(untracked_conflicts)-10} más")
+                if len(hard_conflicts) > 10:
+                    diagnostic_lines.append(f"  … y {len(hard_conflicts)-10} más")
 
             diagnostic = "\n".join(diagnostic_lines)
             logger.error(f"/updateBot abortado por cambios locales:\n{diagnostic}")
@@ -267,7 +342,7 @@ async def cmd_update_bot(event):
                 # Mensaje muy largo → mostrar versión corta
                 await status_msg.edit(
                     f"⚠️ Update abortado — {len(local_changes)} cambios locales + "
-                    f"{len(untracked_conflicts)} conflictos. Mirá el log del bot.",
+                    f"{len(hard_conflicts)} conflictos. Mirá el log del bot.",
                     parse_mode='md'
                 )
             return
@@ -305,7 +380,16 @@ async def cmd_update_bot(event):
             return
 
         # ── Pull trajo cambios → instalar deps y reiniciar ─────
-        await _edit('update_bot_success')
+        success_text = UI.text('update_bot_success', lang)
+        if backed_up:
+            success_text += (
+                f"\n\n📦 {len(backed_up)} archivo(s) de datos respaldado(s) en "
+                "`SystemData/update_backup/` (colisionaban con el pull)"
+            )
+        try:
+            await status_msg.edit(success_text, parse_mode='md')
+        except Exception:
+            pass
 
         try:
             pip_result = subprocess.run(
