@@ -438,21 +438,109 @@ async def cmd_update_bot(event):
 # HELPERS
 # ═════════════════════════════════════════════════════════════
 
-def _get_commands_by_role(role: UserRole, has_free: bool = False) -> str:
-    """Construir la lista de comandos disponibles segun el rol del usuario."""
+# v4.2.18 — Descripciones de comandos para el menú 🧭 COMANDOS.
+# Fallback ES si el locale del usuario no tiene la key (los JSON de locales
+# son la fuente real; esto es red de seguridad).
+_CMD_FALLBACKS = {
+    'cmd_desc_start': 'Abrir el menú principal',
+    'cmd_desc_url': 'Ingresa la URL de cualquier web y el bot te da los resultados',
+    'cmd_desc_imap': 'Extrae combos mailaccess automáticamente',
+    'cmd_desc_hotmail': 'Extrae combos hotmail automáticamente',
+    'cmd_desc_imapchk': 'Verifica combos mail:pass vía IMAP (keywords, países y remitentes)',
+    'cmd_desc_canjear': 'Canjea una key VIP',
+    'cmd_desc_ping': 'Latencia, uptime y versión del bot',
+    'cmd_desc_vip': 'Dar VIP a un usuario',
+    'cmd_desc_unvip': 'Quitar el VIP a un usuario',
+    'cmd_desc_seller': 'Dar rango SELLER',
+    'cmd_desc_unseller': 'Quitar rango SELLER',
+    'cmd_desc_gp': 'Permitir un grupo (descargas automáticas)',
+    'cmd_desc_ungp': 'Quitar grupo permitido',
+    'cmd_desc_bc': 'Broadcast a todos los usuarios',
+    'cmd_desc_bcvip': 'Broadcast solo a VIPs',
+    'cmd_desc_sizedisp': 'Cambiar el tamaño mínimo de descarga',
+    'cmd_desc_updatebot': 'Actualizar el bot desde GitHub',
+    'cmd_vip_more': '💎 Con VIP desbloqueas /imapchk y más — renueva desde «💎 Renovar VIP»',
+}
+
+
+def _cmd_desc(key: str, lang: str) -> str:
+    """Descripción localizada de un comando (fallback ES)."""
+    try:
+        t = locale_manager.get(key, lang)
+    except Exception:
+        t = None
+    if not t or t == key:
+        t = _CMD_FALLBACKS.get(key, key)
+    return t
+
+
+def _cmd_line(cmd: str, key: str, lang: str) -> str:
+    """Línea del menú: ├─ ⚙ /comando — descripción."""
+    return f"├─ ⚙ {cmd} — {_cmd_desc(key, lang)}"
+
+
+def _get_commands_by_role(role: UserRole, lang: str = 'es', has_free: bool = False) -> str:
+    """Construir la lista de comandos disponibles segun el rol del usuario.
+
+    v4.2.18: formato multi-línea "├─ ⚙ /cmd — descripción" (uno por línea)
+    para la sección 🧭 COMANDOS del menú. Los templates welcome/welcome_new/
+    cmd_list inyectan el bloque SIN prefijo propio (cada línea ya trae ├─).
+    El menú FREE también lista los comandos del bot (incluidos /imap y
+    /hotmail, que puede usar con su búsqueda gratis) para que sepa qué
+    tiene el bot, más una línea teaser de los que desbloquea con VIP.
+    """
     if role == UserRole.FREE:
-        cmds = "/start • /canjear"
-        if has_free:
-            cmds += " • /url"
-        return cmds
-    elif role == UserRole.VIP:
-        return "/start • /url • /imap • /hotmail • /imapchk • /ping • /canjear"
-    elif role == UserRole.SELLER:
-        return "/start • /url • /imap • /hotmail • /imapchk • /ping"
-    elif role == UserRole.ADMIN:
-        return ("/start • /url • /imap • /hotmail • /imapchk • /vip • /unvip • /seller • /unseller"
-                " • /gp • /ungp • /bc • /bcvip • /sizedisp • /ping • /updateBot")
-    return "/start • /canjear"
+        return '\n'.join([
+            _cmd_line('/start', 'cmd_desc_start', lang),
+            _cmd_line('/url', 'cmd_desc_url', lang),
+            _cmd_line('/imap', 'cmd_desc_imap', lang),
+            _cmd_line('/hotmail', 'cmd_desc_hotmail', lang),
+            _cmd_line('/canjear', 'cmd_desc_canjear', lang),
+            f"├─ {_cmd_desc('cmd_vip_more', lang)}",
+        ])
+    if role == UserRole.VIP:
+        return '\n'.join([
+            _cmd_line('/start', 'cmd_desc_start', lang),
+            _cmd_line('/url', 'cmd_desc_url', lang),
+            _cmd_line('/imap', 'cmd_desc_imap', lang),
+            _cmd_line('/hotmail', 'cmd_desc_hotmail', lang),
+            _cmd_line('/imapchk', 'cmd_desc_imapchk', lang),
+            _cmd_line('/canjear', 'cmd_desc_canjear', lang),
+            _cmd_line('/ping', 'cmd_desc_ping', lang),
+        ])
+    if role == UserRole.SELLER:
+        return '\n'.join([
+            _cmd_line('/start', 'cmd_desc_start', lang),
+            _cmd_line('/url', 'cmd_desc_url', lang),
+            _cmd_line('/imap', 'cmd_desc_imap', lang),
+            _cmd_line('/hotmail', 'cmd_desc_hotmail', lang),
+            _cmd_line('/imapchk', 'cmd_desc_imapchk', lang),
+            _cmd_line('/ping', 'cmd_desc_ping', lang),
+        ])
+    if role == UserRole.ADMIN:
+        return '\n'.join([
+            _cmd_line('/url', 'cmd_desc_url', lang),
+            _cmd_line('/imap', 'cmd_desc_imap', lang),
+            _cmd_line('/hotmail', 'cmd_desc_hotmail', lang),
+            _cmd_line('/imapchk', 'cmd_desc_imapchk', lang),
+            _cmd_line('/vip', 'cmd_desc_vip', lang),
+            _cmd_line('/unvip', 'cmd_desc_unvip', lang),
+            _cmd_line('/seller', 'cmd_desc_seller', lang),
+            _cmd_line('/unseller', 'cmd_desc_unseller', lang),
+            _cmd_line('/gp', 'cmd_desc_gp', lang),
+            _cmd_line('/ungp', 'cmd_desc_ungp', lang),
+            _cmd_line('/bc', 'cmd_desc_bc', lang),
+            _cmd_line('/bcvip', 'cmd_desc_bcvip', lang),
+            _cmd_line('/sizedisp', 'cmd_desc_sizedisp', lang),
+            _cmd_line('/ping', 'cmd_desc_ping', lang),
+            _cmd_line('/updateBot', 'cmd_desc_updatebot', lang),
+        ])
+    # Fallback genérico
+    return '\n'.join([
+        _cmd_line('/start', 'cmd_desc_start', lang),
+        _cmd_line('/url', 'cmd_desc_url', lang),
+        _cmd_line('/canjear', 'cmd_desc_canjear', lang),
+    ])
 
 
 def _get_access_denied_text(lang: str) -> str:
@@ -1941,7 +2029,7 @@ def register_handlers(bot_client):
 
             free_n = _free_search_count(user) if role == UserRole.FREE else 0
 
-            welcome_text = UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, lang))
+            welcome_text = UI.text(welcome_key, lang, name, _get_commands_by_role(role, lang, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, lang))
 
             main_kb = Keyboards.main(role, lang, free_n) if e.is_private else None
             try:
@@ -1980,7 +2068,7 @@ def register_handlers(bot_client):
             lang = user.get('language', 'es')
             role = get_user_role(uid)
             has_free = db.is_new_user(uid) and role == UserRole.FREE
-            cmds = _get_commands_by_role(role, has_free)
+            cmds = _get_commands_by_role(role, lang, has_free)
             try:
                 await e.reply(
                     UI.text("cmd_list", lang, cmds),
@@ -2327,7 +2415,7 @@ def register_handlers(bot_client):
         name = await _display_name(e, uid)
         welcome_key = "welcome_new" if has_free else "welcome"
         await e.reply(
-            UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, lang)),
+            UI.text(welcome_key, lang, name, _get_commands_by_role(role, lang, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, lang)),
             buttons=Keyboards.main(role, lang, free_n),
             parse_mode='md'
         )
@@ -2786,7 +2874,7 @@ def register_handlers(bot_client):
                 name = await _display_name(e, uid)
                 welcome_key = "welcome_new" if has_free else "welcome"
                 await e.edit(
-                    UI.text(welcome_key, lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, lang)),
+                    UI.text(welcome_key, lang, name, _get_commands_by_role(role, lang, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, lang)),
                     buttons=Keyboards.main(role, lang, free_n),
                     parse_mode='md'
                 )
@@ -2794,7 +2882,7 @@ def register_handlers(bot_client):
             # ─── LISTA DE COMANDOS ───
             elif data == "cmd_list":
                 has_free = db.is_new_user(uid) and role == UserRole.FREE
-                cmds = _get_commands_by_role(role, has_free)
+                cmds = _get_commands_by_role(role, lang, has_free)
                 await e.edit(
                     UI.text("cmd_list", lang, cmds),
                     buttons=Keyboards.back(),
@@ -2951,7 +3039,7 @@ def register_handlers(bot_client):
                 name = await _display_name(e, uid)
                 welcome_key = "welcome_new" if has_free else "welcome"
                 await e.edit(
-                    UI.text(welcome_key, new_lang, name, _get_commands_by_role(role, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, new_lang)),
+                    UI.text(welcome_key, new_lang, name, _get_commands_by_role(role, new_lang, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, new_lang)),
                     buttons=Keyboards.main(role, new_lang, free_n),
                     parse_mode='md'
                 )

@@ -47,7 +47,6 @@ class Keyboards:
     # de una fila provocaba "AttributeError: 'list' object has no attribute
     # 'SUBCLASS_OF_ID'" al serializar el teclado (rompía /start para FREE y OWNER).
     LANG_BUTTON = Button.inline("🌐  Idioma", b"ch_lang")   # botón suelto (filas de 2)
-    LANG_BTN = [LANG_BUTTON]                               # fila de 1 (VIP/SELLER)
     SUPPORT_URL = [Button.url("📞  Soporte", f"https://t.me/{config.SUPPORT_CONTACT.lstrip('@')}")]
 
     @staticmethod
@@ -80,7 +79,7 @@ class Keyboards:
                  Button.inline("💎  Renovar VIP", b"buy_vip_info")],
                 [Button.inline("👥  Referidos", b"ref_info"),
                  Button.inline("📋  Comandos", b"cmd_list"),
-                 Keyboards.LANG_BTN],
+                 Keyboards.LANG_BUTTON],
             ]
 
         elif role == UserRole.SELLER:
@@ -93,7 +92,7 @@ class Keyboards:
                  Button.inline("🔑  Generar key", b"seller_genkey")],
                 [Button.inline("👥  Referidos", b"ref_info"),
                  Button.inline("📋  Comandos", b"cmd_list"),
-                 Keyboards.LANG_BTN],
+                 Keyboards.LANG_BUTTON],
             ]
 
         elif role == UserRole.ADMIN:

@@ -2,6 +2,21 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.18] — Menú con 🧭 COMANDOS descritos por rol + fix: VIP/SELLER veían su menú sin botones
+
+### 🐛 Fix real: el menú de VIP y SELLER salía SIN botones
+- **Causa**: en `ui.py`, la última fila del teclado VIP/SELLER metía `LANG_BTN` — que es una **LISTA** — dentro de la fila de botones. Un teclado con una lista anidada no se puede serializar en Telegram → la red de seguridad v4.2.4 reintentaba **sin botones**. El usuario veía el texto del menú pero ningún botón (era el mismo bug que ya se arregló en v4.2.4 para FREE/OWNER y que había regresado en VIP/SELLER).
+- **Fix**: usar `LANG_BUTTON` (el botón suelto 🌐) como en FREE/ADMIN y eliminar la constante lista `LANG_BTN`. VIP y SELLER vuelven a ver sus 4 filas: 🔍 Búsqueda / 📧 IMAP Checker · 📥 Hotmail Data / 📬 IMAP Data · 👤 Mi cuenta / 💎 Renovar VIP (o 🔑 Generar key) · 👥 Referidos / 📋 Comandos / 🌐 Idioma.
+
+### 🧭 COMANDOS con descripción en el menú (VIP, FREE, SELLER y ADMIN)
+- El bloque **🧭 COMANDOS** del menú ahora lista **cada comando en su propia línea** con su descripción: `├─ ⚙ /url — Ingresa la URL de cualquier web y el bot te da los resultados` (antes era una línea plana tipo `/start • /url • /imap`).
+- **VIP**: `/start`, `/url`, `/imap`, `/hotmail`, `/imapchk`, `/canjear`, `/ping` — todos con descripción.
+- **FREE**: también ve los comandos del bot (`/start`, `/url`, `/imap`, `/hotmail`, `/canjear`) para que sepa qué tiene el bot, más una línea teaser: `💎 Con VIP desbloqueas /imapchk y más — renueva desde «💎 Renovar VIP»`.
+- **SELLER**: los comandos de extracción + `/imapchk` + `/ping`. **ADMIN**: sus 15 comandos de gestión con descripción corta.
+- Descripciones traducidas a **ES/EN/PT** (18 keys nuevas `cmd_desc_*` + `cmd_vip_more`) con fallback ES dentro del código por si un locale queda incompleto.
+- `welcome` / `welcome_new` / `cmd_list`: la lista multi-línea se inyecta sin prefijo propio (cada línea ya trae su `├─`) — sin dobles prefijos ni separadores `•`.
+- El botón 📋 **Comandos** de todos los menús muestra ahora esta misma lista descrita por rol.
+
 ## [4.2.17] — Silos hotmail/imap con límite de peso: 0 KB a 100 MB
 
 ### 📦 Nuevo rango de peso de los silos hotmail e imap

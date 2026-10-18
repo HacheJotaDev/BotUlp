@@ -52,7 +52,7 @@ class LocaleManager:
                 "\n"
                 + SEP + "\n\n"
                 "╭───✦ 🧭 **COMANDOS**\n"
-                "├─ {1}\n"
+                "{1}\n"
                 "╰───✦\n"
                 "\n"
                 + SEP + "\n\n"
@@ -86,7 +86,7 @@ class LocaleManager:
                 "\n"
                 + SEP + "\n\n"
                 "╭───✦ 🧭 **COMANDOS**\n"
-                "├─ {1}\n"
+                "{1}\n"
                 "╰───✦\n"
                 "\n"
                 + SEP + "\n\n"
@@ -102,11 +102,31 @@ class LocaleManager:
             # ── Navegación general ──────────────────────────
             "cmd_list": (
                 "╭───✦ 🧭 **COMANDOS DISPONIBLES**\n"
-                "├─ {0}\n"
+                "{0}\n"
                 "╰───✦\n"
                 "\n"
                 "💡 También puedes usar los botones de abajo."
             ),
+
+            # ── Descripciones de comandos del menú (v4.2.18) ──
+            "cmd_desc_start": "Abrir el menú principal",
+            "cmd_desc_url": "Ingresa la URL de cualquier web y el bot te da los resultados",
+            "cmd_desc_imap": "Extrae combos mailaccess automáticamente",
+            "cmd_desc_hotmail": "Extrae combos hotmail automáticamente",
+            "cmd_desc_imapchk": "Verifica combos mail:pass vía IMAP (keywords, países y remitentes)",
+            "cmd_desc_canjear": "Canjea una key VIP",
+            "cmd_desc_ping": "Latencia, uptime y versión del bot",
+            "cmd_desc_vip": "Dar VIP a un usuario",
+            "cmd_desc_unvip": "Quitar el VIP a un usuario",
+            "cmd_desc_seller": "Dar rango SELLER",
+            "cmd_desc_unseller": "Quitar rango SELLER",
+            "cmd_desc_gp": "Permitir un grupo (descargas automáticas)",
+            "cmd_desc_ungp": "Quitar grupo permitido",
+            "cmd_desc_bc": "Broadcast a todos los usuarios",
+            "cmd_desc_bcvip": "Broadcast solo a VIPs",
+            "cmd_desc_sizedisp": "Cambiar el tamaño mínimo de descarga",
+            "cmd_desc_updatebot": "Actualizar el bot desde GitHub",
+            "cmd_vip_more": "💎 Con VIP desbloqueas /imapchk y más — renueva desde «💎 Renovar VIP»",
             "select_language": (
                 "╭───✦ 🌐 **IDIOMA / LANGUAGE**\n"
                 "├─ Selecciona tu idioma preferido\n"
