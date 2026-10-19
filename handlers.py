@@ -449,15 +449,17 @@ _CMD_FALLBACKS = {
     'cmd_desc_imapchk': 'Verifica combos mail:pass vía IMAP (keywords, países y remitentes)',
     'cmd_desc_canjear': 'Canjea una key VIP',
     'cmd_desc_ping': 'Latencia, uptime y versión del bot',
-    'cmd_desc_vip': 'Dar VIP a un usuario',
+    'cmd_desc_id': 'Muestra tu ID y el ID del chat',
+    'cmd_desc_keygen': 'Genera una key al vuelo: /keygen 30 · sin dias = ilimitada ♾️',
+    'cmd_desc_vip': 'Asigna VIP a un usuario: /vip 30 · sin dias = permanente',
     'cmd_desc_unvip': 'Quitar el VIP a un usuario',
     'cmd_desc_seller': 'Dar rango SELLER',
     'cmd_desc_unseller': 'Quitar rango SELLER',
-    'cmd_desc_gp': 'Permitir un grupo (descargas automáticas)',
+    'cmd_desc_gp': 'Autoriza un grupo: /gp 30 · sin dias = permanente',
     'cmd_desc_ungp': 'Quitar grupo permitido',
     'cmd_desc_bc': 'Broadcast a todos los usuarios',
     'cmd_desc_bcvip': 'Broadcast solo a VIPs',
-    'cmd_desc_sizedisp': 'Cambiar el tamaño mínimo de descarga',
+    'cmd_desc_sizedisp': 'Almacenamiento de la VPS: total, ocupado y libre',
     'cmd_desc_updatebot': 'Actualizar el bot desde GitHub',
     'cmd_vip_more': '💎 Con VIP desbloqueas /imapchk y más — renueva desde «💎 Renovar VIP»',
 }
@@ -496,6 +498,8 @@ def _get_commands_by_role(role: UserRole, lang: str = 'es', has_free: bool = Fal
             _cmd_line('/imap', 'cmd_desc_imap', lang),
             _cmd_line('/hotmail', 'cmd_desc_hotmail', lang),
             _cmd_line('/canjear', 'cmd_desc_canjear', lang),
+            _cmd_line('/ping', 'cmd_desc_ping', lang),
+            _cmd_line('/id', 'cmd_desc_id', lang),
             f"├─ {_cmd_desc('cmd_vip_more', lang)}",
         ])
     if role == UserRole.VIP:
@@ -507,6 +511,7 @@ def _get_commands_by_role(role: UserRole, lang: str = 'es', has_free: bool = Fal
             _cmd_line('/imapchk', 'cmd_desc_imapchk', lang),
             _cmd_line('/canjear', 'cmd_desc_canjear', lang),
             _cmd_line('/ping', 'cmd_desc_ping', lang),
+            _cmd_line('/id', 'cmd_desc_id', lang),
         ])
     if role == UserRole.SELLER:
         return '\n'.join([
@@ -515,14 +520,19 @@ def _get_commands_by_role(role: UserRole, lang: str = 'es', has_free: bool = Fal
             _cmd_line('/imap', 'cmd_desc_imap', lang),
             _cmd_line('/hotmail', 'cmd_desc_hotmail', lang),
             _cmd_line('/imapchk', 'cmd_desc_imapchk', lang),
+            _cmd_line('/canjear', 'cmd_desc_canjear', lang),
             _cmd_line('/ping', 'cmd_desc_ping', lang),
+            _cmd_line('/id', 'cmd_desc_id', lang),
         ])
     if role == UserRole.ADMIN:
         return '\n'.join([
+            _cmd_line('/start', 'cmd_desc_start', lang),
             _cmd_line('/url', 'cmd_desc_url', lang),
             _cmd_line('/imap', 'cmd_desc_imap', lang),
             _cmd_line('/hotmail', 'cmd_desc_hotmail', lang),
             _cmd_line('/imapchk', 'cmd_desc_imapchk', lang),
+            _cmd_line('/keygen', 'cmd_desc_keygen', lang),
+            _cmd_line('/canjear', 'cmd_desc_canjear', lang),
             _cmd_line('/vip', 'cmd_desc_vip', lang),
             _cmd_line('/unvip', 'cmd_desc_unvip', lang),
             _cmd_line('/seller', 'cmd_desc_seller', lang),
@@ -532,6 +542,7 @@ def _get_commands_by_role(role: UserRole, lang: str = 'es', has_free: bool = Fal
             _cmd_line('/bc', 'cmd_desc_bc', lang),
             _cmd_line('/bcvip', 'cmd_desc_bcvip', lang),
             _cmd_line('/sizedisp', 'cmd_desc_sizedisp', lang),
+            _cmd_line('/id', 'cmd_desc_id', lang),
             _cmd_line('/ping', 'cmd_desc_ping', lang),
             _cmd_line('/updateBot', 'cmd_desc_updatebot', lang),
         ])

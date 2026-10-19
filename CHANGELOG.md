@@ -2,6 +2,27 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.21] — Auditoría de menús: ningún comando sin listar en su menú
+
+### 🔍 Auditoría completa (comandos registrados vs. menús)
+- Se comparó el registro real de handlers (`events.NewMessage`) contra el bloque 🧭 COMANDOS de cada rol. Olvidos detectados y corregidos:
+  - **ADMIN: `/keygen` NO estaba en el menú** (agregado en v4.2.20 pero nunca listado) → ahora visible con su sintaxis `/keygen <dias> · sin dias = ilimitada ♾️`.
+  - **ADMIN**: faltaban también `/canjear`, `/start` e `/id` → añadidos (19 comandos listados).
+  - **SELLER**: faltaban `/canjear` e `/id` → añadidos (8 comandos).
+  - **VIP**: faltaba `/id` → añadido (8 comandos).
+  - **FREE**: faltaban `/ping` e `/id` → añadidos (7 comandos + teaser 💎).
+
+### ✨ Descripciones actualizadas a la sintaxis de v4.2.20
+- `cmd_desc_vip`: "Asigna VIP a un usuario: /vip 30 · sin dias = permanente".
+- `cmd_desc_gp`: "Autoriza un grupo: /gp 30 · sin dias = permanente".
+- NUEVAS: `cmd_desc_keygen` ("Genera una key al vuelo: /keygen 30 · sin dias = ilimitada ♾️") y `cmd_desc_id` ("Muestra tu ID y el ID del chat").
+- FIX preexistente de v4.2.18: `cmd_desc_sizedisp` decía "Cambiar el tamaño mínimo de descarga" pero el comando muestra el ALMACENAMIENTO de la VPS → ahora "Almacenamiento de la VPS: total, ocupado y libre" (README ya lo documentaba bien).
+- Sincronizado en 4 fuentes: `_CMD_FALLBACKS` (handlers.py), dict base de `bot_locale.py`, y locales es/en/pt (script idempotente `update_locales_v4221.py`).
+
+### ✅ Verificación
+- `test_v4221_menu_audit.py` (~60 checks): cada comando registrado del bot debe aparecer en el bloque COMANDOS de todos los roles que pueden usarlo (matriz de cobertura derivada de los patrones reales), descripciones presentes en los 3 idiomas + base, sin duplicados, orden estable, y render del menú completo.
+- Regresión completa: suites v4.2.12/v4.2.15/v4.2.16/v4.2.17/v4.2.18/v4.2.19/v4.2.20 verdes (asserts de VERSION actualizados a 4.2.21).
+
 ## [4.2.20] — /keygen, /vip y /gp con días (sin días = ilimitado) + tarjeta KEY GENERADA rediseñada
 
 ### ✨ Nuevo: `/keygen [dias]` (solo ADMIN)

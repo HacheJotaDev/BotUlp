@@ -17,15 +17,15 @@
   "cmd_desc_imapchk": "Verifica combos mail:pass via IMAP (keywords, países e remetentes)",
   "cmd_desc_canjear": "Resgata uma key VIP",
   "cmd_desc_ping": "Latência, uptime e versão do bot",
-  "cmd_desc_vip": "Dar VIP a um usuário",
+  "cmd_desc_vip": "Concede VIP a um usuário: /vip 30 · sem dias = permanente",
   "cmd_desc_unvip": "Remover VIP de um usuário",
   "cmd_desc_seller": "Dar patente SELLER",
   "cmd_desc_unseller": "Remover patente SELLER",
-  "cmd_desc_gp": "Permitir um grupo (downloads automáticos)",
+  "cmd_desc_gp": "Autoriza um grupo: /gp 30 · sem dias = permanente",
   "cmd_desc_ungp": "Remover grupo permitido",
   "cmd_desc_bc": "Broadcast para todos os usuários",
   "cmd_desc_bcvip": "Broadcast só para VIPs",
-  "cmd_desc_sizedisp": "Mudar o tamanho mínimo de download",
+  "cmd_desc_sizedisp": "Armazenamento da VPS: total, usado e livre",
   "cmd_desc_updatebot": "Atualizar o bot do GitHub",
   "cmd_vip_more": "💎 Com VIP você desbloqueia /imapchk e mais — renove em «💎 Renovar VIP»",
   "download_progress": "📥 **Baixando:** `{0}`\n\n📊 Progresso: `{1}`\n⚡ Velocidade: `{2}`\n⏱️ ETA: `{3}`",
@@ -137,5 +137,7 @@
   "im_period_24h": "Novos · últimas 24h",
   "im_period_old": "Somente antigos",
   "im_period_all": "Novos + Antigos",
-  "canjear_error": "╭───✦ ⚠️ ERRO AO RESGATAR\n├─ Não consegui verificar sua key neste momento\n├─ (falha temporária de conexão com o banco)\n├─ 🔁 Aguarde alguns segundos e tente novamente:\n├─ ➡️ /canjear SEU-CODIGO\n╰───✦"
+  "canjear_error": "╭───✦ ⚠️ ERRO AO RESGATAR\n├─ Não consegui verificar sua key neste momento\n├─ (falha temporária de conexão com o banco)\n├─ 🔁 Aguarde alguns segundos e tente novamente:\n├─ ➡️ /canjear SEU-CODIGO\n╰───✦",
+  "cmd_desc_keygen": "Gera uma key na hora: /keygen 30 · sem dias = ilimitada ♾️",
+  "cmd_desc_id": "Mostra seu ID e o ID do chat"
 }

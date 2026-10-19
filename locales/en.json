@@ -17,15 +17,15 @@
   "cmd_desc_imapchk": "Checks mail:pass combos via IMAP (keywords, countries and senders)",
   "cmd_desc_canjear": "Redeem a VIP key",
   "cmd_desc_ping": "Latency, uptime and bot version",
-  "cmd_desc_vip": "Grant VIP to a user",
+  "cmd_desc_vip": "Grants VIP to a user: /vip 30 · no days = permanent",
   "cmd_desc_unvip": "Remove VIP from a user",
   "cmd_desc_seller": "Grant SELLER rank",
   "cmd_desc_unseller": "Remove SELLER rank",
-  "cmd_desc_gp": "Allow a group (auto downloads)",
+  "cmd_desc_gp": "Authorizes a group: /gp 30 · no days = permanent",
   "cmd_desc_ungp": "Remove allowed group",
   "cmd_desc_bc": "Broadcast to all users",
   "cmd_desc_bcvip": "Broadcast to VIPs only",
-  "cmd_desc_sizedisp": "Change the minimum download size",
+  "cmd_desc_sizedisp": "VPS storage: total, used and free",
   "cmd_desc_updatebot": "Update the bot from GitHub",
   "cmd_vip_more": "💎 With VIP you unlock /imapchk and more — renew from «💎 Renovar VIP»",
   "download_progress": "📥 **Downloading:** `{0}`\n\n📊 Progress: `{1}`\n⚡ Speed: `{2}`\n⏱️ ETA: `{3}`",
@@ -137,5 +137,7 @@
   "im_period_24h": "New · last 24h",
   "im_period_old": "Old only",
   "im_period_all": "New + Old",
-  "canjear_error": "╭───✦ ⚠️ REDEEM ERROR\n├─ I couldn't verify your key right now\n├─ (temporary database connection failure)\n├─ 🔁 Wait a few seconds and try again:\n├─ ➡️ /canjear YOUR-CODE\n╰───✦"
+  "canjear_error": "╭───✦ ⚠️ REDEEM ERROR\n├─ I couldn't verify your key right now\n├─ (temporary database connection failure)\n├─ 🔁 Wait a few seconds and try again:\n├─ ➡️ /canjear YOUR-CODE\n╰───✦",
+  "cmd_desc_keygen": "Generates a key on the fly: /keygen 30 · no days = unlimited ♾️",
+  "cmd_desc_id": "Shows your ID and the chat ID"
 }
