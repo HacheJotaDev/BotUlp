@@ -2,6 +2,21 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.23] — Reporte de URL con @ y fecha + confirmación que se auto-borra
+
+### ✨ Mejorado: tarjeta REPORTE DE URL (para admins)
+- Ahora incluye el **@ del usuario** además de su ID: `├─ 👤 Usuario: \`7656500542\` · @usuario` (vía `_lookup_username` con caché; si no tiene @, se muestra solo el ID).
+- Nueva línea **📅 Fecha** del reporte: formato `dd/mm/AAAA HH:MM` (convención ya usada en el listado de archivos).
+
+### ✨ Nuevo: confirmación visible al usuario que se auto-elimina
+- Al tocar ⚠️ Reportar URL el usuario ahora recibe la tarjeta `╭───✦ ✅ REPORTE ENVIADO — Tu reporte ha sido enviado al administrador` en su idioma (es/en/pt).
+- El mensaje **se borra solo a los 6 segundos** (helper `_auto_delete_msg` ya existente, patrón v4.2.x) — el chat queda limpio sin rastros del aviso.
+- Reemplaza al popup antiguo "Reporte enviado correctamente."; se mantiene el `answer()` silencioso para quitar el spinner del botón.
+
+### ✅ Verificación
+- `test_v4223_report.py`: py_compile, VERSION, formato de la tarjeta (4 placeholders + @ + 📅), render real con valores de muestra, código del handler (`_lookup_username`, fecha, `_auto_delete_msg(confirm, 6)`, `e.answer()` sin popup) y locales es/en/pt + base.
+- Regresión completa verde (asserts VERSION → 4.2.23 en suites anteriores).
+
 ## [4.2.22] — /antiguos (días de los antiguos configurable) + /listatxt (TXT de archivos descargados), solo comando
 
 ### ✨ Nuevo: `/antiguos [dias]` (solo ADMIN)

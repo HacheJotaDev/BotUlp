@@ -687,8 +687,14 @@ class LocaleManager:
             "free_used": "Usada",
             "report_received": (
                 "╭───✦ ⚠️ **REPORTE DE URL**\n"
-                "├─ 👤 Usuario: `{0}`\n"
-                "├─ 🔍 URL: `{1}`\n"
+                "├─ 👤 Usuario: `{0}`{1}\n"
+                "├─ 📅 Fecha: {2}\n"
+                "├─ 🔍 URL: `{3}`\n"
+                "╰───✦"
+            ),
+            "report_sent": (
+                "╭───✦ ✅ **REPORTE ENVIADO**\n"
+                "├─ Tu reporte ha sido enviado al administrador\n"
                 "╰───✦"
             ),
 

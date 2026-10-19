@@ -73,7 +73,7 @@
   "phase_scanning": "📂 Escaneando bases de datos...",
   "ping_info": "╭───✦ 📶 **PONG**\n├─ ⚡ Latencia: `{0:.0f} ms`\n├─ ⏱️ Uptime: `{1}`\n├─ 🧩 Versión: `{2}`\n╰───✦",
   "redeem_success": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ 🎉 **¡VIP ACTIVADO!**\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n✅ Tu cuenta VIP se activó correctamente.\n⏳ Vence: **{0}**\n🚀 Disfruta de todas las funciones premium.",
-  "report_received": "╭───✦ ⚠️ **REPORTE DE URL**\n├─ 👤 Usuario: `{0}`\n├─ 🔍 URL: `{1}`\n╰───✦",
+  "report_received": "╭───✦ ⚠️ **REPORTE DE URL**\n├─ 👤 Usuario: `{0}`{1}\n├─ 📅 Fecha: {2}\n├─ 🔍 URL: `{3}`\n╰───✦",
   "search_already_running": "⏳ **Búsqueda en curso** — se ejecutará automáticamente al terminar la actual.",
   "url_usage": "╭───✦ ⚠️ **FALTA EL ENLACE**\n├─ Escribe `/url` seguido del dominio a buscar\n├─ ✍️ Ejemplo: `/url ejemplo.com`\n╰───✦",
   "start_error": "⚠️ Ocurrió un error interno al procesar tu comando.\nPor favor, inténtalo de nuevo enviando /start",
@@ -141,5 +141,6 @@
   "cmd_desc_keygen": "Genera una key al vuelo: /keygen 30 · sin dias = ilimitada ♾️",
   "cmd_desc_id": "Muestra tu ID y el ID del chat",
   "cmd_desc_antiguos": "Cambia cuántos días viven los antiguos: /antiguos 3",
-  "cmd_desc_listatxt": "TXT con los nombres de todos los archivos descargados (generales, hotmail e imap)"
+  "cmd_desc_listatxt": "TXT con los nombres de todos los archivos descargados (generales, hotmail e imap)",
+  "report_sent": "╭───✦ ✅ **REPORTE ENVIADO**\n├─ Tu reporte ha sido enviado al administrador\n╰───✦"
 }

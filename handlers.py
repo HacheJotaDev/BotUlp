@@ -3698,15 +3698,24 @@ def register_handlers(bot_client):
                 # (temp_state ya se limpió al lanzarla → antes decía "Desconocido").
                 kw = (state.last_search.get(uid, {}).get('kw')
                       or state.temp_state.get(uid, {}).get('kw', 'Desconocido'))
+                # v4.2.22: tarjeta del admin con @ del usuario + fecha del reporte
+                uname = await _lookup_username(uid)
+                fecha = datetime.now().strftime('%d/%m/%Y %H:%M')
                 for admin_id in config.ADMIN_IDS:
                     try:
                         await state.bot.send_message(
                             admin_id,
-                            UI.text("report_received", 'es', uid, kw)
+                            UI.text("report_received", 'es', uid, uname, fecha, kw)
                         )
                     except Exception:
                         pass
-                await e.answer("Reporte enviado correctamente.", alert=True)
+                # v4.2.22: confirmación visible al usuario → se auto-elimina a los 6s
+                try:
+                    confirm = await e.respond(UI.text("report_sent", lang))
+                    asyncio.create_task(_auto_delete_msg(confirm, 6))
+                except Exception:
+                    pass
+                await e.answer()
                 return
 
             # ─── PANEL ADMIN ───
