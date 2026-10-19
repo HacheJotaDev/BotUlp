@@ -10,6 +10,7 @@
 """
 
 import os
+import json
 import socket
 import urllib.request
 from pathlib import Path
@@ -150,7 +151,7 @@ class Config:
     BASE_DIR: Path = Path(__file__).resolve().parent
 
     # ── Version ──────────────────────────────────────────────
-    VERSION: str = "4.2.21"
+    VERSION: str = "4.2.22"
 
     # ── Telegram ─────────────────────────────────────────────
     API_ID: int = int(os.getenv("API_ID", "33426502"))
@@ -177,6 +178,8 @@ class Config:
     # (Solo para archivos locales: descargas, caché de resultados, etc.)
     # La base de datos ahora es PostgreSQL (ver DATABASE_URL).
     DB_FILE: Path = BASE_DIR / "SystemData/hj_bot.db"
+    # v4.2.22: ajustes runtime que sobreviven reinicios (p.ej. días de los antiguos)
+    RUNTIME_SETTINGS_FILE: Path = BASE_DIR / "SystemData/runtime_settings.json"
     DIR_DOWNLOADS: Path = BASE_DIR / "HJDescargas"
     DIR_ARCHIVE: Path = BASE_DIR / "Archivo_Historico"
     # v4.2.11: silo HOTMAIL (paralelo al sistema de descargas general)
@@ -246,8 +249,60 @@ class Config:
                   self.DB_FILE.parent, self.DIR_LOCALES, self.DIR_TEMP]:
             d.mkdir(parents=True, exist_ok=True)
 
+        # v4.2.22: cargar ajustes runtime persistidos (SystemData/runtime_settings.json)
+        self._load_runtime_settings()
+
         # Mostrar la IPN URL resuelta al arrancar (sale en pm2 logs)
         print(f"[config] NOWPAYMENTS_IPN_URL = {self.NOWPAYMENTS_IPN_URL}")
+
+    # ── v4.2.22: ajustes runtime persistidos ─────────────
+    def set_delete_after_days(self, days: int) -> None:
+        """Días de vida de los archivos ANTIGUOS (/antiguos <dias>).
+
+        Efecto inmediato (mover_y_limpiar_archivos lee DELETE_AFTER_HOURS
+        en cada sweep horario) + persistido en runtime_settings.json para
+        sobrevivir reinicios. 1..365 tolerado al cargar; el handler valida
+        1..30 antes de llamar aquí.
+        """
+        d = int(days)
+        self.DELETE_AFTER_HOURS = d * 24
+        self._save_runtime_setting("delete_after_days", d)
+
+    @property
+    def delete_after_days(self) -> int:
+        return max(1, self.DELETE_AFTER_HOURS // 24)
+
+    def _load_runtime_settings(self) -> None:
+        """Aplica ajustes guardados. Fail-open: ante cualquier error quedan
+        los defaults (120h). Nunca rompe el arranque del bot."""
+        try:
+            if self.RUNTIME_SETTINGS_FILE.exists():
+                data = json.loads(self.RUNTIME_SETTINGS_FILE.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    v = data.get("delete_after_days")
+                    if isinstance(v, int) and 1 <= v <= 365:
+                        self.DELETE_AFTER_HOURS = v * 24
+        except Exception:
+            pass
+
+    def _save_runtime_setting(self, key: str, value) -> None:
+        """Fusiona y guarda. Fail-open: si falla, el ajuste vive solo en RAM."""
+        try:
+            data = {}
+            if self.RUNTIME_SETTINGS_FILE.exists():
+                try:
+                    data = json.loads(self.RUNTIME_SETTINGS_FILE.read_text(encoding="utf-8")) or {}
+                except Exception:
+                    data = {}
+            if not isinstance(data, dict):
+                data = {}
+            data[key] = value
+            self.RUNTIME_SETTINGS_FILE.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
 
     @property
     def PM2_NAMES(self) -> List[str]:

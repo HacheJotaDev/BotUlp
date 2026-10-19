@@ -127,6 +127,8 @@ class LocaleManager:
             "cmd_desc_bc": "Broadcast a todos los usuarios",
             "cmd_desc_bcvip": "Broadcast solo a VIPs",
             "cmd_desc_sizedisp": "Almacenamiento de la VPS: total, ocupado y libre",
+            "cmd_desc_antiguos": "Cambia cuántos días viven los antiguos: /antiguos 3",
+            "cmd_desc_listatxt": "TXT con los nombres de todos los archivos descargados (generales, hotmail e imap)",
             "cmd_desc_updatebot": "Actualizar el bot desde GitHub",
             "cmd_vip_more": "💎 Con VIP desbloqueas /imapchk y más — renueva desde «💎 Renovar VIP»",
             "select_language": (

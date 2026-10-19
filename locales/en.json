@@ -139,5 +139,7 @@
   "im_period_all": "New + Old",
   "canjear_error": "╭───✦ ⚠️ REDEEM ERROR\n├─ I couldn't verify your key right now\n├─ (temporary database connection failure)\n├─ 🔁 Wait a few seconds and try again:\n├─ ➡️ /canjear YOUR-CODE\n╰───✦",
   "cmd_desc_keygen": "Generates a key on the fly: /keygen 30 · no days = unlimited ♾️",
-  "cmd_desc_id": "Shows your ID and the chat ID"
+  "cmd_desc_id": "Shows your ID and the chat ID",
+  "cmd_desc_antiguos": "Change how many days the old files live: /antiguos 3",
+  "cmd_desc_listatxt": "TXT with the names of all downloaded files (general, hotmail and imap)"
 }

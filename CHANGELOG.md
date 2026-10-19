@@ -2,6 +2,26 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.22] — /antiguos (días de los antiguos configurable) + /listatxt (TXT de archivos descargados), solo comando
+
+### ✨ Nuevo: `/antiguos [dias]` (solo ADMIN)
+- Los archivos pasan a ANTIGUOS a las 24h y vivían **5 días fijos en el código** (`DELETE_AFTER_HOURS = 120`); ahora el admin los cambia al vuelo: `/antiguos 4`, `/antiguos 3`, `/antiguos 2`... (rango 1–30).
+- `/antiguos` a secas → tarjeta con el valor actual + guía; argumento inválido o fuera de rango → guía (nunca silencio, anti-mudez patrón v4.2.19).
+- **Persistente**: `SystemData/runtime_settings.json` (`delete_after_days`) — sobrevive reinicios (carga fail-open en `__post_init__`). Efecto inmediato: el sweep horario de limpieza ya usa el valor nuevo.
+- Confirmación elegante: `╭───✦ ✅ ANTIGUOS ACTUALIZADOS` con días/horas nuevos, valor anterior y nota de persistencia.
+
+### ✨ Nuevo: `/listatxt` (solo ADMIN)
+- Manda un **.txt con los nombres de TODOS los archivos descargados** — generales, hotmail e imap; nuevos y antiguos (los 6 folders del ciclo de vida).
+- Cada línea: `nombre — peso — fecha` (orden fecha descendente), con cabecera de total y secciones por silo.
+- Se envía como documento junto a una tarjeta resumen; el archivo temporal se borra en `finally`. Sin archivos → tarjeta "todavía no hay archivos descargados".
+
+### 🧭 Menú
+- Ambos comandos añadidos SOLO al bloque 🧭 COMANDOS del ADMIN (21 comandos) — **sin botones** en el panel admin, como se pidió. Descripciones en es/en/pt + `bot_locale.py` + `_CMD_FALLBACKS` (22 keys).
+
+### ✅ Verificación
+- `test_v4222_admin_cmds.py`: py_compile, VERSION, persistencia runtime (set/load/roundtrip con Config nueva), `build_files_txt` real con archivos temporales y limpieza, regex de patrones, gates ADMIN, funcional con cliente fake (`/antiguos` 5 casos, `/listatxt` con archivos → documento + sin archivos → aviso) y locales x3.
+- Regresión completa verde (asserts VERSION → 4.2.22 en suites anteriores).
+
 ## [4.2.21] — Auditoría de menús: ningún comando sin listar en su menú
 
 ### 🔍 Auditoría completa (comandos registrados vs. menús)

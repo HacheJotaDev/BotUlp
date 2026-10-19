@@ -143,6 +143,8 @@ pm2 startup
 | `/gp [dias]` / `/ungp` | Permitir grupo actual · con dias expira solo · ♾️ sin dias = permanente |
 | `/bc <texto>` · `/bcvip <texto>` | Broadcast global / solo VIPs |
 | `/sizedisp` | Uso de disco del VPS |
+| `/antiguos [dias]` | Días de vida de los archivos antiguos (1–30, default 5) · persiste a reinicios |
+| `/listatxt` | TXT con los nombres de todos los archivos descargados (generales + hotmail + imap) |
 | `/updateBot` | Actualizar desde GitHub y reiniciar |
 
 ---

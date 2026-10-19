@@ -105,6 +105,58 @@ def get_file_counts() -> Dict[str, int]:
     }
 
 
+def build_files_txt() -> tuple:
+    """v4.2.22: listado completo de archivos descargados para /listatxt (admin).
+
+    Recorre los 6 folders del ciclo de vida (generales / hotmail / imap,
+    nuevos + antiguos) y arma un texto plano con una línea por archivo:
+    nombre — peso — fecha. Ordenado por fecha descendente (lo nuevo arriba).
+    Devuelve (texto, total). Nunca lanza: los folders con problema salen
+    como "(error al leer)".
+    """
+    secciones = [
+        ("📁 GENERALES — NUEVOS", config.DIR_DOWNLOADS),
+        ("📁 GENERALES — ANTIGUOS", config.DIR_ARCHIVE),
+        ("📥 HOTMAIL — NUEVOS", config.DIR_HOTMAIL),
+        ("📥 HOTMAIL — ANTIGUOS", config.DIR_HOTMAIL_ARCHIVE),
+        ("📬 IMAP/MIX — NUEVOS", config.DIR_IMAP),
+        ("📬 IMAP/MIX — ANTIGUOS", config.DIR_IMAP_ARCHIVE),
+    ]
+    out = []
+    total = 0
+    for titulo, carpeta in secciones:
+        try:
+            archivos = sorted(
+                carpeta.glob('*.txt'),
+                key=lambda f: f.stat().st_mtime,
+                reverse=True,
+            )
+        except OSError:
+            archivos = []
+            out.append(f"━━━ {titulo} (error al leer) ━━━")
+            out.append("")
+            continue
+        out.append(f"━━━ {titulo} ({len(archivos)}) ━━━")
+        if not archivos:
+            out.append("(vacío)")
+        for f in archivos:
+            try:
+                st = f.stat()
+                fecha = time.strftime('%d/%m/%Y %H:%M', time.localtime(st.st_mtime))
+                out.append(f"{f.name} — {format_size(st.st_size)} — {fecha}")
+                total += 1
+            except OSError:
+                out.append(f.name)
+                total += 1
+        out.append("")
+    header = (
+        f"📂 ARCHIVOS DESCARGADOS — {time.strftime('%d/%m/%Y %H:%M')}\n"
+        f"Total: {total} archivos\n"
+        f"{'=' * 46}\n\n"
+    )
+    return header + "\n".join(out).rstrip() + "\n", total
+
+
 def normalizar_url(url: str) -> str:
     """Normalizar URL para búsqueda."""
     url = url.strip().lower()

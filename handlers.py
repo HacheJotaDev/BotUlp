@@ -38,7 +38,7 @@ from bot_locale import locale_manager
 from ui import UI, Keyboards
 from utils import (
     normalizar_url, get_file_counts, format_size, format_time,
-    format_uptime, sanitize_md, progress_bar
+    format_uptime, sanitize_md, progress_bar, build_files_txt
 )
 from search import search_engine, hotmail_extract_engine, imap_extract_engine
 from nowpayments import (
@@ -460,6 +460,8 @@ _CMD_FALLBACKS = {
     'cmd_desc_bc': 'Broadcast a todos los usuarios',
     'cmd_desc_bcvip': 'Broadcast solo a VIPs',
     'cmd_desc_sizedisp': 'Almacenamiento de la VPS: total, ocupado y libre',
+    'cmd_desc_antiguos': 'Cambia cuántos días viven los antiguos: /antiguos 3',
+    'cmd_desc_listatxt': 'TXT con los nombres de todos los archivos descargados (generales, hotmail e imap)',
     'cmd_desc_updatebot': 'Actualizar el bot desde GitHub',
     'cmd_vip_more': '💎 Con VIP desbloqueas /imapchk y más — renueva desde «💎 Renovar VIP»',
 }
@@ -542,6 +544,8 @@ def _get_commands_by_role(role: UserRole, lang: str = 'es', has_free: bool = Fal
             _cmd_line('/bc', 'cmd_desc_bc', lang),
             _cmd_line('/bcvip', 'cmd_desc_bcvip', lang),
             _cmd_line('/sizedisp', 'cmd_desc_sizedisp', lang),
+            _cmd_line('/antiguos', 'cmd_desc_antiguos', lang),
+            _cmd_line('/listatxt', 'cmd_desc_listatxt', lang),
             _cmd_line('/id', 'cmd_desc_id', lang),
             _cmd_line('/ping', 'cmd_desc_ping', lang),
             _cmd_line('/updateBot', 'cmd_desc_updatebot', lang),
@@ -3036,6 +3040,121 @@ def register_handlers(bot_client):
             UI.text("sizedisp_info", lang, total_str, used_str, pct, free_str, bar),
             parse_mode='md'
         )
+
+    # --- ANTIGUOS: días de vida de los archivos antiguos (v4.2.22) ---
+    @bot_client.on(events.NewMessage(pattern=r"/antiguos(?:@\w+)?(?:\s+(\S+))?\s*$"))
+    async def cmd_antiguos(e):
+        """v4.2.22: /antiguos [dias] — solo ADMIN.
+
+        Los archivos descargados pasan a ANTIGUOS a las 24h y viven
+        DELETE_AFTER_HOURS (antes 120h = 5 días fijo en el código) hasta
+        que el sweep horario los borra. Este comando cambia esa vigencia
+        al vuelo (4, 3, 2... días) y la persiste en
+        SystemData/runtime_settings.json para sobrevivir reinicios.
+
+        • /antiguos      → tarjeta con el valor actual + guía
+        • /antiguos 3    → los antiguos viven 3 días (72 h)
+        • /antiguos abc  → guía de uso (nunca silencio)
+        """
+        if get_user_role(e.sender_id) != UserRole.ADMIN:
+            return
+        try:
+            arg = (e.pattern_match.group(1) or "").strip()
+            dias_actuales = config.delete_after_days
+
+            if not arg:
+                await e.reply(
+                    "╭───✦ 📅 **DÍAS DE LOS ANTIGUOS**\n"
+                    f"├─ Los antiguos viven ahora: **{dias_actuales} días** ({config.DELETE_AFTER_HOURS} h)\n"
+                    "├─ Los archivos pasan a antiguos a las 24 h\n"
+                    f"├─ Cambiar: `/antiguos <1-30>`\n"
+                    "├─ Ejemplo: `/antiguos 3`\n"
+                    "╰───✦",
+                    parse_mode='md'
+                )
+                return
+
+            if not arg.isdigit() or not (1 <= int(arg) <= 30):
+                await e.reply(
+                    "╭───✦ 📅 **DÍAS DE LOS ANTIGUOS**\n"
+                    "├─ Uso: `/antiguos <dias>`\n"
+                    "├─ Rango válido: 1 a 30 días\n"
+                    "├─ Ejemplos: `/antiguos 4` · `/antiguos 3` · `/antiguos 2`\n"
+                    f"├─ Ahora mismo: **{dias_actuales} días**\n"
+                    "╰───✦",
+                    parse_mode='md'
+                )
+                return
+
+            dias = int(arg)
+            antes = dias_actuales
+            config.set_delete_after_days(dias)
+            logger.info(f"ANTIGUOS_DIAS: admin {e.sender_id} cambió vida de antiguos {antes} → {dias} días")
+            await e.reply(
+                "╭───✦ ✅ **ANTIGUOS ACTUALIZADOS**\n"
+                f"├─ Los antiguos ahora viven: **{dias} días** ({dias * 24} h)\n"
+                f"├─ Antes: **{antes} días**\n"
+                "├─ Aplica en la próxima limpieza automática (cada hora)\n"
+                "├─ 💾 Guardado — sobrevive reinicios\n"
+                "╰───✦",
+                parse_mode='md'
+            )
+        except Exception:
+            # Anti-mudez (patrón v4.2.19): el admin SIEMPRE recibe respuesta
+            logger.exception("Error en /antiguos")
+            try:
+                await e.reply("⚠️ Error cambiando los días, intenta de nuevo.", parse_mode=None)
+            except Exception:
+                pass
+
+    # --- LISTATXT: nombres de todos los archivos descargados (v4.2.22) ---
+    @bot_client.on(events.NewMessage(pattern=r"/listatxt(?:@\w+)?\s*$"))
+    async def cmd_listatxt(e):
+        """v4.2.22: /listatxt — solo ADMIN.
+
+        Manda un .txt con el nombre (peso y fecha) de TODOS los archivos
+        descargados: generales, hotmail e imap — nuevos y antiguos.
+        Solo comando, sin botones en el panel.
+        """
+        if get_user_role(e.sender_id) != UserRole.ADMIN:
+            return
+        path = None
+        try:
+            contenido, total = build_files_txt()
+            if total == 0:
+                await e.reply(
+                    "╭───✦ 📂 **ARCHIVOS DESCARGADOS**\n"
+                    "├─ Todavía no hay archivos descargados\n"
+                    "╰───✦",
+                    parse_mode='md'
+                )
+                return
+
+            fname = f"Archivos_HJ_{time.strftime('%Y%m%d_%H%M%S')}.txt"
+            path = config.DIR_CACHE / fname
+            path.write_text(contenido, encoding='utf-8')
+            await e.reply(
+                "╭───✦ 📂 **ARCHIVOS DESCARGADOS**\n"
+                f"├─ Total: **{total} archivos**\n"
+                "├─ Generales + Hotmail + IMAP (nuevos y antiguos)\n"
+                "╰───✦",
+                file=str(path),
+                parse_mode='md'
+            )
+            logger.info(f"LISTATXT: admin {e.sender_id} recibió listado de {total} archivos")
+        except Exception:
+            # Anti-mudez (patrón v4.2.19): el admin SIEMPRE recibe respuesta
+            logger.exception("Error en /listatxt")
+            try:
+                await e.reply("⚠️ Error generando el listado, intenta de nuevo.", parse_mode=None)
+            except Exception:
+                pass
+        finally:
+            if path is not None:
+                try:
+                    path.unlink(missing_ok=True)
+                except Exception:
+                    pass
 
     # --- CONVERSATION HANDLER ---
     @bot_client.on(events.NewMessage(

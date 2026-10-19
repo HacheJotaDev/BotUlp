@@ -139,5 +139,7 @@
   "im_period_all": "Novos + Antigos",
   "canjear_error": "╭───✦ ⚠️ ERRO AO RESGATAR\n├─ Não consegui verificar sua key neste momento\n├─ (falha temporária de conexão com o banco)\n├─ 🔁 Aguarde alguns segundos e tente novamente:\n├─ ➡️ /canjear SEU-CODIGO\n╰───✦",
   "cmd_desc_keygen": "Gera uma key na hora: /keygen 30 · sem dias = ilimitada ♾️",
-  "cmd_desc_id": "Mostra seu ID e o ID do chat"
+  "cmd_desc_id": "Mostra seu ID e o ID do chat",
+  "cmd_desc_antiguos": "Muda quantos dias vivem os antigos: /antiguos 3",
+  "cmd_desc_listatxt": "TXT com os nomes de todos os arquivos baixados (gerais, hotmail e imap)"
 }

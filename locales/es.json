@@ -139,5 +139,7 @@
   "im_period_all": "Nuevos + Antiguos",
   "canjear_error": "╭───✦ ⚠️ ERROR AL CANJEAR\n├─ No pude verificar tu key en este momento\n├─ (falla temporal de conexión con la base)\n├─ 🔁 Espera unos segundos y reintenta:\n├─ ➡️ /canjear TU-CODIGO\n╰───✦",
   "cmd_desc_keygen": "Genera una key al vuelo: /keygen 30 · sin dias = ilimitada ♾️",
-  "cmd_desc_id": "Muestra tu ID y el ID del chat"
+  "cmd_desc_id": "Muestra tu ID y el ID del chat",
+  "cmd_desc_antiguos": "Cambia cuántos días viven los antiguos: /antiguos 3",
+  "cmd_desc_listatxt": "TXT con los nombres de todos los archivos descargados (generales, hotmail e imap)"
 }
