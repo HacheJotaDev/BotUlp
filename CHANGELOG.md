@@ -2,6 +2,26 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.25] — /imapchk: tope de 5.000 líneas + botón cancelar con entrega de hits parciales
+
+### ✨ Nuevo: tope de líneas a verificar
+- `IMAP_MAX_LINES = 5000` (config.py, configurable por env): si alguien manda un archivo de 10k líneas, **solo se verifican las primeras 5.000** — el resto se ignora.
+- Aviso inmediato al usuario: tarjeta `⚠️ ARCHIVO GRANDE` con el total original de líneas y el tope aplicado.
+- La tarjeta 📧 IMAP CHECKER (`imap_info`) ahora documenta el tope (es/en/pt).
+
+### ✨ Nuevo: botón 🛑 Cancelar y recibir hits
+- El mensaje de progreso del check lleva el botón `🛑 Cancelar y recibir hits` (token único por run `imapc_<uid>_<ms>`).
+- Al cancelar: **cancelación cooperativa** — el checker deja de recoger resultados, los futures aún no iniciados se cancelan (`shutdown(wait=False, cancel_futures=True)` con fallback para Python < 3.9) y el check retorna al momento.
+- El usuario recibe **TODAS las hits encontradas hasta ese momento**: mismo formato que un check terminado (ZIP en modos keywords/country/remitentes, all_hits.txt en clásico) con caption `🛑 CHECK CANCELADO — Hits hasta el momento: N`. Si se cancela sin hits → tarjeta con `Hits: 0`.
+- Seguro contra dobles toques (alerta "Ya se está cancelando...") y el botón muere solo al terminar el check o tras un error (token descartado).
+
+### 🧹 Limpieza
+- La tarjeta de info del checker usaba ejemplos con `/imap` (nombre viejo pre-v4.2.16) — corregidos a `/imapchk` en el base dict (en/pt ya estaban bien).
+
+### ✅ Verificación
+- `test_v4225_imapcancel.py`: py_compile ×6, VERSION, `IMAP_MAX_LINES=5000`, **cancelación funcional real** (archivo de 300 combos inválidos + `cancel_check=lambda: True` → `stats['cancelled']=True` sin red), check normal sin cancel → `cancelled=False`, tope de líneas en handlers (rewrite + aviso), token/botón/parcial en handlers, callback `imapc_`, `Keyboards.imap_cancel`, `state.imap_cancel_requests`, locales ×3 (capped/cancelled/info con líneas nuevas).
+- Regresión completa verde (asserts VERSION → 4.2.25 en suites anteriores).
+
 ## [4.2.24] — Nuevo plan VIP: 15 días por $50 USD
 
 ### ✨ Nuevo plan en TODA la cadena de pago

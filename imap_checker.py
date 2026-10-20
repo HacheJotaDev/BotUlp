@@ -264,7 +264,8 @@ def _worker(combo: str, keywords: List[str] = None, senders: List[str] = None) -
 
 def imap_check_file(input_path: Path, output_path: Path,
                     keywords: List[str] = None, progress_callback=None,
-                    senders: List[str] = None) -> dict:
+                    senders: List[str] = None,
+                    cancel_check=None) -> dict:
     """Check combos via IMAP with controlled concurrency.
 
     Args:
@@ -274,9 +275,14 @@ def imap_check_file(input_path: Path, output_path: Path,
         progress_callback: Function called with (checked, total, hits)
         senders: v4.2.9 — buscar buzones con mensajes enviados por cualquiera
                  de estas direcciones (hasta MAX_SENDERS, sin tope de hits)
+        cancel_check: v4.2.25 — callable sin argumentos; si devuelve True el
+                 check se DETIENE en el momento y retorna las hits parciales
+                 con stats['cancelled'] = True (los futures no iniciados se
+                 cancelan; los en vuelo terminan en background).
 
     Returns:
-        dict with: total, hits, bads, elapsed, hits_data (list of hit dicts)
+        dict with: total, hits, bads, elapsed, hits_data (list of hit dicts),
+        cancelled (bool, v4.2.25)
     """
     with open(input_path, 'r', encoding='utf-8', errors='ignore') as f:
         combos = [line.strip() for line in f if ":" in line.strip()]
@@ -295,12 +301,15 @@ def imap_check_file(input_path: Path, output_path: Path,
     if keywords or senders:
         workers = max(5, MAX_IMAP_WORKERS // 2)
 
-    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="imap") as executor:
-        future_to_combo = {
-            executor.submit(_worker, combo, keywords, senders): combo
-            for combo in combos
-        }
+    # v4.2.25: executor explícito para poder cancelar a mitad de check
+    executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="imap")
+    future_to_combo = {
+        executor.submit(_worker, combo, keywords, senders): combo
+        for combo in combos
+    }
 
+    cancelled = False
+    try:
         for future in as_completed(future_to_combo):
             combo = future_to_combo[future]
             try:
@@ -321,8 +330,34 @@ def imap_check_file(input_path: Path, output_path: Path,
                 except Exception:
                     pass
 
+            # v4.2.25: cancelación cooperativa — el usuario pidió parar;
+            # se dejan de recoger resultados y se cancelan los futures que
+            # aún NO arrancaron (los en vuelo terminan solos en background).
+            if cancel_check is not None:
+                try:
+                    stop = cancel_check()
+                except Exception:
+                    stop = False
+                if stop:
+                    cancelled = True
+                    logger.info(
+                        f"[IMAP] Check CANCELADO por el usuario en "
+                        f"{checked}/{total} — entregando hits parciales "
+                        f"({len(hits_data)})"
+                    )
+                    break
+
             # v4.2.9: los resultados del modo remitente YA NO tienen tope —
             # se reportan todos los buzones con mensajes de esos remitentes.
+    finally:
+        if cancelled:
+            try:
+                executor.shutdown(wait=False, cancel_futures=True)
+            except TypeError:
+                # Python < 3.9: sin cancel_futures — igual no bloqueamos
+                executor.shutdown(wait=False)
+        else:
+            executor.shutdown(wait=True)
 
     # Write hits to file
     with open(output_path, 'w', encoding='utf-8', buffering=1024*64) as f:
@@ -337,7 +372,14 @@ def imap_check_file(input_path: Path, output_path: Path,
         "elapsed": elapsed,
         "hits_data": hits_data,
         "bads_list": bads_list,
+        "cancelled": cancelled,
     }
 
-    logger.info(f"[IMAP] Check finalizado: {stats['hits']} hits de {stats['total']} en {elapsed:.1f}s")
+    if cancelled:
+        logger.info(
+            f"[IMAP] Check cancelado: {stats['hits']} hits parciales "
+            f"de {stats['total']} en {elapsed:.1f}s"
+        )
+    else:
+        logger.info(f"[IMAP] Check finalizado: {stats['hits']} hits de {stats['total']} en {elapsed:.1f}s")
     return stats

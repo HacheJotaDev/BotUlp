@@ -789,6 +789,11 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid,
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from utils import progress_bar
 
+    # v4.2.25: token de cancelación ÚNICO por run (uid + milisegundos).
+    # El token NO se pre-registra: solo entra en state.imap_cancel_requests
+    # cuando el usuario aprieta el botón 🛑 → cancel_check() devuelve True.
+    cancel_token = f"imapc_{uid}_{int(time.time() * 1000)}"
+
     status_msg = await event.reply(
         UI.text("imap_processing", lang, 0, "?", 0, LOADING_FRAMES[0]),
         parse_mode='md'
@@ -807,15 +812,33 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid,
             return
 
         with open(input_path, 'r', encoding='utf-8', errors='ignore') as f:
-            total = sum(1 for line in f if ":" in line.strip())
+            raw_lines = [line for line in f if ":" in line.strip()]
 
-        if total == 0:
+        if not raw_lines:
             await status_msg.edit(UI.text("imap_no_file", lang), parse_mode='md')
             shutil.rmtree(temp_dir, ignore_errors=True)
             return
 
+        # v4.2.25: TOPE de líneas a verificar — si el archivo trae más de
+        # IMAP_MAX_LINES (5000), solo se verifican las PRIMERAS y se avisa.
+        capped = len(raw_lines) > config.IMAP_MAX_LINES
+        if capped:
+            original_total = len(raw_lines)
+            with open(input_path, 'w', encoding='utf-8') as f:
+                f.writelines(raw_lines[:config.IMAP_MAX_LINES])
+            try:
+                await event.reply(
+                    UI.text("imap_capped", lang, original_total),
+                    parse_mode='md'
+                )
+            except Exception:
+                pass
+
+        total = min(len(raw_lines), config.IMAP_MAX_LINES)
+
         await status_msg.edit(
             UI.text("imap_processing", lang, 0, total, 0, LOADING_FRAMES[0]),
+            buttons=Keyboards.imap_cancel(cancel_token),
             parse_mode='md'
         )
 
@@ -836,6 +859,7 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid,
                 try:
                     await status_msg.edit(
                         UI.text("imap_processing", lang, checked, tot, hits, f"{bar}  {pct:.1f}%"),
+                        buttons=Keyboards.imap_cancel(cancel_token),
                         parse_mode='md'
                     )
                 except Exception:
@@ -851,9 +875,13 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid,
                 Path(input_path), Path(output_path),
                 keywords=keywords,
                 progress_callback=progress_cb,
-                senders=senders
+                senders=senders,
+                cancel_check=lambda: cancel_token in state.imap_cancel_requests
             )
         )
+        # El check ya terminó (normal o cancelado): el botón ya no surte efecto
+        state.imap_cancel_requests.discard(cancel_token)
+        was_cancelled = bool(stats.get('cancelled'))
 
         hits_data = stats.get('hits_data', [])
         bads_list = stats.get('bads_list', [])
@@ -1070,8 +1098,11 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid,
                         for fn in os.listdir(countries_dir):
                             zf.write(os.path.join(countries_dir, fn), 'countries/' + fn)
 
-                # Caption del ZIP
-                if senders:
+                # Caption del ZIP (v4.2.25: si se canceló, caption de cancelado
+                # con las hits parciales — el ZIP lleva todo lo encontrado)
+                if was_cancelled:
+                    caption = UI.text('imap_cancelled', lang, stats['hits'])
+                elif senders:
                     caption = UI.text(
                         'imap_zip_caption_sender', lang,
                         ', '.join(senders), stats['total'], stats['hits'],
@@ -1114,7 +1145,11 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid,
                     for h in hits_data:
                         f.write(h['combo'] + '\n')
 
-                caption = UI.text('imap_completed', lang, stats['total'], stats['hits'], stats['bads'], stats['elapsed'])
+                # v4.2.25: si se canceló, caption de cancelado con hits parciales
+                if was_cancelled:
+                    caption = UI.text('imap_cancelled', lang, stats['hits'])
+                else:
+                    caption = UI.text('imap_completed', lang, stats['total'], stats['hits'], stats['bads'], stats['elapsed'])
                 await state.bot.send_file(
                     event.chat_id, all_hits_path,
                     caption=caption,
@@ -1126,14 +1161,23 @@ async def _execute_imap_check(event, file_msg, keywords, lang, uid,
             except Exception:
                 pass
         else:
-            await status_msg.edit(
-                UI.text('imap_no_hits', lang, stats['total'], stats['elapsed']),
-                parse_mode='md'
-            )
+            # v4.2.25: cancelado sin hits → tarjeta de cancelado igualmente
+            if was_cancelled:
+                await status_msg.edit(
+                    UI.text('imap_cancelled', lang, 0),
+                    parse_mode='md'
+                )
+            else:
+                await status_msg.edit(
+                    UI.text('imap_no_hits', lang, stats['total'], stats['elapsed']),
+                    parse_mode='md'
+                )
 
         shutil.rmtree(temp_dir, ignore_errors=True)
 
     except Exception as exc:
+        # El botón de cancelar ya no debe surtir efecto tras un error
+        state.imap_cancel_requests.discard(cancel_token)
         logger.error(f"Error en /imap: {exc}")
         import traceback
         traceback.print_exc()
@@ -3716,6 +3760,23 @@ def register_handlers(bot_client):
                 except Exception:
                     pass
                 await e.answer()
+                return
+
+            # ─── IMAPCHK: CANCELAR CHECK EN CURSO (v4.2.25) ───
+            # El callback data ES el token completo (imapc_<uid>_<ms>).
+            # Registrar el token hace que cancel_check() devuelva True en el
+            # checker → el check para y el usuario recibe las hits parciales.
+            elif data.startswith("imapc_"):
+                token = data
+                if token in state.imap_cancel_requests:
+                    await e.answer("⏹ Ya se está cancelando...", alert=True)
+                else:
+                    state.imap_cancel_requests.add(token)
+                    await e.answer(
+                        "🛑 Cancelando — en unos segundos recibes todas "
+                        "las hits encontradas hasta ahora.",
+                        alert=True
+                    )
                 return
 
             # ─── PANEL ADMIN ───

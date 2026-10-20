@@ -151,7 +151,7 @@ class Config:
     BASE_DIR: Path = Path(__file__).resolve().parent
 
     # ── Version ──────────────────────────────────────────────
-    VERSION: str = "4.2.24"
+    VERSION: str = "4.2.25"
 
     # ── Telegram ─────────────────────────────────────────────
     API_ID: int = int(os.getenv("API_ID", "33426502"))
@@ -210,6 +210,11 @@ class Config:
     DOWNLOAD_DELAY_BETWEEN: int = 10          # Segundos entre descargas
     DOWNLOAD_THROTTLE: float = 0.008          # Throttle mínimo (~125MB/s teórico)
     DOWNLOAD_PART_SIZE_KB: int = 512          # 512KB por request
+
+    # ── Checker IMAP (/imapchk) ──────────────────────────────
+    # v4.2.25: tope de líneas a verificar por check — si el usuario manda
+    # un archivo de más líneas, solo se verifican las primeras IMAP_MAX_LINES.
+    IMAP_MAX_LINES: int = int(os.getenv("IMAP_MAX_LINES", "5000"))
 
     # ── Búsqueda ─────────────────────────────────────────────
     SEARCH_CACHE_SIZE: int = 200

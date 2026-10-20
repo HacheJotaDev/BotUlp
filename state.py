@@ -44,6 +44,12 @@ active_hotmail_extracts: Set[int] = set()
 # v4.2.16: Control de /imap (extracción mix/mail de líneas únicas) en curso
 active_imap_extracts: Set[int] = set()
 
+# v4.2.25: Tokens de cancelación del checker IMAP (/imapchk).
+# Un token "imapc_<uid>_<ms>" está presente SOLO cuando el usuario pidió
+# cancelar; imap_check_file lo consulta vía cancel_check() y entrega las
+# hits parciales. Se limpia con discard al terminar el check.
+imap_cancel_requests: Set[str] = set()
+
 # Ultima busqueda ejecutada por usuario (contexto para reintentos y reportes)
 last_search: Dict[int, dict] = {}
 

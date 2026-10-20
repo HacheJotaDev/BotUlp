@@ -233,6 +233,15 @@ class Keyboards:
         ]
 
     @staticmethod
+    def imap_cancel(token: str):
+        """v4.2.25 — Botón para cancelar un /imapchk en curso.
+
+        Al cancelar, el check se detiene y el usuario recibe TODAS las
+        hits encontradas hasta ese momento.
+        """
+        return [[Button.inline("🛑  Cancelar y recibir hits", token.encode())]]
+
+    @staticmethod
     def payment_invoice(url: str):
         """Teclado post-invoice: botón URL real + verificación manual."""
         return [

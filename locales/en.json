@@ -38,7 +38,7 @@
   "imap_country_progress": "╭───✦ 🌍 **GEOLOCATING HITS**\n├─ 📊 Progress: `{0}/{1}` · 🌍 Countries: `{2}`\n╰───✦\n\n{3}",
   "imap_country_resolving": "╭───✦ 🌍 **GEOLOCATING HITS**\n├─ 📧 Resolving: `{0}` accounts\n╰───✦",
   "imap_country_waiting_file": "╭───✦ 🌍 **IMAP CHECKER · COUNTRY MODE**\n├─ Hits will be grouped by geolocation\n╰───✦\n\n⏳ Now send a .txt file with `mail:pass` to start.",
-  "imap_info": "╭───✦ 📧 **IMAP CHECKER**\n├─ Checks **mail:pass** combos via IMAP SSL\n╰───✦\n\n**Usage modes:**\n\n1️⃣ **Classic** — direct hits:\n     Reply to a .txt + `/imapchk`\n\n2️⃣ **With keywords** — filter + ZIP:\n     Reply to a .txt + `/imapchk kw1, kw2`\n\n3️⃣ **By country** — geolocation + ZIP:\n     Reply to a .txt + `/imapchk country`\n\n4️⃣ **By senders** — mailboxes with messages from those addresses + ZIP:\n     Reply to a .txt + `/imapchk r1@dom.com, r2@dom.com`\n\n📌 Example: `/imapchk netflix, spotify, amazon`\n📌 Senders example: `/imapchk disneyplus@trx.mail2.disneyplus.com`\n📌 Maximum **10 keywords** or **10 senders** separated by commas\n\n📁 ZIP includes:\n     📄 `all_hits.txt` — all hits\n     📄 `bad_accounts.txt` — failed accounts\n     📁 `domains/` — grouped by domain\n     📁 `keywords/` — per keyword with detail\n     📁 `sender/` — mailboxes with messages from the senders\n     📁 `countries/` — by country (country mode)",
+  "imap_info": "╭───✦ 📧 **IMAP CHECKER**\n├─ Checks **mail:pass** combos via IMAP SSL\n╰───✦\n\n**Usage modes:**\n\n1️⃣ **Classic** — direct hits:\n     Reply to a .txt + `/imapchk`\n\n2️⃣ **With keywords** — filter + ZIP:\n     Reply to a .txt + `/imapchk kw1, kw2`\n\n3️⃣ **By country** — geolocation + ZIP:\n     Reply to a .txt + `/imapchk country`\n\n4️⃣ **By senders** — mailboxes with messages from those addresses + ZIP:\n     Reply to a .txt + `/imapchk r1@dom.com, r2@dom.com`\n\n📌 Example: `/imapchk netflix, spotify, amazon`\n📌 Senders example: `/imapchk disneyplus@trx.mail2.disneyplus.com`\n📌 Maximum **10 keywords** or **10 senders** separated by commas\n📌 Maximum **5,000 lines** per check (anything beyond is ignored)\n🛑 You can cancel at any time — you'll receive the hits found so far\n\n📁 ZIP includes:\n     📄 `all_hits.txt` — all hits\n     📄 `bad_accounts.txt` — failed accounts\n     📁 `domains/` — grouped by domain\n     📁 `keywords/` — per keyword with detail\n     📁 `sender/` — mailboxes with messages from the senders\n     📁 `countries/` — by country (country mode)",
   "imap_keywords_waiting_file": "╭───✦ 📧 **IMAP CHECKER**\n├─ 🔎 Keywords: `{0}`\n╰───✦\n\n⏳ Now send a .txt file with `mail:pass` to start.",
   "imap_no_file": "╭───✦ ❌ **IMAP CHECKER**\n├─ You must reply to a **.txt** file with `mail:pass` combos\n╰───✦\n\n💡 Usage: reply to the file + `/imapchk kw1, kw2`",
   "imap_no_hits": "╭───✦ 📧 **IMAP CHECK FINISHED**\n├─ 📊 Total: `{0}`\n├─ ❌ 0 hits found\n├─ ⏱️ Time: `{1:.1f}s`\n╰───✦",
@@ -142,5 +142,7 @@
   "cmd_desc_id": "Shows your ID and the chat ID",
   "cmd_desc_antiguos": "Change how many days the old files live: /antiguos 3",
   "cmd_desc_listatxt": "TXT with the names of all downloaded files (general, hotmail and imap)",
-  "report_sent": "╭───✦ ✅ **REPORT SENT**\n├─ Your report has been sent to the administrator\n╰───✦"
+  "report_sent": "╭───✦ ✅ **REPORT SENT**\n├─ Your report has been sent to the administrator\n╰───✦",
+  "imap_capped": "╭───✦ ⚠️ **LARGE FILE**\n├─ 📄 Your file has `{0}` lines\n├─ ✂️ Cap: only the first **5,000** are checked\n╰───✦",
+  "imap_cancelled": "╭───✦ 🛑 **CHECK CANCELLED**\n├─ ✅ Hits so far: `{0}`\n╰───✦"
 }
