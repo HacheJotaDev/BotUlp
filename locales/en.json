@@ -6,7 +6,7 @@
   "broadcast_done": "╭───✦ ✅ **BROADCAST FINISHED**\n├─ 📬 Sent: `{0}`\n├─ 🚫 Failed: `{1}`\n╰───✦",
   "broadcast_progress": "╭───✦ 📣 **{0}**\n├─ 📬 Sent: `{1}/{2}`\n├─ 🚫 Failed: `{3}`\n╰───✦",
   "broadcast_started": "╭───✦ 📣 **{0} STARTED**\n├─ 👥 Recipients: `{1}`\n├─ ⏳ Sending...\n╰───✦",
-  "buy_vip_info": "╭───✦ 💎 **BUY VIP**\n├─ ⚡ 1 day » $6\n├─ 📊 3 days » $10\n├─ 🔥 7 days » $25\n├─ 👑 30 days » $100\n╰───✦\n\n📬 Contact: {0}",
+  "buy_vip_info": "╭───✦ 💎 **BUY VIP**\n├─ ⚡ 1 day » $6\n├─ 📊 3 days » $10\n├─ 🔥 7 days » $25\n├─ 🚀 15 days » $50\n├─ 👑 30 days » $100\n╰───✦\n\n📬 Contact: {0}",
   "canjear_info": "╭───✦ 🔑 **REDEEM VIP KEY**\n├─ Activate your VIP with the command:\n├─ ➡️ `/canjear HJ-XXXXXXXXXXXX`\n├─\n├─ 💡 Example:\n├─ ➡️ `/canjear HJ-ABC123DEF456`\n╰───✦\n\n📞 Get your key at: @hjofc20",
   "canjear_invalid": "╭───✦ ❌ **INVALID KEY**\n├─ The code does not exist or was already used\n├─ 📌 Format: `/canjear HJ-XXXXXXXXXXXX`\n╰───✦",
   "cmd_list": "╭───✦ 🧭 **AVAILABLE COMMANDS**\n{0}\n╰───✦\n\n💡 You can also use the buttons below.",

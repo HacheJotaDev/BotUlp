@@ -2,6 +2,18 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.24] — Nuevo plan VIP: 15 días por $50 USD
+
+### ✨ Nuevo plan en TODA la cadena de pago
+- `VIP_PLANS` (nowpayments.py): `15: {"price": 50.0, "label": "15 Dias"}` — invoices NowPayments, order_id (`HJ-...-15d-...`), polling e IPN ya lo reconocen automáticamente.
+- Botón nuevo en el menú de pago (ui.py `payment_plans`): `🚀 15 días · $50` (callback `pay_15`), en orden cronológico: 1 → 3 → 7 → **15** → 30.
+- Tarjeta 💎 COMPRAR VIP (`buy_vip_info`) actualizada con la línea `├─ 🚀 15 días » $50` en es/en/pt + `bot_locale.py` base.
+- El resto del flujo ya era genérico: `pay_<days>` → `VIP_PLANS.get(days)` → `create_invoice` → entrega automática por IPN/polling → `_deliver_vip(uid, 15)`.
+
+### ✅ Verificación
+- `test_v4224_plan15.py`: py_compile, VERSION, VIP_PLANS completo (5 planes, $6/$10/$25/$50/$100, orden), botones pay_1/3/7/15/30 con orden y precios, buy_vip_info en base+x3 (5 líneas de planes, ascendente, placeholder {0}), render real por idioma, handler genérico `pay_` intacto.
+- Regresión completa verde (asserts VERSION → 4.2.24 en suites anteriores).
+
 ## [4.2.23] — Reporte de URL con @ y fecha + confirmación que se auto-borra
 
 ### ✨ Mejorado: tarjeta REPORTE DE URL (para admins)

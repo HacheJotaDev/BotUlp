@@ -23,6 +23,7 @@ VIP_PLANS = {
     1: {"price": 6.0, "label": "1 Dia"},
     3: {"price": 10.0, "label": "3 Dias"},
     7: {"price": 25.0, "label": "7 Dias"},
+    15: {"price": 50.0, "label": "15 Dias"},
     30: {"price": 100.0, "label": "30 Dias"},
 }
 

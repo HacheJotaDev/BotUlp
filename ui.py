@@ -226,7 +226,8 @@ class Keyboards:
             [Button.inline("⚡  1 día  ·  $6", b"pay_1"),
              Button.inline("📊  3 días  ·  $10", b"pay_3")],
             [Button.inline("🔥  7 días  ·  $25", b"pay_7"),
-             Button.inline("💎  30 días  ·  $100", b"pay_30")],
+             Button.inline("🚀  15 días  ·  $50", b"pay_15")],
+            [Button.inline("💎  30 días  ·  $100", b"pay_30")],
             Keyboards.SUPPORT_URL,
             [Button.inline("«  Volver", b"back_main")],
         ]
