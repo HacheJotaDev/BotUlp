@@ -2,6 +2,19 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.27] — Los mix NO se ignoran: bajan a GENERAL con el mínimo de los generales
+
+### 🔧 Ajuste del cambio anterior (aclaración del usuario)
+- En 4.2.26 el mix salió del silo imap, pero un `mix.txt` **sin keyword** en nombre/caption quedaba **ignorado** (caía en el filtro de keywords de los generales). Corregido: los archivos con nombre **mix y variantes** (`mix, m1x, m¡x, m!x, mixs...`) ahora **bajan a la carpeta GENERAL** (`HJDescargas`) igual que cualquier archivo normal, con **UNA exención**:
+  - **Sin filtro de keywords** — el nombre mix ya identifica la base de combos (el nombre era lo que daba el auto-bajado en el silo v4.2.16).
+- **Mismo mínimo que los generales**: por debajo de `MIN_DOWNLOAD_SIZE_MB` (5MB) se ignora; desde 5MB exactos baja. El tope de 100MB **es solo de los silos** — un mix de 200MB baja sin problema (tope global 4GB).
+- Los silos quedan intactos: `mail/mailaccess` → silo imap, `hotmail` → silo hotmail (prioridad), `MIX MAIL ACCESS.txt` → silo imap (es mailaccess).
+- Log nuevo en pm2: `MIX detectado en nombre (fuera del silo imap desde v4.2.26): archivo → GENERAL (mínimo 5MB, sin keywords)`.
+
+### ✅ Verificación
+- `test_v4227_mixgeneral.py` NUEVO 21/21: fuente (is_mix + exención keywords + log) y **listener funcional real** — mix 10MB sin caption → GENERAL; variantes m1x/mixs → GENERAL; frontera 5MB exacto baja, 2MB/0 KB ignorados; normal sin keyword sigue ignorado y con keyword en caption baja (filtro intacto para no-mix); mix 200MB baja (tope silo no aplica); mail → silo imap, MIX MAIL ACCESS → imap, hotmail mix → hotmail.
+- Regresión completa verde (asserts VERSION → 4.2.27 en suites anteriores).
+
 ## [4.2.26] — IMAP: eliminado el tipo MIX — solo mail / mailaccess (+ variantes)
 
 ### 🔥 Cambio: el mix ya no existe en el IMAP

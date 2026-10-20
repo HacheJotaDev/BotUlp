@@ -956,8 +956,12 @@ async def realtime_listener(event):
         # (HJDescargas_Imap; el tipo MIX fue retirado en v4.2.26).
         # Prioridad: hotmail primero (silos separados).
         # v4.2.17: ambos silos aceptan de 0 KB a 100 MB (SILO_MAX_SIZE_MB).
+        # v4.2.27: los MIX NO se ignoran ni van al silo — bajan a GENERAL
+        # con el mínimo de los generales y SIN filtro de keywords (el
+        # nombre mix ya identifica la base; eso era el auto-bajado v4.2.16).
         is_hotmail = es_nombre_hotmail(filename)
         is_imap = (not is_hotmail) and es_nombre_imap(filename)
+        is_mix = (not is_hotmail) and (not is_imap) and es_nombre_mix(filename)
 
         # v4.2.17: TOPE de los silos hotmail/imap — 0 KB pasa, pero por
         # encima de 100MB el .txt se ignora (no se baja, no se encola).
@@ -972,6 +976,7 @@ async def realtime_listener(event):
         if not (is_hotmail or is_imap):
             # v4.2.10: Filtro de tamaño MÍNIMO (solo archivos NORMALES) —
             # los hotmail/imap bajan desde 0 KB (tope 100MB ya aplicado arriba).
+            # v4.2.27: los mix también pasan por este mínimo (son generales).
             if file_size < config.MIN_DOWNLOAD_SIZE_MB * 1024 * 1024:
                 logger.info(
                     f"Archivo demasiado pequeño, ignorado: {filename} "
@@ -983,12 +988,17 @@ async def realtime_listener(event):
             text_lower = text_content.lower()
             filename_lower = filename.lower()
 
-            keywords = ["ulp", "url:log:pass", "url:pass", "combo", "database", "leak", "db"]
-            if not any(k in filename_lower for k in keywords):
-                if not any(k in text_lower for k in keywords):
-                    return
+            # v4.2.27: los mix se EXIMEN del filtro de keywords — el
+            # nombre (mix, m1x, mixs...) ya identifica la base de combos,
+            # igual que ocurría en el silo imap sin peso por keyword.
+            if not is_mix:
+                keywords = ["ulp", "url:log:pass", "url:pass", "combo", "database", "leak", "db"]
+                if not any(k in filename_lower for k in keywords):
+                    if not any(k in text_lower for k in keywords):
+                        return
 
-        # v4.2.11: hotmail → silo hotmail · v4.2.16: imap → silo imap · resto → general
+        # v4.2.11: hotmail → silo hotmail · v4.2.16: imap → silo imap ·
+        # resto → general (v4.2.27: los mix caen aquí, a GENERAL)
         if is_hotmail:
             dest_path = config.DIR_HOTMAIL / filename
             logger.info(
@@ -1003,6 +1013,12 @@ async def realtime_listener(event):
             )
         else:
             dest_path = config.DIR_DOWNLOADS / filename
+            if is_mix:
+                logger.info(
+                    f"MIX detectado en nombre (fuera del silo imap desde v4.2.26): "
+                    f"{filename} ({format_size(file_size)}) → GENERAL "
+                    f"(mínimo {config.MIN_DOWNLOAD_SIZE_MB}MB, sin keywords)"
+                )
 
         if dest_path.exists() and dest_path.stat().st_size > 0:
             return
