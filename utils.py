@@ -78,7 +78,7 @@ def _count_txt(directory: Path) -> int:
 def get_file_counts() -> Dict[str, int]:
     """Contar archivos en directorios de descarga y archivo.
 
-    Incluye el silo HOTMAIL (v4.2.12) y el silo IMAP/MIX (v4.2.16) para el
+    Incluye el silo HOTMAIL (v4.2.12) y el silo IMAP (v4.2.16) para el
     panel de GESTIÓN DE ARCHIVOS:
       hm_24h  → HJDescargas_Hotmail (nuevos)
       hm_old  → Archivo_Hotmail     (histórico)
@@ -119,8 +119,8 @@ def build_files_txt() -> tuple:
         ("📁 GENERALES — ANTIGUOS", config.DIR_ARCHIVE),
         ("📥 HOTMAIL — NUEVOS", config.DIR_HOTMAIL),
         ("📥 HOTMAIL — ANTIGUOS", config.DIR_HOTMAIL_ARCHIVE),
-        ("📬 IMAP/MIX — NUEVOS", config.DIR_IMAP),
-        ("📬 IMAP/MIX — ANTIGUOS", config.DIR_IMAP_ARCHIVE),
+        ("📬 IMAP — NUEVOS", config.DIR_IMAP),
+        ("📬 IMAP — ANTIGUOS", config.DIR_IMAP_ARCHIVE),
     ]
     out = []
     total = 0

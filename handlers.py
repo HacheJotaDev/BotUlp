@@ -1753,7 +1753,7 @@ _IM_PERIOD_KEYS = {
 async def _execute_imap_extract(uid: int, lang: str, t_opt: str, chat_id: int,
                                 is_free_search=None, callback_event=None,
                                 reply_to=None):
-    """Ejecutar extracción IMAP/MIX y enviar .txt con líneas únicas (v4.2.16).
+    """Ejecutar extracción IMAP (mail/mailaccess) y enviar .txt con líneas únicas (v4.2.16).
 
     Espejo 1:1 de _execute_hotmail_extract: mismo consumo de acceso
     (gratis inicial / bono / VIP), misma animación y mismo reply.
@@ -2552,7 +2552,7 @@ def register_handlers(bot_client):
     async def cmd_imapchk(e):
         """IMAP Checker v2 — soporta keywords, country, remitentes y genera ZIP.
 
-        (v4.2.16: antes era /imap; ahora /imap es el EXTRACTOR mix/mail)
+        (v4.2.16: antes era /imap; ahora /imap es el EXTRACTOR mail/mailaccess)
 
         Uso:
           /imapchk                       → sin keywords (modo clasico)
@@ -2917,18 +2917,20 @@ def register_handlers(bot_client):
             parse_mode='md'
         )
 
-    # COMANDO /imap — Extracción IMAP/MIX (v4.2.16)
+    # COMANDO /imap — Extracción IMAP mail/mailaccess (v4.2.16)
     # El bot descarga AUTOMÁTICAMENTE los .txt que traen variantes de
-    # mix/mail/mailaccess en el nombre (mix, m1x, m¡x, mail, m4il,
-    # ma¡l, mailaccess, ma¡l4access...) SIN peso mínimo → carpeta
+    # mail/mailaccess en el nombre (mail, m4il, ma¡l, mails,
+    # mailaccess, ma¡l4access...) SIN peso mínimo → carpeta
     # HJDescargas_Imap (24h) y Archivo_Imap (antiguos). Este comando
     # entrega las LÍNEAS ÚNICAS sin repetir, igual que /hotmail.
+    # v4.2.26: el tipo MIX fue eliminado — los archivos mix ya no
+    # entran al silo y los LEGACY del silo se saltean al extraer.
     # (el checker IMAP ahora es /imapchk)
 
     # (?!chk) evita capturar /imapchk — que es el CHECKER de cuentas IMAP
     @bot_client.on(events.NewMessage(pattern=r"/imap(?:@\w+)?(?!chk)(.*)"))
     async def cmd_imap_extract(e):
-        """Extracción IMAP/MIX — líneas únicas sin repetir (nuevos/antiguos)."""
+        """Extracción IMAP (mail/mailaccess) — líneas únicas sin repetir."""
         uid = e.sender_id
         user = db.get_user(uid)
         lang = user.get('language', 'es')

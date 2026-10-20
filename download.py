@@ -120,17 +120,25 @@ def destino_hotmail(filename: str) -> Path:
 
 
 # ═════════════════════════════════════════════════════════════
-# v4.2.16 — Detector de variantes IMAP/MIX/MAIL en el nombre
+# v4.2.16 — Detector de variantes IMAP/MAIL en el nombre
+# v4.2.26 — tipo MIX ELIMINADO: solo mail / mailaccess (+ variantes)
 # ═════════════════════════════════════════════════════════════
 # Silo "mail access" (paralelo al silo hotmail). Detecta ofuscaciones de:
-#   mix · m1x · m¡x · m!x · mixs
 #   mail · m4il · ma¡l · ma1l · ma!l · mails
 #   mailaccess · ma¡l4access · mail4access · mail acces(s)
+# (v4.2.26: mix/m1x/m¡x/m!x/mixs YA NO entran al silo imap —
+#  _IMAP_TOKENS_EXACT los retiró; quedan solo en _MIX_TOKENS_EXACT
+#  para que el extractor /imap salte los archivos mix LEGACY.)
 # Prioridad: si el nombre ya es HOTMAIL (v4.2.11), NO cuenta como imap
 # (los silos quedan separados: "hotmail mix.txt" → silo hotmail).
 
 # Tokens que identificación EXACTA tras normalizar leet
-_IMAP_TOKENS_EXACT = {'mix', 'mixs', 'mail', 'mails', 'mailacces', 'mailaccess'}
+_IMAP_TOKENS_EXACT = {'mail', 'mails', 'mailacces', 'mailaccess'}
+
+# v4.2.26: tokens MIX retirados del silo IMAP. Se conservan SOLO para
+# identificar archivos mix LEGACY ya descargados y que el extractor
+# /imap los salte (search.imap_extract_engine).
+_MIX_TOKENS_EXACT = {'mix', 'mixs'}
 
 # Fuzzy (distancia <=1) solo contra estas palabras, y solo para tokens que
 # empiezan por 'm' (evita falsos positivos tipo nail/bail/email/gmail)
@@ -138,14 +146,15 @@ _IMAP_FUZZY_TARGETS = ('mail', 'mails', 'mailaccess')
 
 
 def es_nombre_imap(filename: str) -> bool:
-    """True si el nombre del archivo es de una base MIX/MAIL (mail access).
+    """True si el nombre del archivo es de una base MAIL/MAILACCESS.
 
     Normaliza leet (1/!/¡→i, 4→a, 0→o, 3→e, 5→s...) y parte el nombre en
     tokens alfanuméricos. Un token cuenta si:
-      • es exactamente una variante conocida (mix, mail, mailaccess...), o
+      • es exactamente una variante conocida (mail, mailaccess...), o
       • empieza por 'm', tiene longitud ±1 de un target y distancia
         Damerau-Levenshtein <=1 (typos tipo maill, mailz, mailacces).
     Los nombres HOTMAIL devuelven False (tienen su propio silo).
+    Los nombres SOLO-MIX (mix, m1x, mixs...) devuelven False desde v4.2.26.
     """
     if not filename:
         return False
@@ -161,6 +170,20 @@ def es_nombre_imap(filename: str) -> bool:
                 if abs(len(tok) - len(target)) <= 1 and _levenshtein(tok, target) <= 1:
                     return True
     return False
+
+
+def es_nombre_mix(filename: str) -> bool:
+    """v4.2.26 — True si el nombre es una variante MIX (mix, m1x, m¡x...).
+
+    El tipo mix fue ELIMINADO del silo IMAP: los archivos con nombre mix
+    ya no se descargan al silo. Esta función SOLO existe para reconocer
+    los archivos mix LEGACY que puedan quedar en HJDescargas_Imap y que
+    el extractor /imap los salte. Nunca matchea mail/mailaccess.
+    """
+    if not filename:
+        return False
+    norm = filename.lower().translate(_LEET_TABLE)
+    return any(tok in _MIX_TOKENS_EXACT for tok in re.findall(r'[a-z]+', norm))
 
 
 # ═════════════════════════════════════════════════════════════
@@ -929,8 +952,9 @@ async def realtime_listener(event):
         # v4.2.11: SILO HOTMAIL — los .txt con variantes de 'hotmail' en el NOMBRE
         # (hotmail, hotmails, hotma1il, hotma¡l, h0tmail...) NO tienen peso mínimo
         # y se guardan en su propia carpeta (HJDescargas_Hotmail).
-        # v4.2.16: SILO IMAP/MIX — ídem para variantes de mix/mail/mailaccess
-        # (HJDescargas_Imap). Prioridad: hotmail primero (silos separados).
+        # v4.2.16: SILO IMAP — ídem para variantes de mail/mailaccess
+        # (HJDescargas_Imap; el tipo MIX fue retirado en v4.2.26).
+        # Prioridad: hotmail primero (silos separados).
         # v4.2.17: ambos silos aceptan de 0 KB a 100 MB (SILO_MAX_SIZE_MB).
         is_hotmail = es_nombre_hotmail(filename)
         is_imap = (not is_hotmail) and es_nombre_imap(filename)
@@ -974,7 +998,7 @@ async def realtime_listener(event):
         elif is_imap:
             dest_path = config.DIR_IMAP / filename
             logger.info(
-                f"IMAP/MIX detectado en nombre: {filename} "
+                f"IMAP detectado en nombre (mail/mailaccess): {filename} "
                 f"({format_size(file_size)}) → {config.DIR_IMAP} (0 KB–{config.SILO_MAX_SIZE_MB}MB)"
             )
         else:

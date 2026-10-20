@@ -123,7 +123,7 @@ pm2 startup
 ### 👑 VIP
 | Comando | Descripción |
 |---------|-------------|
-| `/imap` | IMAP Data — líneas ÚNICAS de los .txt mix/mail (nuevos / antiguos) |
+| `/imap` | IMAP Data — líneas ÚNICAS de los .txt mail/mailaccess (nuevos / antiguos) |
 | `/imapchk` | IMAP Checker (responde a un .txt con mail:pass) |
 | `/imapchk kw1, kw2` | Con keywords → ZIP agrupado |
 | `/imapchk country` | Agrupar hits por país → ZIP |

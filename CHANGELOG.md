@@ -2,6 +2,23 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.26] — IMAP: eliminado el tipo MIX — solo mail / mailaccess (+ variantes)
+
+### 🔥 Cambio: el mix ya no existe en el IMAP
+- **Detector** (`download.py`): `_IMAP_TOKENS_EXACT` retira `mix` y `mixs` — los .txt con nombre **mix** (`mix, m1x, m¡x, m!x, mixs...`) **YA NO se descargan al silo imap** (`HJDescargas_Imap`); pasan al flujo general (peso mínimo + keywords como cualquier archivo normal). `mail` y `mailaccess` (**y todas sus variantes leet/fuzzy**) siguen entrando igual que siempre.
+- **Extractor `/imap`** (`search.py`): el motor de silo gana el param `exclude` y el extractor IMAP **saltea los archivos mix LEGACY** que puedan quedar guardados en el silo — `/imap` ahora devuelve SOLO contenido mail/mailaccess, aunque queden mix viejos en la carpeta. Un nombre mixto tipo `MIX MAIL ACCESS.txt` sigue entrando (es mailaccess). El extractor **hotmail NO cambia** (no excluye nada).
+- Nuevo helper `es_nombre_mix()` (download.py): reconoce variantes mix legacy — solo uso interno del extractor.
+
+### 🧹 Etiquetas y textos
+- `/listatxt` (admin): secciones `📬 IMAP/MIX — NUEVOS/ANTIGUOS` → `📬 IMAP — NUEVOS/ANTIGUOS`.
+- Log de descarga: `IMAP/MIX detectado` → `IMAP detectado (mail/mailaccess)`.
+- Comentarios/docstrings/README actualizados (config, utils, state, handlers, README).
+
+### ✅ Verificación
+- `test_v4226_nomix.py` NUEVO: py_compile ×6, VERSION, tokens exactos (sin mix en imap, mix solo en legacy), detector funcional (mix→False, mail/mailaccess→True, `MIX MAIL ACCESS`→True por mail), `es_nombre_mix` (positivos/negativos), **extracción funcional real**: silo temporal con `mix.txt`/`m1x.txt`/`mixs.txt` + `mail.txt`/`mailaccess.txt` → el resultado contiene SOLO líneas mail/mailaccess; hotmail engine intacto (no excluye); fuente de `_silo_extract_engine`/`imap_extract_engine`; etiquetas y textos sin MIX.
+- Suites v4.2.16/v4.2.17/v4.2.22 actualizadas al nuevo comportamiento (mix pasa a negativo del detector; probes de silo usan nombres mail; secciones de /listatxt sin MIX).
+- Regresión completa verde (asserts VERSION → 4.2.26 en suites anteriores).
+
 ## [4.2.25] — /imapchk: tope de 5.000 líneas + botón cancelar con entrega de hits parciales
 
 ### ✨ Nuevo: tope de líneas a verificar

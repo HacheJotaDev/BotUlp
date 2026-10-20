@@ -22,6 +22,8 @@ from config import config
 from logger_setup import logger
 from roles import SearchMode
 import state
+from download import es_nombre_imap, es_nombre_mix
+from download import es_nombre_imap, es_nombre_mix
 
 executor = ThreadPoolExecutor(
     max_workers=config.MAX_WORKERS,
@@ -481,11 +483,14 @@ def _extract_lines_file(path: Path, cancel_event: threading.Event = None) -> Lis
 
 
 async def _silo_extract_engine(time_opt: str, dir_new: Path, dir_old: Path,
-                               tag: str) -> Optional[Path]:
+                               tag: str, exclude=None) -> Optional[Path]:
     """Motor genérico de EXTRACCIÓN por silo (líneas únicas, sin repetir).
 
     v4.2.16: refactor de hotmail_extract_engine — mismo comportamiento,
     parametrizado por carpetas (nuevos/antiguos) y tag (hotmail/imap).
+    v4.2.26: param opcional exclude — callable(name)->bool; los archivos
+    cuyo nombre de vuelta True se SALTEAN (imap lo usa para ignorar los
+    mix LEGACY que queden en el silo; hotmail no excluye nada).
 
     time_opt:
       '24h' → solo NUEVOS   (dir_new)
@@ -513,7 +518,10 @@ async def _silo_extract_engine(time_opt: str, dir_new: Path, dir_old: Path,
         except OSError:
             return 0
 
-    files = [f for d in dirs for f in d.glob('*.txt') if _safe_size(f) > 0]
+    files = [
+        f for d in dirs for f in d.glob('*.txt')
+        if _safe_size(f) > 0 and not (exclude and exclude(f.name))
+    ]
     if not files:
         return None
 
@@ -580,11 +588,16 @@ async def hotmail_extract_engine(time_opt: str) -> Optional[Path]:
 
 
 async def imap_extract_engine(time_opt: str) -> Optional[Path]:
-    """Extracción IMAP/MIX (v4.2.16) — líneas únicas del silo imap.
+    """Extracción IMAP (v4.2.16) — líneas únicas del silo imap.
 
     Lee HJDescargas_Imap (nuevos) + Archivo_Imap (antiguos) según el
     periodo, igual que /hotmail con su silo.
+    v4.2.26: el tipo MIX fue ELIMINADO — solo se extrae mail/mailaccess.
+    Los archivos con nombre mix (mix, m1x, m¡x, m!x, mixs...) que queden
+    LEGACY en el silo se SALTEAN (un nombre mixto "mix + mail" sigue
+    entrando porque es mailaccess).
     """
     return await _silo_extract_engine(
-        time_opt, config.DIR_IMAP, config.DIR_IMAP_ARCHIVE, 'imap'
+        time_opt, config.DIR_IMAP, config.DIR_IMAP_ARCHIVE, 'imap',
+        exclude=lambda name: es_nombre_mix(name) and not es_nombre_imap(name),
     )

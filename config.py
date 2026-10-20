@@ -151,7 +151,7 @@ class Config:
     BASE_DIR: Path = Path(__file__).resolve().parent
 
     # ── Version ──────────────────────────────────────────────
-    VERSION: str = "4.2.25"
+    VERSION: str = "4.2.26"
 
     # ── Telegram ─────────────────────────────────────────────
     API_ID: int = int(os.getenv("API_ID", "33426502"))
@@ -186,9 +186,10 @@ class Config:
     DIR_HOTMAIL: Path = BASE_DIR / "HJDescargas_Hotmail"         # .txt hotmail recientes (nuevos)
     DIR_HOTMAIL_ARCHIVE: Path = BASE_DIR / "Archivo_Hotmail"     # .txt hotmail antiguos
     DIR_CACHE: Path = BASE_DIR / "Cache_Resultados"
-    # v4.2.16: silo IMAP/MIX (mail access) — paralelo al silo hotmail
-    DIR_IMAP: Path = BASE_DIR / "HJDescargas_Imap"           # mix/mail recientes (nuevos)
-    DIR_IMAP_ARCHIVE: Path = BASE_DIR / "Archivo_Imap"       # mix/mail antiguos
+    # v4.2.16: silo IMAP (mail/mailaccess) — paralelo al silo hotmail
+    # v4.2.26: el tipo MIX fue eliminado del silo
+    DIR_IMAP: Path = BASE_DIR / "HJDescargas_Imap"           # mail/mailaccess recientes (nuevos)
+    DIR_IMAP_ARCHIVE: Path = BASE_DIR / "Archivo_Imap"       # mail/mailaccess antiguos
     DIR_LOCALES: Path = BASE_DIR / "locales"
     DIR_TEMP: Path = BASE_DIR / "Temp_Parts"
 

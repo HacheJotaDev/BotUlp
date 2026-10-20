@@ -41,7 +41,7 @@ active_hotmail_checks: Set[int] = set()
 # v4.2.11: Control de /hotmail (extracción de líneas únicas) en curso
 active_hotmail_extracts: Set[int] = set()
 
-# v4.2.16: Control de /imap (extracción mix/mail de líneas únicas) en curso
+# v4.2.16: Control de /imap (extracción mail/mailaccess de líneas únicas) en curso
 active_imap_extracts: Set[int] = set()
 
 # v4.2.25: Tokens de cancelación del checker IMAP (/imapchk).
