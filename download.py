@@ -14,6 +14,7 @@ import os
 import re
 import asyncio
 import time
+import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Callable
 
@@ -568,6 +569,141 @@ async def mover_y_limpiar_archivos():
         logger.info(f"Limpieza: {moved} archivados, {deleted} eliminados")
 
 
+# ═════════════════════════════════════════════════════════════
+# v4.2.28 — EXPULSIÓN POR ESPACIO LLENO (el más antiguo sale primero)
+# ═════════════════════════════════════════════════════════════
+# Mientras haya espacio disponible, los archivos nuevos se descargan
+# normalmente. Cuando el almacenamiento esté lleno (o no exista espacio
+# suficiente para un archivo nuevo), se identifica el archivo MÁS
+# ANTIGUO almacenado y se elimina primero — nunca uno reciente. Si ese
+# borrado no libera suficiente, se siguen eliminando los siguientes más
+# antiguos, UNO POR UNO, hasta conseguir el espacio necesario. Liberado
+# el espacio, la descarga arranca automáticamente. Si llega otro nuevo
+# y vuelve a faltar espacio, se repite exactamente el mismo proceso.
+
+def _carpetas_almacen() -> list:
+    """Carpetas que forman el 'almacenamiento' del bot (expulsables).
+
+    Silos + archivo + resultados de cache + temporales: todo lo que el
+    bot guarda en disco entra al pool, sin distinción de silo — el más
+    antiguo GLOBAL sale primero.
+    """
+    return [
+        config.DIR_DOWNLOADS, config.DIR_ARCHIVE,
+        config.DIR_HOTMAIL, config.DIR_HOTMAIL_ARCHIVE,
+        config.DIR_IMAP, config.DIR_IMAP_ARCHIVE,
+        config.DIR_CACHE, config.DIR_TEMP,
+    ]
+
+
+def espacio_libre_bytes() -> int:
+    """Bytes libres en el disco donde vive el bot. -1 si no se puede saber."""
+    try:
+        return shutil.disk_usage(str(config.BASE_DIR)).free
+    except Exception:
+        return -1
+
+
+def _candidatos_expulsion(min_age_sec: float) -> list:
+    """Archivos expulsables ordenados del MÁS ANTIGUO al más nuevo.
+
+    Solo archivos regulares (>0 bytes) de las carpetas del bot, con edad
+    mayor al window de protección — NUNCA un archivo reciente. Los .tmp
+    (descargas en vuelo) no se tocan. Cada candidato: (mtime, size, path).
+    """
+    now = time.time()
+    cand = []
+    for d in _carpetas_almacen():
+        try:
+            items = list(d.iterdir())
+        except OSError:
+            continue
+        for f in items:
+            try:
+                if not f.is_file() or f.name.endswith(('.tmp', '.part')):
+                    continue
+                st = f.stat()
+                if st.st_size <= 0 or (now - st.st_mtime) < min_age_sec:
+                    continue  # vacío o demasiado reciente → protegido
+                cand.append((st.st_mtime, st.st_size, f))
+            except OSError:
+                continue
+    cand.sort(key=lambda t: (t[0], t[2].name))  # más antiguo primero
+    return cand
+
+
+async def liberar_espacio_para(necesario_bytes: int, filename: str = "") -> bool:
+    """v4.2.28 — Garantiza espacio libre suficiente para un archivo nuevo.
+
+    Ya hay espacio → True sin tocar nada. Si falta: elimina el archivo
+    MÁS ANTIGUO del almacenamiento, uno por uno (re-consultando el
+    espacio real tras cada borrado), hasta que el nuevo quepa
+    (tamaño + STORAGE_SAFETY_MARGIN_MB). Nunca elimina archivos con
+    menos de STORAGE_PROTECT_MINUTES de antigüedad. Si aun así no se
+    consigue espacio → False (el llamador aborta la descarga).
+    """
+    if not config.STORAGE_EVICT_ENABLED:
+        return True
+
+    objetivo = necesario_bytes + config.STORAGE_SAFETY_MARGIN_MB * 1024 * 1024
+    if necesario_bytes <= 0:
+        objetivo = config.STORAGE_SAFETY_MARGIN_MB * 1024 * 1024
+
+    libre = espacio_libre_bytes()
+    if libre < 0:
+        return True  # espacio desconocido → no bloquear descargas
+    if libre >= objetivo:
+        return True
+
+    min_age = config.STORAGE_PROTECT_MINUTES * 60
+    objetivo_legible = format_size(objetivo)
+    logger.warning(
+        f"🧹 ESPACIO LLENO: {format_size(libre)} libres < {objetivo_legible} "
+        f"necesarios para '{filename or 'nuevo archivo'}' — "
+        f"eliminando los MÁS ANTIGUOS uno por uno..."
+    )
+
+    ahora = time.time()
+    skip: set = set()
+    borrados = 0
+    liberado = 0
+
+    while espacio_libre_bytes() < objetivo:
+        cand = [c for c in _candidatos_expulsion(min_age) if c[2] not in skip]
+        if not cand:
+            faltan = objetivo - espacio_libre_bytes()
+            logger.error(
+                f"🧹 ESPACIO: sin más archivos expulsables "
+                f"(protegidos los < {config.STORAGE_PROTECT_MINUTES}min) y faltan "
+                f"{format_size(max(faltan, 0))} — descarga de "
+                f"'{filename or 'nuevo archivo'}' ABORTADA"
+            )
+            return False
+        mtime, size, path = cand[0]  # el MÁS ANTIGUO que exista
+        edad_h = max((ahora - mtime) / 3600.0, 0.0)
+        try:
+            path.unlink()
+            borrados += 1
+            liberado += size
+            logger.info(
+                f"🧹 ESPACIO: eliminado el más antiguo '{path.name}' "
+                f"({format_size(size)}, {edad_h:.1f}h de antigüedad) — "
+                f"{format_size(liberado)} liberados acumulados"
+            )
+        except OSError as exc:
+            logger.warning(f"🧹 ESPACIO: no se pudo eliminar '{path.name}': {exc}")
+            skip.add(path)  # saltarlo y probar con el siguiente más antiguo
+        await asyncio.sleep(0)  # ceder el loop entre borrados
+
+    logger.info(
+        f"🧹 ESPACIO: listo para '{filename or 'nuevo archivo'}' — "
+        f"{borrados} archivo(s) antiguo(s) eliminado(s), "
+        f"{format_size(liberado)} liberados, "
+        f"{format_size(espacio_libre_bytes())} libres ahora"
+    )
+    return True
+
+
 async def _download_with_progress(
     event_or_msg,
     filename: str,
@@ -604,6 +740,20 @@ async def _download_with_progress(
                 temp_path.rename(dest_path)
                 logger.info(f"Descarga completada (resume): {filename}")
                 return True
+
+        # v4.2.28: GARANTÍA DE ESPACIO — si el disco está lleno (o no cabe
+        # el archivo nuevo), eliminar el archivo MÁS ANTIGUO del bot, uno
+        # por uno, hasta liberar lo necesario. Una vez liberado, la descarga
+        # continúa automáticamente aquí mismo.
+        try:
+            if not await liberar_espacio_para(file_size, filename):
+                logger.error(
+                    f"Descarga ABORTADA por falta de espacio (nada expulsable): {filename}"
+                )
+                return False
+        except Exception as exc:
+            # fail-open: un fallo del chequeo de espacio JAMÁS bloquea descargas
+            logger.warning(f"Chequeo de espacio falló (fail-open): {exc}")
 
         start_time = time.time()
         last_progress_log = [0]

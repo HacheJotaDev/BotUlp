@@ -2,6 +2,22 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.28] — Expulsión por espacio lleno: el archivo MÁS ANTIGUO sale primero
+
+### ✨ Nuevo: el almacenamiento nunca se llena — el nuevo entra siempre
+- **Mientras haya espacio**, todo se descarga normalmente (sin cambios).
+- **Cuando el disco no tiene espacio suficiente** para un archivo nuevo (tamaño + margen de seguridad `STORAGE_SAFETY_MARGIN_MB=256`), el sistema identifica el archivo **MÁS ANTIGUO almacenado** (entre las 6 carpetas de descargas + cache + temp, orden global por fecha) y **lo elimina primero — nunca uno reciente**.
+- **Si ese borrado no libera suficiente**, sigue eliminando los siguientes más antiguos **uno por uno** (re-consultando el espacio real tras cada borrado) hasta conseguir el espacio necesario.
+- **Liberado el espacio, la descarga arranca automáticamente** (el corte ocurre dentro del propio flujo de descarga, en `_download_with_progress` — sirve para las 3 rutas: cola auto-DL, archivo grande y pendientes del admin).
+- **Si llega otro nuevo y vuelve a faltar espacio, se repite exactamente el mismo procedimiento.**
+- Protecciones: los archivos con menos de `STORAGE_PROTECT_MINUTES=10` **jamás se expulsan** (nunca uno reciente); los `.tmp`/`.part` de descargas en vuelo no se tocan; si no queda nada expulsable y aún falta espacio, la descarga se aborta con log claro (sin rellenar el disco); cualquier fallo del chequeo es fail-open (jamás bloquea descargas).
+- Config (env): `STORAGE_EVICT_ENABLED=1`, `STORAGE_SAFETY_MARGIN_MB=256`, `STORAGE_PROTECT_MINUTES=10`.
+- Logs pm2: `🧹 ESPACIO LLENO: X libres < Y necesarios — eliminando los MÁS ANTIGUOS...` + una línea por archivo eliminado (nombre, peso, antigüedad en horas, acumulado) + resumen final.
+
+### ✅ Verificación
+- `test_v4228_espacio.py` NUEVO 40/40: fuente (enganche/fail-open/sort/pool/protecciones) y **expulsión funcional real** con disco simulado y archivos sparse — falta poco → sale SOLO el más antiguo; falta bastante → uno por uno (3 y 2 borrados) hasta que el nuevo quepa; solo recientes → NADA se borra y aborta; orden GLOBAL entre carpetas (sale el más viejo del archivo, no el de un silo más nuevo); .tmp en vuelo jamás; switch OFF; espacio de sobra no toca nada; ventana de protección (9min protegido / 11min expulsable).
+- Regresión completa verde (asserts VERSION → 4.2.28 en suites anteriores).
+
 ## [4.2.27] — Los mix NO se ignoran: bajan a GENERAL con el mínimo de los generales
 
 ### 🔧 Ajuste del cambio anterior (aclaración del usuario)

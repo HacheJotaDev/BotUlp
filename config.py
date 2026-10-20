@@ -151,7 +151,7 @@ class Config:
     BASE_DIR: Path = Path(__file__).resolve().parent
 
     # ── Version ──────────────────────────────────────────────
-    VERSION: str = "4.2.27"
+    VERSION: str = "4.2.28"
 
     # ── Telegram ─────────────────────────────────────────────
     API_ID: int = int(os.getenv("API_ID", "33426502"))
@@ -204,6 +204,13 @@ class Config:
     # v4.2.17: SILOS hotmail/imap — rango de peso 0 KB a 100 MB (sin mínimo,
     # pero tope duro: los .txt de más de 100MB se ignoran). Configurable.
     SILO_MAX_SIZE_MB: int = int(os.getenv("SILO_MAX_SIZE_MB", "100"))
+    # v4.2.28: EXPULSIÓN POR ESPACIO LLENO — cuando el disco no tiene
+    # espacio para un archivo nuevo, se elimina el archivo MÁS ANTIGUO
+    # del bot, uno por uno, hasta liberar lo necesario (el nuevo entra
+    # siempre). Nunca toca archivos recientes (STORAGE_PROTECT_MINUTES).
+    STORAGE_EVICT_ENABLED: bool = os.getenv("STORAGE_EVICT_ENABLED", "1") == "1"
+    STORAGE_SAFETY_MARGIN_MB: int = int(os.getenv("STORAGE_SAFETY_MARGIN_MB", "256"))
+    STORAGE_PROTECT_MINUTES: int = int(os.getenv("STORAGE_PROTECT_MINUTES", "10"))
     DOWNLOAD_CHUNK_SIZE: int = 1024 * 1024    # 1MB chunks
     DOWNLOAD_TIMEOUT: int = 3600              # 1 hora timeout
     MAX_CONCURRENT_DOWNLOADS: int = 1         # 1 a la vez para evitar FloodWait
