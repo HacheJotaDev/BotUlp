@@ -516,12 +516,14 @@ def _get_commands_by_role(role: UserRole, lang: str = 'es', has_free: bool = Fal
             _cmd_line('/id', 'cmd_desc_id', lang),
         ])
     if role == UserRole.SELLER:
+        # v4.2.29: /keygen añadido al listado SELLER (antes solo ADMIN)
         return '\n'.join([
             _cmd_line('/start', 'cmd_desc_start', lang),
             _cmd_line('/url', 'cmd_desc_url', lang),
             _cmd_line('/imap', 'cmd_desc_imap', lang),
             _cmd_line('/hotmail', 'cmd_desc_hotmail', lang),
             _cmd_line('/imapchk', 'cmd_desc_imapchk', lang),
+            _cmd_line('/keygen', 'cmd_desc_keygen', lang),
             _cmd_line('/canjear', 'cmd_desc_canjear', lang),
             _cmd_line('/ping', 'cmd_desc_ping', lang),
             _cmd_line('/id', 'cmd_desc_id', lang),
@@ -2247,8 +2249,9 @@ def register_handlers(bot_client):
         • /keygen 30  → key de 30 días
         • /keygen     → key ILIMITADA (VIP permanente al canjearla)
         • /keygen abc → guía de uso (nunca silencio)
-        Solo ADMIN (los sellers conservan el panel de botones 1/3/7/30)."""
-        if get_user_role(e.sender_id) != UserRole.ADMIN:
+        v4.2.29: también SELLER (antes solo ADMIN). El panel de botones
+        de ambos roles comparte las duraciones 1/3/7/15/30 días."""
+        if get_user_role(e.sender_id) not in (UserRole.ADMIN, UserRole.SELLER):
             return
         lang = 'es'
         try:
@@ -3850,6 +3853,7 @@ def register_handlers(bot_client):
                 await e.edit(text, buttons=Keyboards.back("admin_enter"), parse_mode='md')
 
             elif data == "adm_genkey":
+                # v4.2.29: gen_key() ahora incluye el botón 15 días
                 if role not in (UserRole.ADMIN, UserRole.SELLER):
                     return await e.answer("Acceso denegado.", alert=True)
                 await e.edit("🔑 **Generador de Keys**", buttons=Keyboards.gen_key())

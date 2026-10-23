@@ -133,10 +133,14 @@ pm2 startup
 
 > 📦 Desde v4.2.17 los silos **hotmail** (`HJDescargas_Hotmail`) e **imap** (`HJDescargas_Imap`) solo auto-descargan .txt de **0 KB a 100 MB** (`SILO_MAX_SIZE_MB`, configurable en `.env`); los .txt de más de 100 MB se ignoran. Los archivos normales mantienen su rango (mínimo 5 MB).
 
+### 💼 Seller (v4.2.29)
+| Comando | Descripción |
+|---------|-------------|
+| `/keygen [dias]` | Generar key al vuelo · ♾️ sin dias = key ilimitada · botones 1/3/7/15/30 días en el panel |
+
 ### 🔐 Admin
 | Comando | Descripción |
 |---------|-------------|
-| `/keygen [dias]` | Generar key al vuelo · ♾️ sin dias = key ilimitada |
 | `/vip [dias] [id]` | VIP directo (responde a un mensaje o pasa ID) · ♾️ sin dias = permanente |
 | `/vip <id>` | VIP permanente (forma clásica) · `/unvip <id>` remover |
 | `/seller <id>` | Asignar seller · `/unseller <id>` remover |

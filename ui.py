@@ -184,11 +184,13 @@ class Keyboards:
 
     @staticmethod
     def gen_key():
+        # v4.2.29: botón 15 días añadido (faltaba; admin y seller comparten menú)
         return [
             [Button.inline("1 día", b"gen_1"),
              Button.inline("3 días", b"gen_3"),
              Button.inline("7 días", b"gen_7")],
-            [Button.inline("30 días", b"gen_30")],
+            [Button.inline("15 días", b"gen_15"),
+             Button.inline("30 días", b"gen_30")],
             [Button.inline("«  Volver", b"back_main")],
         ]
 

@@ -2,6 +2,21 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.29] — El seller también genera keys con /keygen + botón de 15 días
+
+### ✨ Seller con /keygen (antes solo ADMIN)
+- `/keygen [dias]` ahora funciona para **SELLER y ADMIN** (el seller antes recibía silencio total). Misma tarjeta, mismo link `t.me/<bot>?start=<code>`, misma guía si el argumento no es numérico y anti-mudez en error.
+- `/keygen` a secas sigue generando key **♾️ ilimitada** (paridad total con el admin).
+- `/keygen` añadida al listado de comandos del SELLER (menú 📋 Comandos — ahora 9 comandos) y a la nueva sección **💼 Seller** del README (movida fuera de 🔐 Admin).
+
+### 🔑 Botón de 15 días (olvidado en v4.2.20)
+- El menú **🔑 Generador de Keys** (panel de botones) ahora muestra **1 · 3 · 7 · 15 · 30 días** — el botón **15 días** faltaba desde la creación del panel. Distribución: `1/3/7` · `15/30` · « Volver.
+- El menú es compartido: lo ven igual el admin (`adm_genkey`) y el seller (`seller_genkey`), y el callback `gen_15` reutiliza el handler `gen_` existente (días=15 → `_dur_txt` → "15 días").
+
+### ✅ Verificación
+- `test_v4229_sellerkeygen.py` NUEVO: gate `/keygen` ADMIN+SELLER (fuente), menú con `gen_15` "15 días" (fuente + funcional sobre `Keyboards.gen_key()`), `gen_15` → días=15 parseado por el handler `gen_`, `_dur_txt(15) == "15 días"`, listado SELLER con `/keygen` (9 comandos), `db.gen_key(uid, 15)` real contra Neon + patrón regex intacto.
+- Suites anteriores actualizadas: asserts VERSION → 4.2.29; `test_v4221_menu_audit` (`/keygen` esperada en SELLER+ADMIN, SELLER pasa de 8 a 9 comandos); `test_v4220_keys_admin` (gate documentado ADMIN+SELLER).
+
 ## [4.2.28] — Expulsión por espacio lleno: el archivo MÁS ANTIGUO sale primero
 
 ### ✨ Nuevo: el almacenamiento nunca se llena — el nuevo entra siempre
