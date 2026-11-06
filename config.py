@@ -151,7 +151,13 @@ class Config:
     BASE_DIR: Path = Path(__file__).resolve().parent
 
     # ── Version ──────────────────────────────────────────────
-    VERSION: str = "4.2.29"
+    VERSION: str = "4.2.30"
+
+    # ── Promo global de precios (v4.2.30: /promo <pct>) ──────
+    # Descuento porcentual aplicado a TODOS los planes VIP (0 = sin promo).
+    # Se cambia en caliente con /promo <1-100> (solo ADMIN) y se persiste
+    # en runtime_settings.json → sobrevive reinicios. 100 = todo gratis.
+    PROMO_PERCENT: int = 0
 
     # ── Telegram ─────────────────────────────────────────────
     API_ID: int = int(os.getenv("API_ID", "33426502"))
@@ -285,6 +291,23 @@ class Config:
     def delete_after_days(self) -> int:
         return max(1, self.DELETE_AFTER_HOURS // 24)
 
+    # ── v4.2.30: promo global de precios (/promo) ────────
+    def set_promo_percent(self, pct: int) -> None:
+        """Fijar el descuento global de los planes VIP (solo /promo, ADMIN).
+
+        Efecto inmediato (effective_price() lee PROMO_PERCENT en cada
+        llamada) + persistido en runtime_settings.json para sobrevivir
+        reinicios. El handler valida 0..100 antes de llamar aquí; por
+        seguridad aquí también se acota (jamás rompe el arranque).
+        """
+        p = max(0, min(100, int(pct)))
+        self.PROMO_PERCENT = p
+        self._save_runtime_setting("promo_percent", p)
+
+    @property
+    def promo_percent(self) -> int:
+        return max(0, min(100, int(self.PROMO_PERCENT)))
+
     def _load_runtime_settings(self) -> None:
         """Aplica ajustes guardados. Fail-open: ante cualquier error quedan
         los defaults (120h). Nunca rompe el arranque del bot."""
@@ -295,6 +318,10 @@ class Config:
                     v = data.get("delete_after_days")
                     if isinstance(v, int) and 1 <= v <= 365:
                         self.DELETE_AFTER_HOURS = v * 24
+                    # v4.2.30: promo de precios persistida (/promo <pct>)
+                    p = data.get("promo_percent")
+                    if isinstance(p, int) and 0 <= p <= 100:
+                        self.PROMO_PERCENT = p
         except Exception:
             pass
 

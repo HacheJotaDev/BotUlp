@@ -16,6 +16,7 @@ from telethon import Button
 from bot_locale import locale_manager
 from roles import UserRole
 from config import config
+from nowpayments import VIP_PLANS, effective_price, get_promo_percent, format_price
 
 
 class UI:
@@ -38,6 +39,14 @@ class UI:
         if localized:
             return localized
         return locale_manager.get(key, 'es', *args) or key
+
+
+# v4.2.30: emoji por plan (identidad visual que siempre tuvieron)
+_PLAN_EMOJIS = {1: "⚡", 3: "📊", 7: "🔥", 15: "🚀", 30: "💎"}
+
+
+def _plan_emoji(days: int) -> str:
+    return _PLAN_EMOJIS.get(days, "💎")
 
 
 class Keyboards:
@@ -224,15 +233,32 @@ class Keyboards:
 
     @staticmethod
     def payment_plans():
-        return [
-            [Button.inline("⚡  1 día  ·  $6", b"pay_1"),
-             Button.inline("📊  3 días  ·  $10", b"pay_3")],
-            [Button.inline("🔥  7 días  ·  $25", b"pay_7"),
-             Button.inline("🚀  15 días  ·  $50", b"pay_15")],
-            [Button.inline("💎  30 días  ·  $100", b"pay_30")],
-            Keyboards.SUPPORT_URL,
-            [Button.inline("«  Volver", b"back_main")],
-        ]
+        """v4.2.30: precios dinámicos — los labels se construyen desde
+        VIP_PLANS + effective_price() (promo global aplicada). Con promo
+        activa se añade una fila banner arriba y el precio rebajado en
+        cada botón. Sin promo queda IDÉNTICO a la versión anterior
+        (⚡ 1 día · $6 ... 💎 30 días · $100)."""
+        rows = []
+        pct = get_promo_percent()
+        if pct > 0:
+            rows.append([Button.inline(f"🏷️  PROMO  -{pct}%  ·  precios rebajados", b"promo_info")])
+
+        # Planes en el mismo orden de siempre: 1/3 · 7/15 · 30
+        plan_buttons = []
+        for days in (1, 3, 7, 15, 30):
+            plan = VIP_PLANS.get(days)
+            if not plan:
+                continue
+            price_txt = format_price(effective_price(days))
+            label = f"{_plan_emoji(days)}  {days} día{'s' if days != 1 else ''}  ·  ${price_txt}"
+            plan_buttons.append(Button.inline(label, f"pay_{days}".encode()))
+
+        rows.append([plan_buttons[0], plan_buttons[1]])
+        rows.append([plan_buttons[2], plan_buttons[3]])
+        rows.append([plan_buttons[4]])
+        rows.append(Keyboards.SUPPORT_URL)
+        rows.append([Button.inline("«  Volver", b"back_main")])
+        return rows
 
     @staticmethod
     def imap_cancel(token: str):

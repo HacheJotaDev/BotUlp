@@ -310,13 +310,15 @@ class LocaleManager:
             ),
 
             # ── Compra VIP ──────────────────────────────────
+            # v4.2.30: {1}..{5} = precios dinámicos (effective_price de
+            # nowpayments.py, promo aplicada). {0} = contacto.
             "buy_vip_info": (
                 "╭───✦ 💎 **COMPRAR VIP**\n"
-                "├─ ⚡ 1 día » $6\n"
-                "├─ 📊 3 días » $10\n"
-                "├─ 🔥 7 días » $25\n"
-                "├─ 🚀 15 días » $50\n"
-                "├─ 👑 30 días » $100\n"
+                "├─ ⚡ 1 día » {1}\n"
+                "├─ 📊 3 días » {2}\n"
+                "├─ 🔥 7 días » {3}\n"
+                "├─ 🚀 15 días » {4}\n"
+                "├─ 👑 30 días » {5}\n"
                 "╰───✦\n"
                 "\n"
                 "📬 Contacto: {0}"
@@ -328,6 +330,23 @@ class LocaleManager:
                 "╰───✦\n"
                 "\n"
                 "👇 Selecciona tu plan:"
+            ),
+            # v4.2.30: banner de promo (se antepone a pay_plans cuando hay
+            # promo activa; {0} = porcentaje sin el signo %)
+            "pay_promo_banner": (
+                "╭───✦ 🏷️ **PROMO ACTIVA: -{0}%**\n"
+                "├─ 🔥 Todos los planes rebajados\n"
+                "╰───✦\n"
+                "\n"
+            ),
+            # v4.2.30: entrega GRATIS con promo 100% ({0} = plan, {1} = pct)
+            "pay_promo_free": (
+                "╭━━━━━━━━━━━━━━━━━━━━╮\n"
+                "┃ 🎉 **PROMO 100% — GRATIS**\n"
+                "╰━━━━━━━━━━━━━━━━━━━━╯\n"
+                "\n"
+                "🎁 Tu **{0}** de VIP fue activado GRATIS.\n"
+                "🚀 Ya puedes usar /url o el menú para buscar."
             ),
             "pay_invoice": (
                 "╭───✦ 💳 **PAGO CREADO**\n"

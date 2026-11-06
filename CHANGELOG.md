@@ -2,6 +2,27 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.30] — /promo: descuento global de precios (solo ADMIN)
+
+### ✨ Nuevo: `/promo <pct>` — todos los precios bajan al instante
+- `/promo 70` → los precios de TODOS los planes bajan un **70%** en todas partes: botones del menú de compra, textos y el **cobro real** de NOWPayments (`price_amount` con descuento). `/promo 50` → mitad, etc.
+- **Solo ADMIN** (mismo gate que `/vip`, `/antiguos`): los demás usuarios no reciben respuesta.
+- **Validación completa**: `/promo 120` → error claro («El máximo permitido es 100%»); `/promo -5` → «el descuento no lleva signo»; `/promo abc` o `/promo 70 extra` → guía de uso (nunca silencio); `/promo` a secas → tarjeta de estado + tabla de precios vigente.
+- `/promo 0` **desactiva** la promo (precios normales) — sin este comando no había forma de volver atrás.
+- `/promo 100` → **todos los planes GRATIS**: el VIP se entrega al instante (sin invoice — NOWPayments no admite $0), queda registrado en DB como `delivered $0` y la confirmación avisa con ⚠️ explícito.
+- **Persistente**: vive en `SystemData/runtime_settings.json` (mismo mecanismo que `/antiguos`) → sobrevive reinicios. Al arrancar, la promo se recupera sola.
+
+### 🏗️ Arquitectura: un único punto de verdad de precios
+- `VIP_PLANS` (nowpayments.py) queda como **precios BASE**; el precio real SIEMPRE pasa por `effective_price(days)` que aplica `config.promo_percent` al vuelo. Como lee config en cada llamada, un `/promo` aplica **al instante** para todos los usuarios, sin reinicio y sin cachés stale (cero cuellos de botella: es un atributo `int`).
+- **Botones dinámicos** (`ui.py`): `payment_plans()` construye los labels desde `effective_price()` (`⚡ 1 día · $1.80`) y con promo activa añade arriba una fila banner `🏷️ PROMO -70% · precios rebajados` (tocarla refresca los precios y muestra un toast).
+- **Textos multi-idioma**: nuevo banner `pay_promo_banner` (ES/EN/PT) encima del menú de compra; `buy_vip_info` (ES/EN/PT + base) pasa a placeholders `{1}..{5}` — los precios ya no viven hardcodeados en los textos.
+- **`pay_check` FIX (latente)**: el monto del pago pendiente ahora se muestra desde el **registro real de la DB** (`amount_usd` con el que se creó la invoice), no desde el precio base — si se creó con promo, el usuario ve su monto exacto.
+- **Los pagos ya pendientes NO cambian de precio** (cada invoice congela su monto al crearse) — sin sorpresas ni dobles cobros.
+- Nuevas claves de locale: `pay_promo_banner`, `pay_promo_free`, `cmd_desc_promo` (ES/EN/PT) + fallback en `_CMD_FALLBACKS`. `/promo` añadida al listado 📋 Comandos del ADMIN y al README.
+
+### ✅ Verificación
+- Suite de verificación local (sin commitear, mismo criterio que versiones anteriores): sintaxis de los 7 archivos tocados, matemática de precios para 0/1/33/50/70/99/100% sobre los 5 planes, botones con/sin promo (labels exactos y callbacks `pay_*` intactos), rendering del banner en ES/EN/PT, redondeo a 2 decimales (cobrado = mostrado), persistencia round-trip de `runtime_settings.json`, clamps ante valores absurdos, regex del comando (`/promo`, `/promo 70`, `/promoBot 70`, `/promo 120`, `/promo -5`, `/promo abc def`), importación completa de `handlers.py` (sin ciclos ni imports rotos).
+
 ## [4.2.29] — El seller también genera keys con /keygen + botón de 15 días
 
 ### ✨ Seller con /keygen (antes solo ADMIN)

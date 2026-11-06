@@ -148,6 +148,7 @@ pm2 startup
 | `/bc <texto>` · `/bcvip <texto>` | Broadcast global / solo VIPs |
 | `/sizedisp` | Uso de disco del VPS |
 | `/antiguos [dias]` | Días de vida de los archivos antiguos (1–30, default 5) · persiste a reinicios |
+| `/promo [pct]` | Descuento global en TODOS los planes: `/promo 70` baja los precios un 70% en botones, textos y cobro real · 1–100 (`/promo 120` da error) · `0` = desactivar · `100` = todo gratis · persiste a reinicios |
 | `/listatxt` | TXT con los nombres de todos los archivos descargados (generales + hotmail + imap) |
 | `/updateBot` | Actualizar desde GitHub y reiniciar |
 

@@ -19,6 +19,9 @@ from logger_setup import logger
 from database import db
 
 # ── Precios VIP (USD) ──────────────────────────────────────
+# PRECIOS BASE — única fuente de verdad de los precios del bot.
+# El precio REAL cobrado/mostrado SIEMPRE pasa por effective_price(),
+# que aplica la promo global (/promo <pct>, solo ADMIN) al vuelo.
 VIP_PLANS = {
     1: {"price": 6.0, "label": "1 Dia"},
     3: {"price": 10.0, "label": "3 Dias"},
@@ -26,6 +29,48 @@ VIP_PLANS = {
     15: {"price": 50.0, "label": "15 Dias"},
     30: {"price": 100.0, "label": "30 Dias"},
 }
+
+
+# ═══════════════════════════════════════════════════════════
+#  PROMO GLOBAL DE PRECIOS (v4.2.30 — /promo <pct>)
+# ═══════════════════════════════════════════════════════════
+
+def get_promo_percent() -> int:
+    """Descuento global vigente (0..100). Lee config en cada llamada:
+    un /promo aplica AL INSTANTE para todos los usuarios, sin reinicio
+    y sin cachés stale (cuello de botella cero: es un atributo int)."""
+    return config.promo_percent
+
+
+def effective_price(days: int) -> float:
+    """Precio REAL de un plan con la promo vigente aplicada.
+
+    promo 0   → precio base tal cual ($6 → $6)
+    promo 70  → $6 → $1.80 · $100 → $30
+    promo 100 → $0.00 (el handler entrega el VIP gratis, sin invoice)
+
+    Redondeo a 2 decimales (centavos) — lo que ve el usuario en
+    botones/textos es EXACTAMENTE lo que se envía a NOWPayments.
+    """
+    plan = VIP_PLANS.get(days)
+    if not plan:
+        return 0.0
+    pct = get_promo_percent()
+    if pct <= 0:
+        return round(plan["price"], 2)
+    if pct >= 100:
+        return 0.0
+    return round(plan["price"] * (100 - pct) / 100, 2)
+
+
+def format_price(v: float) -> str:
+    """Formatear USD para botones/textos: $6 · $30 · $1.80 · $7.50.
+    Enteros sin decimales (mismo estilo que siempre), fraccionados
+    con 2 decimales."""
+    s = f"{float(v):.2f}"
+    if s.endswith(".00"):
+        s = s[:-3]
+    return s
 
 # ── Configuracion API ──────────────────────────────────────
 NP_API_BASE = "https://api.nowpayments.io/v1"
@@ -120,22 +165,61 @@ async def create_invoice(user_id: int, days: int, lang: str = 'es') -> Optional[
       - invoice_id
       - invoice_url (link multi-crypto)
       - order_id
-      - price_amount
+      - price_amount (precio REAL cobrado, con promo aplicada)
+      - promo_percent (0 si no hay promo activa)
       - plan_label
+      - free (True solo con promo 100%: VIP gratis, sin llamada a la API)
 
     Estrategia robusta:
       1) Intentar con ipn_callback_url (auto-delivery instantáneo)
       2) Si falla por IPN URL inválida → reintento SIN ipn_callback_url
          (el polling de 30s detecta el pago igualmente)
       3) Hasta 2 reintentos con backoff si hay timeout/error de red
+
+    v4.2.30: el monto enviado a NOWPayments es effective_price(days)
+    (promo aplicada). Con promo 100% el precio es $0 y NOWPayments no
+    admite invoices de $0 → NO se llama a la API: se registra el pago
+    en DB como delivered $0 y el handler entrega el VIP al instante.
     """
     plan = VIP_PLANS.get(days)
     if not plan:
         logger.error(f"Plan invalido: {days} dias")
         return None
 
-    price_usd = plan["price"]
+    promo_pct = get_promo_percent()
+    price_usd = effective_price(days)
     order_id = f"HJ-{user_id}-{days}d-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+
+    # ── PROMO 100%: plan GRATIS — sin invoice, sin API ──
+    if price_usd <= 0:
+        free_id = f"PROMO-{user_id}-{days}d-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
+        logger.info(
+            f"PROMO 100%: user={user_id} | {plan['label']} GRATIS | "
+            f"record={free_id} (sin invoice NOWPayments)"
+        )
+        try:
+            db.create_payment(
+                user_id=user_id,
+                invoice_id=free_id,
+                order_id=order_id,
+                days=days,
+                amount_usd=0.0,
+                status="delivered",
+                lang=lang
+            )
+        except Exception as db_err:
+            # El registro es contable: si falla, el VIP igual se entrega
+            # (fail-open) y queda el log para auditoría.
+            logger.error(f"PROMO 100%: registro DB falló para {free_id}: {db_err}")
+        return {
+            "invoice_id": free_id,
+            "invoice_url": "",
+            "order_id": order_id,
+            "price_amount": 0.0,
+            "promo_percent": promo_pct,
+            "plan_label": plan["label"],
+            "free": True,
+        }
 
     payload = {
         "price_amount": price_usd,
@@ -168,7 +252,7 @@ async def create_invoice(user_id: int, days: int, lang: str = 'es') -> Optional[
 
             logger.info(
                 f"Invoice creado: id={invoice_id} | user={user_id} | {plan['label']} | "
-                f"${price_usd} | url={invoice_url[:50]}... | attempt={attempt}"
+                f"${price_usd} (promo -{promo_pct}%) | url={invoice_url[:50]}... | attempt={attempt}"
             )
 
             # Guardar en DB (invoice_id en columna invoice_id)
@@ -191,7 +275,9 @@ async def create_invoice(user_id: int, days: int, lang: str = 'es') -> Optional[
                 "invoice_url": invoice_url,
                 "order_id": order_id,
                 "price_amount": price_usd,
+                "promo_percent": promo_pct,
                 "plan_label": plan["label"],
+                "free": False,
             }
 
         # Falló este intento

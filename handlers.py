@@ -35,7 +35,7 @@ from logger_setup import logger
 from database import db
 from roles import UserRole, SearchMode, get_user_role, can_search
 from bot_locale import locale_manager
-from ui import UI, Keyboards
+from ui import UI, Keyboards, _plan_emoji
 from utils import (
     normalizar_url, get_file_counts, format_size, format_time,
     format_uptime, sanitize_md, progress_bar, build_files_txt
@@ -43,7 +43,8 @@ from utils import (
 from search import search_engine, hotmail_extract_engine, imap_extract_engine
 from nowpayments import (
     create_invoice, VIP_PLANS, get_payment_status,
-    SUCCESS_STATUSES, WAITING_STATUSES, FAIL_STATUSES, _deliver_vip
+    SUCCESS_STATUSES, WAITING_STATUSES, FAIL_STATUSES, _deliver_vip,
+    effective_price, get_promo_percent, format_price
 )
 from imap_checker import imap_check_file, MAX_SENDERS
 from hotmail_checker import hotmail_check_file, parse_proxy as parse_hotmail_proxy
@@ -461,6 +462,7 @@ _CMD_FALLBACKS = {
     'cmd_desc_bcvip': 'Broadcast solo a VIPs',
     'cmd_desc_sizedisp': 'Almacenamiento de la VPS: total, ocupado y libre',
     'cmd_desc_antiguos': 'Cambia cuántos días viven los antiguos: /antiguos 3',
+    'cmd_desc_promo': 'Descuento global en los precios: /promo 70 · /promo 0 = desactivar · máximo 100',
     'cmd_desc_listatxt': 'TXT con los nombres de todos los archivos descargados (generales, hotmail e imap)',
     'cmd_desc_updatebot': 'Actualizar el bot desde GitHub',
     'cmd_vip_more': '💎 Con VIP desbloqueas /imapchk y más — renueva desde «💎 Renovar VIP»',
@@ -481,6 +483,22 @@ def _cmd_desc(key: str, lang: str) -> str:
 def _cmd_line(cmd: str, key: str, lang: str) -> str:
     """Línea del menú: ├─ ⚙ /comando — descripción."""
     return f"├─ ⚙ {cmd} — {_cmd_desc(key, lang)}"
+
+
+def _promo_price_rows() -> str:
+    """v4.2.30: filas «antes $X → ahora $Y» de los 5 planes con la promo
+    vigente (para las tarjetas de /promo). Usa SIEMPRE effective_price()
+    → lo que ve el admin es exactamente lo que paga el usuario."""
+    rows = ""
+    for days in (1, 3, 7, 15, 30):
+        plan = VIP_PLANS.get(days)
+        if not plan:
+            continue
+        antes = format_price(plan["price"])
+        ahora = format_price(effective_price(days))
+        dias = f"{days} día" if days == 1 else f"{days} días"
+        rows += f"├─ {_plan_emoji(days)} {dias}: antes ${antes} → ahora **${ahora}**\n"
+    return rows
 
 
 def _get_commands_by_role(role: UserRole, lang: str = 'es', has_free: bool = False) -> str:
@@ -547,6 +565,7 @@ def _get_commands_by_role(role: UserRole, lang: str = 'es', has_free: bool = Fal
             _cmd_line('/bcvip', 'cmd_desc_bcvip', lang),
             _cmd_line('/sizedisp', 'cmd_desc_sizedisp', lang),
             _cmd_line('/antiguos', 'cmd_desc_antiguos', lang),
+            _cmd_line('/promo', 'cmd_desc_promo', lang),
             _cmd_line('/listatxt', 'cmd_desc_listatxt', lang),
             _cmd_line('/id', 'cmd_desc_id', lang),
             _cmd_line('/ping', 'cmd_desc_ping', lang),
@@ -3156,6 +3175,131 @@ def register_handlers(bot_client):
             except Exception:
                 pass
 
+    # --- PROMO: descuento global de precios (v4.2.30) ---
+    @bot_client.on(events.NewMessage(pattern=r"/promo(?:@\w+)?(?:\s+(.+?))?\s*$"))
+    async def cmd_promo(e):
+        """v4.2.30: /promo [pct] — descuento global en TODOS los planes (solo ADMIN).
+
+        • /promo 70   → los precios bajan un 70% en todas partes: botones,
+                        textos y el cobro REAL de NOWPayments
+        • /promo 100  → todos los planes GRATIS (entrega inmediata, sin invoice)
+        • /promo 0    → desactiva la promo (precios normales)
+        • /promo 120  → ERROR: el máximo es 100%
+        • /promo      → tarjeta con el estado actual + guía
+        • /promo abc  → guía de uso (nunca silencio)
+
+        Aplica AL INSTANTE (effective_price() lee config en cada llamada:
+        botones, textos e invoices sin cachés stale) y persiste en
+        SystemData/runtime_settings.json → sobrevive reinicios. Los pagos
+        ya pendientes conservan el precio con el que fueron creados.
+        """
+        if get_user_role(e.sender_id) != UserRole.ADMIN:
+            return
+        try:
+            arg = (e.pattern_match.group(1) or "").strip()
+            actual = get_promo_percent()
+
+            # ── /promo a secas: estado actual + guía ──
+            if not arg:
+                if actual > 0:
+                    estado = (
+                        f"├─ Promo activa: **-{actual}%**\n"
+                        + _promo_price_rows()
+                        + "├─ 🛑 Desactivar: `/promo 0`\n"
+                    )
+                else:
+                    estado = "├─ Promo: **desactivada** (precios normales)\n"
+                await e.reply(
+                    "╭───✦ 🏷️ **PROMO DE PRECIOS**\n"
+                    + estado
+                    + "├─ Activar: `/promo <1-100>` · ej. `/promo 70`\n"
+                    "├─ Tope máximo: **100%** (por encima da error)\n"
+                    "╰───✦",
+                    parse_mode='md'
+                )
+                return
+
+            # ── argumento no válido: texto, decimal, negativo o args extra ──
+            if not arg.isdigit():
+                if arg.lstrip("+-").isdigit() and ("-" in arg or "+" in arg):
+                    motivo = "├─ ❌ El descuento no lleva signo (ni negativo)\n"
+                elif " " in arg:
+                    motivo = "├─ ❌ Solo se admite UN número, sin texto extra\n"
+                else:
+                    motivo = "├─ ❌ Debe ser un número entero (sin decimales)\n"
+                await e.reply(
+                    "╭───✦ 🏷️ **PROMO — USO INCORRECTO**\n"
+                    + motivo
+                    + "├─ Uso: `/promo <1-100>`\n"
+                    "├─ Ejemplo: `/promo 70`\n"
+                    "├─ `/promo 0` desactiva la promo\n"
+                    f"├─ Ahora mismo: **-{actual}%**\n"
+                    "╰───✦",
+                    parse_mode='md'
+                )
+                return
+
+            pct = int(arg)
+
+            # ── fuera de rango: 101+ → error con el tope bien claro ──
+            if pct > 100:
+                await e.reply(
+                    "╭───✦ ❌ **PROMO INVÁLIDA**\n"
+                    f"├─ Pediste: **{pct}%**\n"
+                    "├─ El máximo permitido es **100%**\n"
+                    "├─ Uso: `/promo <1-100>` · `/promo 0` desactiva\n"
+                    f"├─ Ahora mismo: **-{actual}%**\n"
+                    "╰───✦",
+                    parse_mode='md'
+                )
+                return
+
+            # ── /promo 0 → desactivar ──
+            if pct == 0:
+                config.set_promo_percent(0)
+                logger.info(f"PROMO: admin {e.sender_id} DESACTIVÓ la promo (antes -{actual}%)")
+                await e.reply(
+                    "╭───✦ ✅ **PROMO DESACTIVADA**\n"
+                    "├─ Todos los planes vuelven a su precio normal\n"
+                    f"├─ Antes: **-{actual}%** de descuento\n"
+                    "├─ Aplica ya en botones, textos y cobro real\n"
+                    "├─ 💾 Guardado — sobrevive reinicios\n"
+                    "╰───✦",
+                    parse_mode='md'
+                )
+                return
+
+            # ── /promo 1..100 → activar (100 = todo gratis) ──
+            config.set_promo_percent(pct)
+            logger.info(f"PROMO: admin {e.sender_id} fijó la promo en -{pct}% (antes -{actual}%)")
+
+            detalle = (
+                "╭───✦ 📌 **DETALLE**\n"
+                "├─ Aplica YA en botones, textos y cobro real\n"
+                "├─ Los pagos ya pendientes no cambian de precio\n"
+                "├─ 💾 Guardado — sobrevive reinicios\n"
+                "├─ 🛑 Desactivar: `/promo 0`\n"
+            )
+            if pct == 100:
+                detalle += "├─ ⚠️ Con 100% TODOS los planes son GRATIS\n╰───✦"
+            else:
+                detalle += "╰───✦"
+
+            await e.reply(
+                f"╭───✦ 🏷️ **PROMO ACTIVADA: -{pct}%**\n"
+                + _promo_price_rows()
+                + "╰───✦\n\n"
+                + detalle,
+                parse_mode='md'
+            )
+        except Exception:
+            # Anti-mudez (patrón v4.2.19): el admin SIEMPRE recibe respuesta
+            logger.exception("Error en /promo")
+            try:
+                await e.reply("⚠️ Error cambiando la promo, intenta de nuevo.", parse_mode=None)
+            except Exception:
+                pass
+
     # --- LISTATXT: nombres de todos los archivos descargados (v4.2.22) ---
     @bot_client.on(events.NewMessage(pattern=r"/listatxt(?:@\w+)?\s*$"))
     async def cmd_listatxt(e):
@@ -3329,12 +3473,27 @@ def register_handlers(bot_client):
                 )
 
             # ─── COMPRAR VIP (menu con pago automatico + contacto) ───
-            elif data == "buy_vip_info":
-                await e.edit(
-                    UI.text("pay_plans", lang),
-                    buttons=Keyboards.payment_plans(),
-                    parse_mode='md'
-                )
+            # v4.2.30: banner de promo encima cuando hay descuento activo.
+            # promo_info = tocar el banner → refresca planes al precio vigente.
+            elif data in ("buy_vip_info", "promo_info"):
+                promo_pct = get_promo_percent()
+                text = UI.text("pay_plans", lang)
+                if promo_pct > 0:
+                    text = UI.text("pay_promo_banner", lang, promo_pct) + text
+                try:
+                    await e.edit(
+                        text,
+                        buttons=Keyboards.payment_plans(),
+                        parse_mode='md'
+                    )
+                except MessageNotModifiedError:
+                    pass
+                if data == "promo_info":
+                    toast = f"🏷️ Promo activa: -{promo_pct}%" if promo_pct > 0 else "Sin promo activa"
+                    try:
+                        await e.answer(toast)
+                    except Exception:
+                        pass
 
             # ─── PAGO: Seleccionar plan ───
             elif data.startswith("pay_") and data != "pay_check":
@@ -3346,7 +3505,7 @@ def register_handlers(bot_client):
                 await e.edit(UI.text("pay_checking", lang), parse_mode='md')
 
                 result = await create_invoice(uid, days, lang)
-                if not result or "invoice_url" not in result:
+                if not result:
                     await e.edit(
                         UI.text("pay_api_error", lang),
                         buttons=Keyboards.back(),
@@ -3354,10 +3513,33 @@ def register_handlers(bot_client):
                     )
                     return
 
-                invoice_url = result["invoice_url"]
+                # ── v4.2.30: PROMO 100% → VIP gratis, entrega inmediata ──
+                # (create_invoice NO llamó a NOWPayments: un invoice de $0
+                #  no existe; el plan se entrega directo y queda registrado)
+                if result.get("free"):
+                    await _deliver_vip(state, uid, days, result["invoice_id"], lang, "promo-100")
+                    new_role = get_user_role(uid)
+                    await e.edit(
+                        UI.text("pay_promo_free", lang, plan["label"]),
+                        buttons=Keyboards.main(new_role, lang, False),
+                        parse_mode='md'
+                    )
+                    return
 
+                invoice_url = result.get("invoice_url") or ""
+                if not invoice_url:
+                    await e.edit(
+                        UI.text("pay_api_error", lang),
+                        buttons=Keyboards.back(),
+                        parse_mode='md'
+                    )
+                    return
+
+                # El monto mostrado es EXACTAMENTE el cobrado (promo incluida):
+                # sale del propio resultado de create_invoice, nunca del precio base.
                 await e.edit(
-                    UI.text("pay_invoice", lang, plan["label"], plan["price"], invoice_url),
+                    UI.text("pay_invoice", lang, plan["label"],
+                            result.get("price_amount", effective_price(days)), invoice_url),
                     buttons=Keyboards.payment_invoice(invoice_url),
                     parse_mode='md'
                 )
@@ -3382,10 +3564,11 @@ def register_handlers(bot_client):
                 payment = pending[0]
                 invoice_id = str(payment['invoice_id'])
                 days = payment.get('days') or 0
-                plan = VIP_PLANS.get(days, {
-                    "price": float(payment.get('amount_usd') or 0.0),
-                    "label": f"{days} días"
-                })
+                # v4.2.30 FIX: el monto mostrado es el REAL del pago pendiente
+                # (guardado en DB al crear la invoice), NO el precio base del
+                # plan — si se creó con promo, el usuario ve su monto con promo.
+                amount = float(payment.get('amount_usd') or 0.0)
+                label = (VIP_PLANS.get(days) or {}).get("label") or f"{days} días"
 
                 status = await get_payment_status(invoice_id)
 
@@ -3408,7 +3591,7 @@ def register_handlers(bot_client):
                 else:
                     # waiting / confirming / sending / not_found / error de red
                     await e.edit(
-                        UI.text("pay_status_pending", lang, plan["label"], float(plan["price"])),
+                        UI.text("pay_status_pending", lang, label, amount),
                         buttons=Keyboards.payment_checking(),
                         parse_mode='md'
                     )
