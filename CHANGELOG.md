@@ -2,6 +2,40 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.32] — Emojis premium en TODAS las salidas: 86 asociaciones + iconos en botones
+
+### ✨ De 20 a 86 emojis premium — catálogo completo
+- Se incorporan los **66 nuevos IDs reales** aportados (grupos A/B/C: 🚫 👑 📧 🔄 👤 💡 🚀 ♾️ 🔐 💼 📂 💳 📌 🎉 ➡️ 🗂️ 🔑 🧭 👇 🗄️ 📨 🔗 🎖️ 💲 💾 ❓ ♻️ 🛑 🏷️ 🔁 🆕 ✍️ 📣 📑 📋 🌟 👋 🛡️ 📞 🧹 ⬇️ 🪪 💬 🎯 ☄️ ⚙️ 🆔 📍 📎 🪙 🧮 🧩 📶 📈 📉 💰 ✂️ 🗑 🔧 🆓 🏳️ 🔒 1️⃣-4️⃣) con sus **IDs exactos, sin alterar uno solo**.
+- Los **20 originales de v4.2.31 quedan INTACTOS** (mismos IDs, mismas asociaciones, mismo comportamiento ya verificado en producción). El catálogo queda en **86 asociaciones + el alias técnico 🔍** (misma lupa que 🔎, heredado de v4.2.31).
+- La clave de búsqueda es siempre el **emoji original del código**, nunca el glifo alternativo: 📧/📨 (glifo ✉️), 🔐/🔒, 💲/💰, 🚫/❌ y 📑/📁 conviven con IDs independientes.
+
+### 🔍 Por qué en v4.2.31 algunos sitios seguían con emojis normales (corregido)
+1. **Botones**: los labels de botones NUNCA pasan por el parser de mensajes — ahí estaban la mayoría de emojis «normales» visibles (menús completos). v4.2.32 los cubre con **iconos premium** (ver abajo).
+2. **66 emojis sin ID**: 👑 💼 🆓 📧 🔑 🚀 🔄 💳 🏷️ 🛑 📞… aparecían normales en los TEXTOS porque simplemente no estaban en el catálogo de 20. Ahora están.
+3. **Respuestas de callback (toasts/alerts)**: `answerCallbackQuery` no admite entidades — límite de la plataforma, documentado (1 aparición: 🛑 en «Cancelando…»).
+- Los métodos de envío en sí ya estaban cubiertos: `send_message`, `edit`, `reply`, `respond`, captions de `send_file` y los 3 parse_mode pasan TODOS por `_parse_message_text` (verificado contra el código de Telethon 1.45).
+
+### 🎨 NUEVO — Emojis premium como ICONOS de botones
+- Telethon 1.45 / layer 211 soporta `icon_custom_emoji_id` (Bot API 9.4): el emoji del botón pasa a ser su **icono premium** y desaparece del label — sin copia Unicode redundante.
+- Parche central en `TelegramClient.build_reply_markup`: cubre TODOS los send/edit/send_file con botones sin tocar un call site. Callbacks, datos y URLs quedan intactos; los botones se RECONSTRUYEN (nunca se mutan los compartidos como `BACK`/`LANG_BUTTON`/`SUPPORT_URL`).
+- Lo que no admite icono se conserva tal cual: banderas 🇪🇸/🇬🇧/🇧🇷 del selector de idioma, «  Volver, botones numéricos «1 día» y cualquier emoji sin ID (📢 Compartir mi link).
+
+### 🧬 Sustitución de «alt» verificado (requisito de Telegram)
+- Cada entidad `MessageEntityCustomEmoji` debe cubrir el emoji EXACTO del campo `DocumentAttributeCustomEmoji.alt`. Para los 66 nuevos con glifo distinto (🚫→❌, 📧→✉️, 🗂️→🗃, 🆔→☝️, 🌟→⭐️, keycaps…) el texto visible se sustituye por el alt y se **recalculan los offsets UTF-16 de TODAS las entidades** (negritas que contienen la sustitución ajustan su longitud; las posteriores se desplazan).
+- **Validación MTProto al arrancar**: `GetCustomEmojiDocuments` pide los 66 documentos, lee sus alt REALES y corrige el mapa de sustituciones (si el alt real coincide con la clave, se retira la sustitución; si difiere, se usa el verificado). Los 20 originales nunca se tocan.
+- Guarda ZWJ: 🏳️‍🌈 y secuencias compuestas jamás se convierten (detecta el backtrack del regex a la variante corta). Banderas de países: excluidas por diseño (no hay IDs).
+
+### 🛡️ Protección total — sin cambios (ampliada)
+- Autocomprobación al arrancar en 3 fases: (1) validación MTProto de documentos, (2) sonda de custom emoji en mensaje al admin, (3) **sonda de icono premium en botón** — si el servidor rechaza solo los iconos, se apagan los iconos y los mensajes siguen premium; si rechaza todo (bot sin username de Fragment), se desactiva todo y el bot sigue con emojis normales.
+- Motor **idempotente**: un emoji que ya tiene entidad custom jamás se re-convierte (imposible apilar entidades). Ruta rápida sin copias cuando no hay sustituciones (el 100 % de los casos de los 20 originales).
+- Interruptor único `PREMIUM_EMOJIS=0` apaga mensajes + botones. Degradación elegante: cualquier fallo → envío con emojis normales.
+
+### ✅ Verificación (suite `test_premium_emojis.py`, sin red)
+- **68/68 pruebas**: catálogo exacto (86+1, 86 document_ids distintos, 20 intactos byte a byte), matemática UTF-16 verificada contra `utf-16-le` real para las 87 claves × variantes VS16/keycaps, sustituciones de alt con deltas negativas/positivas y recálculo de bold/links, integración con el parser REAL de Telethon (`md`/`html`/`None`), exclusión code/pre vs anidamiento en bold, URLs intactas, banderas y ZWJ intactos, botones (iconos, data/URL, estilos, objetos compartidos sin mutar, idempotencia, fallbacks), menús reales de `ui.py` (FREE/VIP/ADMIN/panel/planes/tiempos/idioma), toggle en caliente, excepciones tragadas y rendimiento (1.200 emojis en ~5 ms).
+- **Auditoría de cobertura sobre los archivos reales**: 1.908 apariciones del catálogo (1.341 en locales ES/EN/PT + 500 en strings del código incl. bot_locale + 66 en labels de botones + 1 en toast) → **1.907 convertidas (99,9 %)**. La única no convertida es 🛑 dentro de un toast de callback (Telegram no admite entidades ahí). Fuera del catálogo y sin ID: ⏹ (toast), 📢 (botón Compartir), y los símbolos tipográficos ✦ ☾ ☽ ✓ del diseño Obsidian (no son emojis).
+- `py_compile` de los 11 módulos + importación completa de `bot.py` con todos los módulos (sin ciclos ni errores).
+- Pendiente de verificación en producción (requiere credenciales): validación MTProto de los 66 documentos y las dos sondas en vivo del arranque.
+
 ## [4.2.31] — Emojis premium (custom emoji) en todos los mensajes
 
 ### ✨ 20 emojis pasan a premium — sin tocar ni un texto

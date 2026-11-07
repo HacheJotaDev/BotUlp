@@ -151,15 +151,17 @@ class Config:
     BASE_DIR: Path = Path(__file__).resolve().parent
 
     # ── Version ──────────────────────────────────────────────
-    VERSION: str = "4.2.31"
+    VERSION: str = "4.2.32"
 
-    # ── Emojis premium (v4.2.31) ──────────────────────────────
-    # Custom emojis de Telegram en TODOS los mensajes del bot.
-    #   1 = activados (por defecto) · 0 = desactivados (emojis normales)
+    # ── Emojis premium (v4.2.31 · ampliado en v4.2.32) ─────────
+    # Custom emojis de Telegram en TODOS los mensajes del bot y
+    # iconos premium en los botones inline/URL compatibles.
+    #   1 = activados (por defecto) · 0 = desactivado (emojis normales)
     # NOTA: los bots solo pueden enviar custom emojis si tienen un
     # username coleccionable comprado en Fragment. Al arrancar, el bot
-    # hace una autocomprobación en vivo y, si el servidor los rechaza,
-    # los desactiva solo (queda anotado en el log, nada se rompe).
+    # valida los documentos vía MTProto, hace una autocomprobación en
+    # vivo (mensaje + botón) y, si el servidor los rechaza, los
+    # desactiva solo (queda anotado en el log, nada se rompe).
     PREMIUM_EMOJIS: bool = os.getenv("PREMIUM_EMOJIS", "1") == "1"
 
     # ── Promo global de precios (v4.2.30: /promo <pct>) ──────

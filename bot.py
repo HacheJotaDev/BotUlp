@@ -76,8 +76,9 @@ async def main():
     state.userbot = userbot_client
     state.START_TIME = _time.time()
 
-    # v4.2.31: emojis premium — parche del parser de Telethon (un punto
-    # cubre send/edit/reply/captions con cualquier parse_mode)
+    # v4.2.32: emojis premium — parches del parser y de los teclados de
+    # Telethon (dos puntos cubren send/edit/reply/captions/botones con
+    # cualquier parse_mode) — catálogo ampliado a 86 asociaciones
     premium_emojis.install()
 
     # Inicializar cola de auto-descarga
@@ -155,9 +156,11 @@ async def main():
     logger.info(f"Bot: @{me.username} (ID: {me.id})")
     logger.info(f"Userbot: {user_me.first_name} (ID: {user_me.id})")
 
-    # v4.2.31: autocomprobación de emojis premium — envía y borra una
-    # prueba al admin; si el servidor los rechaza (bot sin username de
-    # Fragment), se desactivan solos y el bot sigue con emojis normales
+    # v4.2.32: autocomprobación de emojis premium — valida los 66
+    # documentos nuevos vía MTProto (alt reales), envía y borra una
+    # prueba (mensaje + botón con icono) al admin; si el servidor los
+    # rechaza (bot sin username de Fragment), se desactivan solos y el
+    # bot sigue con emojis normales
     await premium_emojis.self_test(bot_client)
 
     logger.info(f"HJ ULP PRO v{config.VERSION} — ACTIVO ✓")
