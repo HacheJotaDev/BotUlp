@@ -2,6 +2,32 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.2.31] — Emojis premium (custom emoji) en todos los mensajes
+
+### ✨ 20 emojis pasan a premium — sin tocar ni un texto
+- ✅ 📊 📁 ⚠️ ❌ ⚡ ⏳ ⏱️ 🎁 💎 👥 📬 📄 📅 📥 🔎 🔥 📦 🌐 🌍 ahora se envían como **custom emoji premium** en TODOS los mensajes del bot: /start, menús, búsquedas, progreso de descargas, captions de archivos, errores, verificación de pagos… (mismo ID para 🔍 y 🔎 — misma lupa; variantes ⚠️/⚠, ⚡️/⚡, ⏱️/⏱ cubiertas con y sin selector VS16).
+- **1.184 ocurrencias** se convierten al vuelo (846 en locales ES/EN/PT + 338 en strings del código) — el 70,5% de los textos del bot lleva al menos uno.
+
+### 🏗️ Arquitectura: parche único en el parser de Telethon
+- NUEVO `premium_emojis.py`: intercepta `MessageParseMethods._parse_message_text` — **un solo punto** cubre `send_message`, `edit`, `reply`, `respond`, captions de `send_file` y los 3 modos que usa el bot (`parse_mode='md'`, `'html'` y `None` — los mensajes de error con ⚠️ también). Cero cambios en los 163+ call sites.
+- Los textos fuente **no se tocan**: lógica, comparaciones, splits y truncados siguen viendo los mismos strings de siempre (cero riesgo de regresión).
+- Offsets/lengths en **unidades UTF-16** (lo que exige Telegram), calculados sobre el texto YA parseado por markdown — verificados byte a byte contra `utf-16-le` real, con emojis BMP (1 unidad) y astrales (2 unidades).
+- Emojis dentro de bloques `` `code` ``/`pre` se quedan normales (ahí un premium rompería la monoespaciada); dentro de **negrita**/cursiva/enlaces sí se anidan (válido y deseado).
+
+### 🛡️ Protección total — el bot nunca se rompe
+- **Autocomprobación al arrancar**: el bot envía un «✅ premium» al admin y lo borra. Si el servidor lo rechaza (los bots necesitan un **username coleccionable de Fragment** para custom emojis), se desactivan solos, queda anotado en el log y todo sigue con emojis normales.
+- **Degradación elegante**: cualquier fallo calculando entidades → el mensaje se envía con emojis normales (jamás se pierde un envío).
+- **Interruptor**: `PREMIUM_EMOJIS=0` en `.env` los apaga al instante sin tocar código (`1` por defecto).
+- **Rendimiento**: un escaneo regex por mensaje — 1,8 µs sin coincidencias, 2,5 ms en el peor caso probado (9 KB con 1.200 emojis). Cero latencia de red añadida.
+
+### 📋 Límites de Telegram (nada que hacer)
+- Los **labels de botones** no soportan custom emoji (plataforma): los emojis de los botones siguen normales.
+- Quedan **72 emojis sin ID premium** (🚫 👑 📧 🔄 👤 💡 🚀 ♾️ 🔐 💼 📂 💳 📌 🎉 ➡️ 🗂️ 🔑 🧭 👇 🗄️ 📨 🔗 🎖️ 💲 💾 ❓ ♻️ 🛑 🏷️ 🔁 🆕 ✍️ 📣 📑 📋 🌟 👋 🛡️ 1️⃣-4️⃣ 📞 🧹 ⬇️ 🪪 💬 🎯 ☄️ ⚙️ 🆔 📍 📎 🪙 🧮 🧩 📶 📈 📉 💰 ✂️ 🗑 🔧 🆓 🏳️ 🔒 🗑️ y las ~48 banderas de países) — pendientes de IDs para una segunda tanda.
+
+### ✅ Verificación
+- Suite local de 46 asserts (sin red): document_id exacto de las 21 variantes, matemática UTF-16 (BMP vs astral, VS16, adyacentes, mezclas), exclusión code/pre vs anidamiento en bold, integración con el parser REAL de Telethon ('md'/'html'/None), toggle en caliente, None-safety y benchmarks de rendimiento.
+- `py_compile` de los 14 módulos + importación completa de `bot.py` (handlers + download + premium_emojis, sin ciclos) + recuento de cobertura sobre los 447 textos de locales y 308 strings de código.
+
 ## [4.2.30] — /promo: descuento global de precios (solo ADMIN)
 
 ### ✨ Nuevo: `/promo <pct>` — todos los precios bajan al instante

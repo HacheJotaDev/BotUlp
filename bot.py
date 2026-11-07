@@ -25,6 +25,7 @@ from handlers import register_handlers
 from download import (
     _auto_dl_worker, realtime_listener, mover_y_limpiar_archivos
 )
+import premium_emojis
 
 # ═════════════════════════════════════════════════════════════
 # INICIALIZACION
@@ -74,6 +75,10 @@ async def main():
     state.bot = bot_client
     state.userbot = userbot_client
     state.START_TIME = _time.time()
+
+    # v4.2.31: emojis premium — parche del parser de Telethon (un punto
+    # cubre send/edit/reply/captions con cualquier parse_mode)
+    premium_emojis.install()
 
     # Inicializar cola de auto-descarga
     state.auto_dl_queue = asyncio.Queue()
@@ -149,6 +154,12 @@ async def main():
     user_me = await userbot_client.get_me()
     logger.info(f"Bot: @{me.username} (ID: {me.id})")
     logger.info(f"Userbot: {user_me.first_name} (ID: {user_me.id})")
+
+    # v4.2.31: autocomprobación de emojis premium — envía y borra una
+    # prueba al admin; si el servidor los rechaza (bot sin username de
+    # Fragment), se desactivan solos y el bot sigue con emojis normales
+    await premium_emojis.self_test(bot_client)
+
     logger.info(f"HJ ULP PRO v{config.VERSION} — ACTIVO ✓")
 
     # ── Shutdown elegante (SIGTERM/SIGINT) ──────────────────
