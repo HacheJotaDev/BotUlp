@@ -265,7 +265,7 @@ Trabajo de diseño de producto completo sobre la interfaz: menús por rol en **f
 ## [4.2.23] — Reporte de URL con @ y fecha + confirmación que se auto-borra
 
 ### ✨ Mejorado: tarjeta REPORTE DE URL (para admins)
-- Ahora incluye el **@ del usuario** además de su ID: `├─ 👤 Usuario: \`7656500542\` · @usuario` (vía `_lookup_username` con caché; si no tiene @, se muestra solo el ID).
+- Ahora incluye el **@ del usuario** además de su ID: `├─ 👤 Usuario: \`1234567890\` · @usuario` (vía `_lookup_username` con caché; si no tiene @, se muestra solo el ID).
 - Nueva línea **📅 Fecha** del reporte: formato `dd/mm/AAAA HH:MM` (convención ya usada en el listado de archivos).
 
 ### ✨ Nuevo: confirmación visible al usuario que se auto-elimina

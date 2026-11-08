@@ -97,7 +97,7 @@ pm2 startup
 |----------|:-----------:|-------------|
 | `BOT_TOKEN` | ✅ | Token del bot (de [@BotFather](https://t.me/BotFather)) |
 | `API_ID` / `API_HASH` | ⬜ | Credenciales de Telegram (my.telegram.org) |
-| `ADMIN_IDS` | ⬜ | IDs de admins separados por coma: `7656500542,123456789` |
+| `ADMIN_IDS` | ⬜ | IDs de admins separados por coma: `1234567890,123456789` |
 | `BOT_USERNAME` | ⬜ | Username del bot sin @ (para links de canje) |
 | `SUPPORT_CONTACT` | ⬜ | Usuario de soporte sin @ (botón 📞 Soporte) |
 | `NOWPAYMENTS_API_KEY` | ⬜ | API key de NOWPayments |
@@ -191,7 +191,7 @@ Todos los mensajes del bot siguen un lenguaje visual unificado:
 ╰━━━━━━━━━━━━━━━━━━━━╯
 
 ╭───✦ 👤 MI CUENTA
-├─ 🆔 ID: `7656500542`
+├─ 🆔 ID: `1234567890`
 ├─ 🎖️ Rango: VIP
 ╰───✦
 ```

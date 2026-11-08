@@ -171,13 +171,13 @@ class Config:
     PROMO_PERCENT: int = 0
 
     # ── Telegram ─────────────────────────────────────────────
-    API_ID: int = int(os.getenv("API_ID", "33426502"))
-    API_HASH: str = os.getenv("API_HASH", "54a521a10855ddd24314433372190f97")
+    API_ID: int = int(os.getenv("API_ID", "12345"))
+    API_HASH: str = os.getenv("API_HASH", "tu_api_hash_aqui")
     BOT_TOKEN: str = field(default_factory=lambda: os.getenv("BOT_TOKEN", ""))
     USER_SESSION: str = os.getenv("USER_SESSION", "user_session")
     BOT_SESSION: str = os.getenv("BOT_SESSION", "bot_session")
 
-    ADMIN_IDS: List[int] = field(default_factory=lambda: _env_list("ADMIN_IDS", [7656500542]))
+    ADMIN_IDS: List[int] = field(default_factory=lambda: _env_list("ADMIN_IDS", [1234567890]))
 
     BOT_USERNAME: str = os.getenv("BOT_USERNAME", "UlpHJBot")
     SELLER_USERNAMES: List[str] = field(default_factory=lambda: _env_list("SELLER_USERNAMES", ["@hjofc20"]))
@@ -188,7 +188,7 @@ class Config:
     #  Compatible con Neon, Supabase, Railway, Render, etc.
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "postgresql://neondb_owner:npg_yeLUO1TV8Qdl@ep-damp-bar-ay8m8k1e-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+        "postgresql://usuario:password@ep-tu-host-pooler.region.aws.neon.tech/nombre_bd?sslmode=require"
     )
 
     # ── Directorios ──────────────────────────────────────────

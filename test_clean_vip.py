@@ -390,7 +390,7 @@ def test_L9_static_conservation():
 #  NOTIFICACIONES VIP A ADMINISTRADORES
 # ─────────────────────────────────────────────────────────────
 
-ADMIN_ID = 7656500542          # el configurado por defecto en config.py
+ADMIN_ID = config.ADMIN_IDS[0]   # el primero configurado en config.py
 CLIENT_ID = 123456789
 
 
