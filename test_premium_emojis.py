@@ -509,8 +509,8 @@ def test_menu_real():
     btns = list(walk(m))
     icons = {b.text: getattr(getattr(b, "style", None), "icon", None)
              for b in btns}
-    check("menú VIP: 🔍 📧 📥 📬 👤 💎 👥 📋 🌐 convertidos a icono",
-          icons.get("Nueva búsqueda") == 5874960879434338403
+    check("menú VIP (v4.3.0, sin botón Nueva búsqueda): 📧 📥 📬 👤 💎 👥 📋 🌐 como iconos",
+          all(t != "Nueva búsqueda" for t in icons)
           and icons.get("IMAP Checker") == 5967280668885913944
           and icons.get("Hotmail Data") == 5877307202888273539
           and icons.get("Mi cuenta") == 5258011929993026890
@@ -532,9 +532,9 @@ def test_menu_real():
     m = build(Keyboards.main(UserRole.ADMIN))
     icons = {b.text: getattr(getattr(b, "style", None), "icon", None)
              for b in walk(m)}
-    check("menú ADMIN: 🔐 panel · 📂 gestión · 👥 referidos · 📋 comandos",
-          icons.get("Panel admin") == 5258476306152038031
-          and icons.get("Gestión archivos") == 6017174676898321263
+    check("menú ADMIN (v4.3.0, sin Gestión archivos): 🔐 panel · 👥 referidos · 📋 comandos",
+          all(t != "Gestión archivos" for t in icons)
+          and icons.get("Panel admin") == 5258476306152038031
           and icons.get("Referidos") == 5258513401784573443
           and icons.get("Comandos") == 5956561916573782596)
 
@@ -585,10 +585,10 @@ def test_menu_real():
     m = build(Keyboards.time())
     icons = {b.text: getattr(getattr(b, "style", None), "icon", None)
              for b in walk(m)}
-    check("tiempos: ⚡ 🗂️ 📅 como iconos, « Cancelar intacto",
-          icons.get("Últimas 24 horas") == 5258152182150077732
-          and icons.get("24h + Antiguos") == 5967456680940671207
-          and icons.get("Solo antiguos") == 5258105663359294787
+    check("tiempos (v4.3.0 unificados): ⚡ 🗂️ 📅 como iconos, « Cancelar intacto",
+          icons.get("Nuevos · 24h") == 5258152182150077732
+          and icons.get("Todos · 24h + antiguos") == 5967456680940671207
+          and icons.get("Antiguos · histórico") == 5258105663359294787
           and icons.get("«  Cancelar") is None)
 
     # Auto-DL ON/OFF (compartidos por rama if/else)

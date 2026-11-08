@@ -38,7 +38,7 @@ class LocaleManager:
             "welcome": (
                 "╭━━━━━━━━━━━━━━━━━━━━╮\n"
                 "┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n"
-                "┃ ⚡ v4.2 · Professional\n"
+                "┃ ⚡ {5} · Professional\n"
                 "╰━━━━━━━━━━━━━━━━━━━━╯\n"
                 "\n"
                 "👋 Hola, **{0}**\n"
@@ -67,7 +67,7 @@ class LocaleManager:
             "welcome_new": (
                 "╭━━━━━━━━━━━━━━━━━━━━╮\n"
                 "┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n"
-                "┃ ⚡ v4.2 · Professional\n"
+                "┃ ⚡ {5} · Professional\n"
                 "╰━━━━━━━━━━━━━━━━━━━━╯\n"
                 "\n"
                 "👋 Hola, **{0}**\n"
@@ -450,6 +450,9 @@ class LocaleManager:
             ),
             "list_footer": "╰───✦",
             "list_more": "├─ … y **{0}** más",
+            "welcome_cmds_more": (
+                "├─ … y **{0}** más — lista completa en el botón 📋 **Comandos**"
+            ),
             "broadcast_started": (
                 "╭───✦ 📣 **{0} INICIADO**\n"
                 "├─ 👥 Destinatarios: `{1}`\n"

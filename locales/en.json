@@ -97,8 +97,8 @@
   "update_bot_uptodate": "╭───✦ ✅ **BOT UPDATED**\n├─ You are already on the latest version\n╰───✦",
   "vip_list_empty": "╭───✦ 👑 **VIP USERS**\n├─ No active VIP users\n╰───✦",
   "vip_list_header": "╭───✦ 👑 **VIP USERS** · {0}",
-  "welcome": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.2 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hello, **{0}**\n\n╭───✦ ⚡ **ADVANTAGES**\n├─ 🔎 Ultra-fast parallel search\n├─ 🗄️ Databases updated 24/7\n├─ 🛡️ Privacy & full anonymity\n├─ 📦 Data ready to use\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMMANDS**\n{1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **YOUR ACCOUNT**\n├─ 🎖️ Rank: **{2}**\n├─ 📊 Searches: `{3}`\n╰───✦\n\n{4}🌟 Support: @hjofc20",
-  "welcome_new": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.2 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hello, **{0}**\n\n╭───✦ ⚡ **ADVANTAGES**\n├─ 🔎 Ultra-fast parallel search\n├─ 🗄️ Databases updated 24/7\n├─ 🛡️ Privacy & full anonymity\n├─ 📦 Data ready to use\n╰───✦\n\n╭───✦ 🎁 **WELCOME GIFT**\n├─ You have **1 free search** to try\n├─ Afterwards you'll need VIP to keep searching\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMMANDS**\n{1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **YOUR ACCOUNT**\n├─ 🎖️ Rank: **{2}**\n├─ 📊 Searches: `{3}`\n╰───✦\n\n{4}🌟 Support: @hjofc20",
+  "welcome": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ {5} · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hello, **{0}**\n\n╭───✦ ⚡ **ADVANTAGES**\n├─ 🔎 Ultra-fast parallel search\n├─ 🗄️ Databases updated 24/7\n├─ 🛡️ Privacy & full anonymity\n├─ 📦 Data ready to use\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMMANDS**\n{1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **YOUR ACCOUNT**\n├─ 🎖️ Rank: **{2}**\n├─ 📊 Searches: `{3}`\n╰───✦\n\n{4}🌟 Support: @hjofc20",
+  "welcome_new": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ {5} · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hello, **{0}**\n\n╭───✦ ⚡ **ADVANTAGES**\n├─ 🔎 Ultra-fast parallel search\n├─ 🗄️ Databases updated 24/7\n├─ 🛡️ Privacy & full anonymity\n├─ 📦 Data ready to use\n╰───✦\n\n╭───✦ 🎁 **WELCOME GIFT**\n├─ You have **1 free search** to try\n├─ Afterwards you'll need VIP to keep searching\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMMANDS**\n{1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **YOUR ACCOUNT**\n├─ 🎖️ Rank: **{2}**\n├─ 📊 Searches: `{3}`\n╰───✦\n\n{4}🌟 Support: @hjofc20",
   "vip_expiring": "⚠️ **Your VIP expires in {0} day(s)** — renew via «💎 Renovar VIP» to keep access",
   "vip_expiring_today": "⚠️ **Your VIP expires TODAY** — renew now via «💎 Renovar VIP»",
   "acct_vip_line": "├─ ⏳ VIP active until: `{0}` · {1}\n├─ {2}\n",
@@ -147,5 +147,6 @@
   "cmd_desc_listatxt": "TXT with the names of all downloaded files (general, hotmail and imap)",
   "report_sent": "╭───✦ ✅ **REPORT SENT**\n├─ Your report has been sent to the administrator\n╰───✦",
   "imap_capped": "╭───✦ ⚠️ **LARGE FILE**\n├─ 📄 Your file has `{0}` lines\n├─ ✂️ Cap: only the first **5,000** are checked\n╰───✦",
-  "imap_cancelled": "╭───✦ 🛑 **CHECK CANCELLED**\n├─ ✅ Hits so far: `{0}`\n╰───✦"
+  "imap_cancelled": "╭───✦ 🛑 **CHECK CANCELLED**\n├─ ✅ Hits so far: `{0}`\n╰───✦",
+  "welcome_cmds_more": "├─ … and **{0}** more — full list in the 📋 **Commands** button"
 }

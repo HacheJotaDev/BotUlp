@@ -151,7 +151,7 @@ class Config:
     BASE_DIR: Path = Path(__file__).resolve().parent
 
     # ── Version ──────────────────────────────────────────────
-    VERSION: str = "4.2.32"
+    VERSION: str = "4.3.0"
 
     # ── Emojis premium (v4.2.31 · ampliado en v4.2.32) ─────────
     # Custom emojis de Telegram en TODOS los mensajes del bot y

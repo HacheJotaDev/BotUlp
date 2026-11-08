@@ -97,8 +97,8 @@
   "update_bot_uptodate": "╭───✦ ✅ **BOT ACTUALIZADO**\n├─ Ya estás en la última versión\n╰───✦",
   "vip_list_empty": "╭───✦ 👑 **USUARIOS VIP**\n├─ No hay usuarios VIP activos\n╰───✦",
   "vip_list_header": "╭───✦ 👑 **USUARIOS VIP** · {0}",
-  "welcome": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.2 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hola, **{0}**\n\n╭───✦ ⚡ **VENTAJAS**\n├─ 🔎 Búsqueda paralela ultra-rápida\n├─ 🗄️ Bases de datos actualizadas 24/7\n├─ 🛡️ Privacidad y anonimato total\n├─ 📦 Data lista para usar\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMANDOS**\n{1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **TU CUENTA**\n├─ 🎖️ Rango: **{2}**\n├─ 📊 Búsquedas: `{3}`\n╰───✦\n\n{4}🌟 Soporte: @hjofc20",
-  "welcome_new": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ v4.2 · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hola, **{0}**\n\n╭───✦ ⚡ **VENTAJAS**\n├─ 🔎 Búsqueda paralela ultra-rápida\n├─ 🗄️ Bases de datos actualizadas 24/7\n├─ 🛡️ Privacidad y anonimato total\n├─ 📦 Data lista para usar\n╰───✦\n\n╭───✦ 🎁 **REGALO DE BIENVENIDA**\n├─ Tienes **1 búsqueda gratis** para probar\n├─ Luego necesitarás VIP para seguir buscando\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMANDOS**\n{1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **TU CUENTA**\n├─ 🎖️ Rango: **{2}**\n├─ 📊 Búsquedas: `{3}`\n╰───✦\n\n{4}🌟 Soporte: @hjofc20",
+  "welcome": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ {5} · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hola, **{0}**\n\n╭───✦ ⚡ **VENTAJAS**\n├─ 🔎 Búsqueda paralela ultra-rápida\n├─ 🗄️ Bases de datos actualizadas 24/7\n├─ 🛡️ Privacidad y anonimato total\n├─ 📦 Data lista para usar\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMANDOS**\n{1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **TU CUENTA**\n├─ 🎖️ Rango: **{2}**\n├─ 📊 Búsquedas: `{3}`\n╰───✦\n\n{4}🌟 Soporte: @hjofc20",
+  "welcome_new": "╭━━━━━━━━━━━━━━━━━━━━╮\n┃ ✦ ☾ **HJ ULP PRO** ☽ ✦\n┃ ⚡ {5} · Professional\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n👋 Hola, **{0}**\n\n╭───✦ ⚡ **VENTAJAS**\n├─ 🔎 Búsqueda paralela ultra-rápida\n├─ 🗄️ Bases de datos actualizadas 24/7\n├─ 🛡️ Privacidad y anonimato total\n├─ 📦 Data lista para usar\n╰───✦\n\n╭───✦ 🎁 **REGALO DE BIENVENIDA**\n├─ Tienes **1 búsqueda gratis** para probar\n├─ Luego necesitarás VIP para seguir buscando\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 🧭 **COMANDOS**\n{1}\n╰───✦\n\n┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n╭───✦ 👤 **TU CUENTA**\n├─ 🎖️ Rango: **{2}**\n├─ 📊 Búsquedas: `{3}`\n╰───✦\n\n{4}🌟 Soporte: @hjofc20",
   "vip_expiring": "⚠️ **Tu VIP expira en {0} día(s)** — renuévalo desde «💎 Renovar VIP» para no perder acceso",
   "vip_expiring_today": "⚠️ **Tu VIP expira HOY** — renuévalo ahora desde «💎 Renovar VIP»",
   "acct_vip_line": "├─ ⏳ VIP activo hasta: `{0}` · {1}\n├─ {2}\n",
@@ -147,5 +147,6 @@
   "cmd_desc_listatxt": "TXT con los nombres de todos los archivos descargados (generales, hotmail e imap)",
   "report_sent": "╭───✦ ✅ **REPORTE ENVIADO**\n├─ Tu reporte ha sido enviado al administrador\n╰───✦",
   "imap_capped": "╭───✦ ⚠️ **ARCHIVO GRANDE**\n├─ 📄 Tu archivo tiene `{0}` líneas\n├─ ✂️ Tope: solo se verifican las primeras **5.000**\n╰───✦",
-  "imap_cancelled": "╭───✦ 🛑 **CHECK CANCELADO**\n├─ ✅ Hits hasta el momento: `{0}`\n╰───✦"
+  "imap_cancelled": "╭───✦ 🛑 **CHECK CANCELADO**\n├─ ✅ Hits hasta el momento: `{0}`\n╰───✦",
+  "welcome_cmds_more": "├─ … y **{0}** más — lista completa en el botón 📋 **Comandos**"
 }

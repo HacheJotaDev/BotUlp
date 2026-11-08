@@ -501,6 +501,26 @@ def _promo_price_rows() -> str:
     return rows
 
 
+def _promo_admin_card() -> str:
+    """v4.3.0: tarjeta de estado de la promo para el PANEL ADMIN (botón
+    🏷️ Promo). Muestra los mismos datos que /promo — precios reales vía
+    effective_price() — sin la guía de comando."""
+    pct = get_promo_percent()
+    if pct > 0:
+        estado = f"├─ Estado: **ACTIVA · -{pct}%**\n"
+        if pct == 100:
+            estado += "├─ ⚠️ Con 100% TODOS los planes son GRATIS\n"
+        estado += _promo_price_rows()
+    else:
+        estado = "├─ Estado: **desactivada** (precios normales)\n"
+    return (
+        "╭───✦ 🏷️ **PROMO DE PRECIOS**\n"
+        + estado
+        + "╰───✦\n\n"
+        "👇 Descuento rápido con los botones, o `/promo <1-100>` para uno exacto."
+    )
+
+
 def _get_commands_by_role(role: UserRole, lang: str = 'es', has_free: bool = False) -> str:
     """Construir la lista de comandos disponibles segun el rol del usuario.
 
@@ -577,6 +597,25 @@ def _get_commands_by_role(role: UserRole, lang: str = 'es', has_free: bool = Fal
         _cmd_line('/url', 'cmd_desc_url', lang),
         _cmd_line('/canjear', 'cmd_desc_canjear', lang),
     ])
+
+
+# v4.3.0: la bienvenida truncó su lista de comandos — la pantalla completa
+# vive en el botón «📋 Comandos» (cmd_list). Antes el ADMIN veía 23 líneas
+# de comandos seguidas en el menú principal (muro de texto).
+WELCOME_MAX_CMDS = 5
+
+
+def _welcome_cmds_block(role: UserRole, lang: str = 'es', has_free: bool = False) -> str:
+    """Bloque COMANDOS de la bienvenida: los 5 primeros comandos del rol
+    + puntero «… y N más» hacia el botón 📋 Comandos si hay más."""
+    lines = _get_commands_by_role(role, lang, has_free).splitlines()
+    if len(lines) <= WELCOME_MAX_CMDS:
+        return '\n'.join(lines)
+    more = len(lines) - WELCOME_MAX_CMDS
+    return '\n'.join(
+        lines[:WELCOME_MAX_CMDS]
+        + [UI.text("welcome_cmds_more", lang, more)]
+    )
 
 
 def _get_access_denied_text(lang: str) -> str:
@@ -2166,7 +2205,13 @@ def register_handlers(bot_client):
 
             free_n = _free_search_count(user) if role == UserRole.FREE else 0
 
-            welcome_text = UI.text(welcome_key, lang, name, _get_commands_by_role(role, lang, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, lang))
+            welcome_text = UI.text(
+                welcome_key, lang, name,
+                _welcome_cmds_block(role, lang, has_free),
+                UI.role_badge(role), user.get('search_count', 0),
+                _welcome_extra(user, role, lang),
+                f"v{config.VERSION}",
+            )
 
             main_kb = Keyboards.main(role, lang, free_n) if e.is_private else None
             try:
@@ -2534,9 +2579,10 @@ def register_handlers(bot_client):
         allowed, is_free_search = await _check_search_access(uid, lang, is_group_allowed, e.is_private)
 
         if not allowed:
+            # v4.3.0: funnel de conversión — CTA directo en vez de solo « Volver
             return await e.reply(
                 _get_access_denied_text(lang),
-                buttons=Keyboards.back() if e.is_private else None,
+                buttons=Keyboards.access_denied() if e.is_private else None,
                 parse_mode='md'
             )
 
@@ -2597,7 +2643,7 @@ def register_handlers(bot_client):
         if role == UserRole.FREE:
             return await e.reply(
                 UI.text("access_denied_no_free", lang),
-                buttons=Keyboards.back() if e.is_private else None,
+                buttons=Keyboards.access_denied_feature() if e.is_private else None,
                 parse_mode='md'
             )
 
@@ -2718,7 +2764,11 @@ def register_handlers(bot_client):
         name = await _display_name(e, uid)
         welcome_key = "welcome_new" if has_free else "welcome"
         await e.reply(
-            UI.text(welcome_key, lang, name, _get_commands_by_role(role, lang, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, lang)),
+            UI.text(welcome_key, lang, name,
+                    _welcome_cmds_block(role, lang, has_free),
+                    UI.role_badge(role), user.get('search_count', 0),
+                    _welcome_extra(user, role, lang),
+                    f"v{config.VERSION}"),
             buttons=Keyboards.main(role, lang, free_n),
             parse_mode='md'
         )
@@ -2918,9 +2968,10 @@ def register_handlers(bot_client):
         )
 
         if not allowed:
+            # v4.3.0: funnel de conversión (mismo criterio que /url)
             return await e.reply(
                 _get_access_denied_text(lang),
-                buttons=Keyboards.back() if e.is_private else None,
+                buttons=Keyboards.access_denied() if e.is_private else None,
                 parse_mode='md'
             )
 
@@ -2966,9 +3017,10 @@ def register_handlers(bot_client):
         )
 
         if not allowed:
+            # v4.3.0: funnel de conversión (mismo criterio que /url)
             return await e.reply(
                 _get_access_denied_text(lang),
-                buttons=Keyboards.back() if e.is_private else None,
+                buttons=Keyboards.access_denied() if e.is_private else None,
                 parse_mode='md'
             )
 
@@ -3365,9 +3417,10 @@ def register_handlers(bot_client):
         allowed, is_free_search = await _check_search_access(uid, lang, is_group_allowed, e.is_private)
 
         if not allowed:
+            # v4.3.0: funnel de conversión (mismo criterio que /url)
             return await e.reply(
                 _get_access_denied_text(lang),
-                buttons=Keyboards.back(),
+                buttons=Keyboards.access_denied(),
                 parse_mode='md'
             )
 
@@ -3419,7 +3472,11 @@ def register_handlers(bot_client):
                 name = await _display_name(e, uid)
                 welcome_key = "welcome_new" if has_free else "welcome"
                 await e.edit(
-                    UI.text(welcome_key, lang, name, _get_commands_by_role(role, lang, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, lang)),
+                    UI.text(welcome_key, lang, name,
+                            _welcome_cmds_block(role, lang, has_free),
+                            UI.role_badge(role), user.get('search_count', 0),
+                            _welcome_extra(user, role, lang),
+                            f"v{config.VERSION}"),
                     buttons=Keyboards.main(role, lang, free_n),
                     parse_mode='md'
                 )
@@ -3623,7 +3680,11 @@ def register_handlers(bot_client):
                 name = await _display_name(e, uid)
                 welcome_key = "welcome_new" if has_free else "welcome"
                 await e.edit(
-                    UI.text(welcome_key, new_lang, name, _get_commands_by_role(role, new_lang, has_free), UI.role_badge(role), user.get('search_count', 0), _welcome_extra(user, role, new_lang)),
+                    UI.text(welcome_key, new_lang, name,
+                            _welcome_cmds_block(role, new_lang, has_free),
+                            UI.role_badge(role), user.get('search_count', 0),
+                            _welcome_extra(user, role, new_lang),
+                            f"v{config.VERSION}"),
                     buttons=Keyboards.main(role, new_lang, free_n),
                     parse_mode='md'
                 )
@@ -3689,11 +3750,62 @@ def register_handlers(bot_client):
                 if role != UserRole.ADMIN:
                     return await e.answer("Acceso denegado.", alert=True)
                 count = len(state.pending_downloads)
+                if count == 0:
+                    return await e.answer("No hay archivos pendientes.", alert=True)
+                # v4.3.0: confirmación en 2 pasos — vaciar la cola es
+                # destructivo y antes se ejecutaba con un solo tap.
+                await e.edit(
+                    "╭───✦ 🗑️ **VACIAR PENDIENTES**\n"
+                    f"├─ Se eliminarán **{count}** archivos de la cola\n"
+                    "├─ ⚠️ Esta acción no se puede deshacer\n"
+                    "╰───✦",
+                    buttons=Keyboards.clear_pending_confirm(count),
+                    parse_mode='md'
+                )
+
+            elif data == "clear_pending_yes":
+                # v4.3.0: segundo paso de la confirmación — aquí sí se borra.
+                if role != UserRole.ADMIN:
+                    return await e.answer("Acceso denegado.", alert=True)
+                count = len(state.pending_downloads)
                 state.pending_downloads.clear()
                 await e.edit(
                     f"🗑 **{count} archivos pendientes eliminados.**",
                     buttons=Keyboards.back("adm_files")
                 )
+
+            # ─── PROMO DESDE EL PANEL (v4.3.0) ───
+            elif data == "adm_promo":
+                if role != UserRole.ADMIN:
+                    return await e.answer("Acceso denegado.", alert=True)
+                await e.edit(
+                    _promo_admin_card(),
+                    buttons=Keyboards.admin_promo(get_promo_percent()),
+                    parse_mode='md'
+                )
+
+            elif data.startswith("promo_set_"):
+                if role != UserRole.ADMIN:
+                    return await e.answer("Acceso denegado.", alert=True)
+                pct = int(data.split("_")[2])
+                config.set_promo_percent(pct)
+                logger.info(
+                    f"PROMO: admin {uid} fijó la promo en -{pct}% (botón panel)"
+                )
+                await e.answer(
+                    "🏷️ Promo DESACTIVADA — precios normales" if pct == 0
+                    else f"🏷️ Promo aplicada: **-{pct}%**",
+                    alert=True
+                )
+                await e.edit(
+                    _promo_admin_card(),
+                    buttons=Keyboards.admin_promo(pct),
+                    parse_mode='md'
+                )
+
+            elif data == "promo_noop":
+                await e.answer("Esa promo ya está activa.", alert=True)
+                return
 
             # ─── BUSQUEDA ───
             elif data == "search_init":
@@ -3824,14 +3936,19 @@ def register_handlers(bot_client):
                         buttons=Keyboards.formats()
                     )
                 else:
-                    await e.answer("Usa 'Nueva búsqueda' primero.", alert=True)
+                    # v4.3.0: el botón «Nueva búsqueda» ya no existe — la
+                    # sesión se (re)inicia con /url <dominio>.
+                    await e.answer(
+                        "Sesión expirada — inicia con /url <dominio>",
+                        alert=True
+                    )
 
             # ─── REINTENTAR SIN RESULTADOS (24h + Antiguos) ───
             elif data == "retry_all":
                 last = state.last_search.get(uid)
                 if not last:
                     return await e.answer(
-                        "No hay búsqueda previa. Usa 'Nueva búsqueda'.",
+                        "No hay búsqueda previa — usa /url <dominio>",
                         alert=True
                     )
 
@@ -3957,7 +4074,11 @@ def register_handlers(bot_client):
             elif data.startswith("imapc_"):
                 token = data
                 if token in state.imap_cancel_requests:
-                    await e.answer("⏹ Ya se está cancelando...", alert=True)
+                    # v4.3.0: el emoji de «stop» viejo (sin ID premium) se
+                    # unifica con la señal de stop del propio flujo (los
+                    # toasts no admiten entidades: el emoji queda normal,
+                    # pero al menos es CONSISTENTE con el otro aviso)
+                    await e.answer("🛑 Ya se está cancelando...", alert=True)
                 else:
                     state.imap_cancel_requests.add(token)
                     await e.answer(
@@ -4036,15 +4157,27 @@ def register_handlers(bot_client):
                 await e.edit(text, buttons=Keyboards.back("admin_enter"), parse_mode='md')
 
             elif data == "adm_genkey":
-                # v4.2.29: gen_key() ahora incluye el botón 15 días
+                # v4.3.0: tarjeta con estructura + Volver regresa al PANEL admin
                 if role not in (UserRole.ADMIN, UserRole.SELLER):
                     return await e.answer("Acceso denegado.", alert=True)
-                await e.edit("🔑 **Generador de Keys**", buttons=Keyboards.gen_key())
+                await e.edit(
+                    "╭───✦ 🔑 **GENERADOR DE KEYS**\n"
+                    "├─ Elige la duración de la key a generar\n"
+                    "╰───✦",
+                    buttons=Keyboards.gen_key("admin_enter"),
+                    parse_mode='md'
+                )
 
             elif data == "seller_genkey":
                 if role not in (UserRole.ADMIN, UserRole.SELLER):
                     return await e.answer("Acceso denegado.", alert=True)
-                await e.edit("🔑 **Generador de Keys**", buttons=Keyboards.gen_key())
+                await e.edit(
+                    "╭───✦ 🔑 **GENERADOR DE KEYS**\n"
+                    "├─ Elige la duración de la key a generar\n"
+                    "╰───✦",
+                    buttons=Keyboards.gen_key("back_main"),
+                    parse_mode='md'
+                )
 
             elif data.startswith("gen_"):
                 days = int(data.split("_")[1])

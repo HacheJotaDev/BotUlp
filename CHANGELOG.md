@@ -2,6 +2,49 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.3.0] — Rediseño profesional UI/UX + auditoría de emojis premium
+
+### 🎯 Resumen del rediseño
+Trabajo de diseño de producto completo sobre la interfaz: menús por rol en **filas balanceadas 2×2**, eliminación de botones redundantes, CTAs donde faltaban, confirmación para acciones destructivas y unificación de los teclados de periodo. **Cero cambios de lógica de negocio**: búsquedas, descargas, pagos, roles, base de datos y comandos quedan intactos.
+
+### 🗑️ Botón «Nueva búsqueda» — ELIMINADO (instrucción obligatoria)
+- Fuera de los menús principal de **VIP, SELLER y ADMIN** (sus 3 únicas apariciones como botón).
+- La búsqueda se mantiene al 100 % con **/url** (método que el bot ya proporcionaba y que además es más rápido: 1 comando vs. botón + escribir dominio).
+- **FREE conserva su botón «🎁 Búsqueda gratis (n)»**: no es «Nueva búsqueda», es la entrada funcional del regalo con contador en vivo.
+- Las 2 alertas que decían «Usa 'Nueva búsqueda'» ahora apuntan a `/url <dominio>`.
+- El callback `search_init` NO se elimina: sigue vivo para el botón de regalo de FREE (ninguna ruta muerta).
+
+### 🧹 Botones redundantes eliminados
+- **«📂 Gestión archivos» del menú ADMIN**: duplicaba «📂 Archivos» del Panel admin (misma callback `adm_files`) → queda solo en el panel, su lugar natural.
+- Menús VIP/SELLER/ADMIN: de 5-6 filas a **4 filas × 2 botones** con estructura idéntica entre roles (solo cambia el botón propio del rango: Renovar VIP / Generar key / Panel admin) — memoria muscular de navegación.
+
+### ➕ Botones añadidos (solo donde faltaban)
+- **Acceso denegado (FREE sin búsquedas)**: CTA directo [💎 Comprar VIP] [👥 Referidos] — el texto decía «Hazte VIP» pero no llevaba a ningún lado (funnel roto). Variante VIP-only para /imapchk con solo [💎 Comprar VIP].
+- **Generador de keys — opción «♾️ Ilimitada»**: paridad total con `/keygen` (antes la ilimitada solo existía por comando). Ahora con emoji por plan (⚡📊🔥🚀💎, mismo mapa de identidad que los planes de pago) y « Volver context-aware (regresa al Panel admin si se abrió desde ahí).
+- **Panel admin — [🏷️ Promo]**: control de promo con presets rápidos (-25 / -50 / -70 / 100 % gratis / desactivar) + tarjeta de estado con precios reales. Misma ruta interna que `/promo` (`config.set_promo_percent`).
+- **«Actualizar bot» aislado en su propia fila**: es la única acción que reinicia el bot — separada de las consultas.
+
+### 🛡️ Confirmación en 2 pasos (acción destructiva)
+- «🗑️ Vaciar pendientes» ya no borra con un solo tap: pide confirmación («¿Vaciar N?» → [Sí, vaciar] / [Cancelar]) y avisa que no se puede deshacer.
+
+### 🎨 Sistema de diseño visual
+- **Teclados de periodo UNIFICADOS**: /url, /hotmail y /imap usan el MISMO patrón (⚡ Nuevos · 24h | 🗂️ Todos · 24h + antiguos / 📅 Antiguos · histórico) — antes había 3 estilos distintos para el mismo concepto.
+- **Bienvenida truncada**: máximo 5 comandos + «… y N más — lista completa en el botón 📋 Comandos» (el ADMIN veía 23 líneas de comandos seguidas). La pantalla 📋 Comandos conserva la lista completa.
+- **Versión dinámica en el header** de la bienvenida: `v{config.VERSION}` en ES/EN/PT (antes «v4.2» hardcodeado, stale desde v4.2.3).
+- «Generador de Keys» ahora es una tarjeta ✦ con subtítulo (antes un mensaje pelado).
+
+### 🔍 Auditoría de emojis premium (estado REAL verificado)
+- **86 asociaciones + alias 🔍 intactas, los 20 originales byte a byte, las 86 en uso** (0 claves muertas).
+- **Cobertura en superficies con entidades: 100 %** tras 2 correcciones:
+  - `📢` → `📣` en «Compartir mi link»: 📣 SÍ tiene ID registrado y su glifo premium ES el diseño megáfono → el botón gana icono premium.
+  - `⏹` → `🛑` en el toast de cancelación repetida: consistencia con el resto del flujo (los toasts no admiten entidades — límite de plataforma).
+- Excepciones documentadas y verificadas: **toasts/alerts** (5 apariciones: 🛑×2, 🏷️×1, 🌐×1 — `answerCallbackQuery` no admite entidades), **banderas** (47 distintas, excluidas por diseño), **símbolos tipográficos** ✦ ☾ ☽ ✓ (decoración, no emojis), logs de consola y comentarios internos.
+- Sin IDs nuevos, sin IDs inventados, sin cambios de diseño de los documentos ya seleccionados.
+
+### ✅ Verificación (suite `test_redesign.py` + `test_premium_emojis.py`, sin red)
+- 40 pruebas nuevas de interfaz: ausencia total de «Nueva búsqueda» como botón, estructura de los 4 menús, cobertura de callbacks (todo botón tiene handler y todo handler tiene botón), paridad de claves ES/EN/PT, truncado de bienvenida, versión dinámica, teclados unificados, funnel de denegación, confirmación de vaciar, presets de promo, paridad gen_0 ↔ /keygen, emoji 📣 con icono premium.
+- Re-ejecutada la suite completa de emojis premium (68/68) y re-auditado el código con el script de cobertura (0 pendientes accionables).
+
 ## [4.2.32] — Emojis premium en TODAS las salidas: 86 asociaciones + iconos en botones
 
 ### ✨ De 20 a 86 emojis premium — catálogo completo

@@ -1,9 +1,19 @@
 """
 ═══════════════════════════════════════════════════════════════
-  HJ ULP EXTRACTOR BOT — UI & Keyboards Module v6.0 · Obsidian
+  HJ ULP EXTRACTOR BOT — UI & Keyboards Module v7.0 · Obsidian
 ═══════════════════════════════════════════════════════════════
-  • Botones con jerarquía visual consistente
-  • Botones URL reales (pagar invoice, soporte)
+  • v4.3.0 REDISEÑO UI/UX — sistema de diseño unificado:
+      · Menús por rol en filas balanceadas 2×2 (máx. 4 filas)
+      · Botón «Nueva búsqueda» ELIMINADO de VIP/SELLER/ADMIN
+        (la búsqueda vive en /url; FREE conserva su botón de
+        regalo con contador, que es su entrada funcional)
+      · Teclados de periodo UNIFICADOS (mismo patrón /url,
+        /hotmail y /imap)
+      · Generador de keys con paridad total a /keygen (añade
+        la opción ILIMITADA que solo existía por comando)
+      · Funnel de conversión: acceso denegado con CTA directo
+      · Confirmación en 2 pasos para acciones destructivas
+      · Panel admin: control de promo con presets
   • Insignias únicas por rango: 🆓 FREE · 💎 VIP · 💼 SELLER · 👑 OWNER
   • Roles FREE / VIP / SELLER / OWNER
 ═══════════════════════════════════════════════════════════════
@@ -60,6 +70,15 @@ class Keyboards:
 
     @staticmethod
     def main(role: UserRole, lang: str = 'es', has_free_search: bool = False):
+        """Menú principal por rol — filas balanceadas 2×2 (v4.3.0).
+
+        v4.3.0: el botón «🔍 Nueva búsqueda» se ELIMINA de VIP/SELLER/
+        ADMIN (la búsqueda se hace con /url, listado en COMANDOS). FREE
+        conserva su botón de regalo porque es su entrada funcional:
+        muestra el contador de búsquedas gratis en vivo.
+        Estructura idéntica entre roles (memoria muscular): solo cambia
+        el botón propio de cada rango (Renovar VIP / Generar key /
+        Panel admin)."""
         # has_free_search acepta int (cantidad de búsquedas gratis) o bool.
         free_n = int(has_free_search or 0)
 
@@ -80,39 +99,37 @@ class Keyboards:
 
         elif role == UserRole.VIP:
             return [
-                [Button.inline("🔍  Nueva búsqueda", b"search_init"),
-                 Button.inline("📧  IMAP Checker", b"imap_info")],
-                [Button.inline("📥  Hotmail Data", b"hotmail_dl_info"),
-                 Button.inline("📬  IMAP Data", b"imap_dl_info")],
-                [Button.inline("👤  Mi cuenta", b"my_account"),
-                 Button.inline("💎  Renovar VIP", b"buy_vip_info")],
-                [Button.inline("👥  Referidos", b"ref_info"),
-                 Button.inline("📋  Comandos", b"cmd_list"),
+                [Button.inline("📧  IMAP Checker", b"imap_info"),
+                 Button.inline("📥  Hotmail Data", b"hotmail_dl_info")],
+                [Button.inline("📬  IMAP Data", b"imap_dl_info"),
+                 Button.inline("👤  Mi cuenta", b"my_account")],
+                [Button.inline("💎  Renovar VIP", b"buy_vip_info"),
+                 Button.inline("👥  Referidos", b"ref_info")],
+                [Button.inline("📋  Comandos", b"cmd_list"),
                  Keyboards.LANG_BUTTON],
             ]
 
         elif role == UserRole.SELLER:
             return [
-                [Button.inline("🔍  Nueva búsqueda", b"search_init"),
-                 Button.inline("📧  IMAP Checker", b"imap_info")],
-                [Button.inline("📥  Hotmail Data", b"hotmail_dl_info"),
-                 Button.inline("📬  IMAP Data", b"imap_dl_info")],
-                [Button.inline("👤  Mi cuenta", b"my_account"),
-                 Button.inline("🔑  Generar key", b"seller_genkey")],
-                [Button.inline("👥  Referidos", b"ref_info"),
-                 Button.inline("📋  Comandos", b"cmd_list"),
+                [Button.inline("📧  IMAP Checker", b"imap_info"),
+                 Button.inline("📥  Hotmail Data", b"hotmail_dl_info")],
+                [Button.inline("📬  IMAP Data", b"imap_dl_info"),
+                 Button.inline("👤  Mi cuenta", b"my_account")],
+                [Button.inline("🔑  Generar key", b"seller_genkey"),
+                 Button.inline("👥  Referidos", b"ref_info")],
+                [Button.inline("📋  Comandos", b"cmd_list"),
                  Keyboards.LANG_BUTTON],
             ]
 
         elif role == UserRole.ADMIN:
+            # v4.3.0: «Gestión archivos» sale del menú principal — ya vive
+            # en el Panel admin (antes duplicaba «📂 Archivos» a 1 tap).
             return [
-                [Button.inline("🔍  Nueva búsqueda", b"search_init"),
-                 Button.inline("📧  IMAP Checker", b"imap_info")],
-                [Button.inline("📥  Hotmail Data", b"hotmail_dl_info"),
-                 Button.inline("📬  IMAP Data", b"imap_dl_info")],
-                [Button.inline("👤  Mi cuenta", b"my_account"),
-                 Button.inline("🔐  Panel admin", b"admin_enter")],
-                [Button.inline("📂  Gestión archivos", b"adm_files"),
+                [Button.inline("📧  IMAP Checker", b"imap_info"),
+                 Button.inline("📥  Hotmail Data", b"hotmail_dl_info")],
+                [Button.inline("📬  IMAP Data", b"imap_dl_info"),
+                 Button.inline("👤  Mi cuenta", b"my_account")],
+                [Button.inline("🔐  Panel admin", b"admin_enter"),
                  Button.inline("👥  Referidos", b"ref_info")],
                 [Button.inline("📋  Comandos", b"cmd_list"),
                  Keyboards.LANG_BUTTON],
@@ -121,33 +138,31 @@ class Keyboards:
         return []
 
     @staticmethod
-    def time():
+    def _period_keyboard(prefix: str):
+        """v4.3.0: teclado de periodo UNIFICADO — el mismo patrón visual
+        para /url (time_), /hotmail (hm_time_) e /imap (im_time_).
+        Antes había 3 estilos distintos para el mismo concepto.
+        Las tarjetas de cada pantalla explican el detalle de cada opción."""
         return [
-            [Button.inline("⚡  Últimas 24 horas", b"time_24h"),
-             Button.inline("🗂️  24h + Antiguos", b"time_all")],
-            [Button.inline("📅  Solo antiguos", b"time_old")],
+            [Button.inline("⚡  Nuevos · 24h", (prefix + "24h").encode()),
+             Button.inline("🗂️  Todos · 24h + antiguos", (prefix + "all").encode())],
+            [Button.inline("📅  Antiguos · histórico", (prefix + "old").encode())],
             [Button.inline("«  Cancelar", b"back_main")],
         ]
+
+    @staticmethod
+    def time():
+        return Keyboards._period_keyboard("time_")
 
     @staticmethod
     def hotmail_time():
-        """v4.2.12: selección de periodo para /hotmail (estilo HOTMAIL EXTRACTOR)."""
-        return [
-            [Button.inline("⚡  Nuevos — últimos archivos (24h)", b"hm_time_24h")],
-            [Button.inline("📅  Antiguos — histórico hotmail", b"hm_time_old")],
-            [Button.inline("🗂️  Todos — nuevos + antiguos", b"hm_time_all")],
-            [Button.inline("«  Cancelar", b"back_main")],
-        ]
+        """Selección de periodo para /hotmail (patrón unificado v4.3.0)."""
+        return Keyboards._period_keyboard("hm_time_")
 
     @staticmethod
     def imap_time():
-        """v4.2.16: selección de periodo para /imap (estilo IMAP EXTRACTOR)."""
-        return [
-            [Button.inline("⚡  Nuevos — últimos archivos (24h)", b"im_time_24h")],
-            [Button.inline("📅  Antiguos — histórico imap", b"im_time_old")],
-            [Button.inline("🗂️  Todos — nuevos + antiguos", b"im_time_all")],
-            [Button.inline("«  Cancelar", b"back_main")],
-        ]
+        """Selección de periodo para /imap (patrón unificado v4.3.0)."""
+        return Keyboards._period_keyboard("im_time_")
 
     @staticmethod
     def formats():
@@ -181,26 +196,53 @@ class Keyboards:
 
     @staticmethod
     def admin():
+        """v4.3.0: «Actualizar bot» aislado en su propia fila (acción que
+        reinicia el bot — separada de las consultas) + nuevo control de
+        promo con presets (antes solo por comando /promo)."""
         return [
             [Button.inline("👑  Ver VIPs", b"adm_vips"),
              Button.inline("💼  Sellers", b"adm_sellers")],
             [Button.inline("🔑  Generar key", b"adm_genkey"),
              Button.inline("📊  Estadísticas", b"adm_stats")],
             [Button.inline("📂  Archivos", b"adm_files"),
-             Button.inline("🔄  Actualizar bot", b"adm_update_bot")],
+             Button.inline("🏷️  Promo", b"adm_promo")],
+            [Button.inline("🔄  Actualizar bot", b"adm_update_bot")],
             [Button.inline("«  Volver", b"back_main")],
         ]
 
     @staticmethod
-    def gen_key():
-        # v4.2.29: botón 15 días añadido (faltaba; admin y seller comparten menú)
+    def admin_promo(active_pct: int):
+        """v4.3.0: presets de promo desde el panel — misma ruta interna que
+        /promo (config.set_promo_percent). El botón activo se marca para
+        que el admin vea de un vistazo el estado actual."""
+        def _preset(pct: int, label: str):
+            if active_pct == pct:
+                return Button.inline(f"✅  {label}", b"promo_noop")
+            return Button.inline(f"🏷️  {label}", f"promo_set_{pct}".encode())
+
+        off = (Button.inline("✅  Promo desactivada", b"promo_noop")
+               if active_pct == 0 else
+               Button.inline("🛑  Desactivar promo", b"promo_set_0"))
         return [
-            [Button.inline("1 día", b"gen_1"),
-             Button.inline("3 días", b"gen_3"),
-             Button.inline("7 días", b"gen_7")],
-            [Button.inline("15 días", b"gen_15"),
-             Button.inline("30 días", b"gen_30")],
-            [Button.inline("«  Volver", b"back_main")],
+            [_preset(25, "-25%"), _preset(50, "-50%")],
+            [_preset(70, "-70%"), _preset(100, "100% gratis")],
+            [off],
+            [Button.inline("«  Panel", b"admin_enter")],
+        ]
+
+    @staticmethod
+    def gen_key(back_data: str = "back_main"):
+        """v4.3.0: paridad total con /keygen — se añade la opción ILIMITADA
+        (antes solo existía con «/keygen» sin días) y el emoji por plan,
+        con el MISMO mapa de identidad de payment_plans (⚡📊🔥🚀💎)."""
+        return [
+            [Button.inline("⚡  1 día", b"gen_1"),
+             Button.inline("📊  3 días", b"gen_3")],
+            [Button.inline("🔥  7 días", b"gen_7"),
+             Button.inline("🚀  15 días", b"gen_15")],
+            [Button.inline("💎  30 días", b"gen_30"),
+             Button.inline("♾️  Ilimitada", b"gen_0")],
+            [Button.inline("«  Volver", back_data.encode())],
         ]
 
     @staticmethod
@@ -216,6 +258,35 @@ class Keyboards:
             [Button.inline("🗑️  Vaciar pendientes", b"clear_pending")],
             [Button.inline("🔄  Refrescar", b"refresh_files"),
              Button.inline("«  Panel", b"admin_enter")],
+        ]
+
+    @staticmethod
+    def clear_pending_confirm(count: int):
+        """v4.3.0: confirmación en 2 pasos para vaciar pendientes —
+        antes un solo tap borraba la cola sin aviso (acción destructiva)."""
+        return [
+            [Button.inline(f"🗑️  Sí, vaciar  ({count})", b"clear_pending_yes")],
+            [Button.inline("«  Cancelar", b"adm_files")],
+        ]
+
+    @staticmethod
+    def access_denied():
+        """v4.3.0: funnel de conversión — el mensaje de acceso denegado
+        dice «Hazte VIP / invita amigos» pero no llevaba a ningún lado.
+        CTA directo a las dos rutas que el propio texto menciona."""
+        return [
+            [Button.inline("💎  Comprar VIP", b"buy_vip_info"),
+             Button.inline("👥  Referidos", b"ref_info")],
+            [Button.inline("«  Volver", b"back_main")],
+        ]
+
+    @staticmethod
+    def access_denied_feature():
+        """v4.3.0: variante para funciones VIP-only (/imapchk) — aquí los
+        referidos NO resuelven el problema, solo el CTA de compra."""
+        return [
+            [Button.inline("💎  Comprar VIP", b"buy_vip_info")],
+            [Button.inline("«  Volver", b"back_main")],
         ]
 
     @staticmethod
@@ -302,11 +373,14 @@ class Keyboards:
 
     @staticmethod
     def ref_panel(link: str, lang: str = 'es'):
-        """Panel de referidos: compartir link (diálogo nativo de Telegram) + volver."""
+        """Panel de referidos: compartir link (diálogo nativo de Telegram) + volver.
+        v4.3.0: el emoji megáfono antiguo (sin ID premium) se cambia por
+        📣, que SÍ tiene ID registrado y cuyo glifo premium es el mismo
+        diseño de megáfono: el botón gana icono premium."""
         share_text = quote(UI.text("ref_share_text", lang))
         share_url = (f"https://t.me/share/url?url={quote(link)}"
                      f"&text={share_text}")
         return [
-            [Button.url("📢  Compartir mi link", share_url)],
+            [Button.url("📣  Compartir mi link", share_url)],
             [Button.inline("«  Volver", b"back_main")],   # fila directa (back() es [[btn]])
         ]
