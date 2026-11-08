@@ -42,6 +42,8 @@
 - 🎁 **Sistema de referidos**: +1 búsqueda gratis para el invitado y el referidor por cada amigo que se una
 - 🌐 **Multi-idioma**: Español, English, Português (configurable por usuario)
 - 💳 **Pagos automáticos** con NOWPayments (USDT, BTC, ETH, LTC…) + canje de keys
+- 💎 **Notificaciones de venta VIP**: cada compra confirmada llega al admin por MP con datos reales (cliente, plan, fechas, importe, transacción) — idempotente ante confirmaciones duplicadas del proveedor
+- 🧹 **Limpieza inteligente de mensajes**: el bot borra solo sus avisos temporales ya cumplidos (configurable y desactivable con `AUTO_CLEAN_MESSAGES=0`)
 - 📧 **IMAP Checker** con keywords, agrupación por dominio y geolocalización por país (ZIP)
 - 🗄️ **SQLite WAL** thread-safe con caché de usuarios y `busy_timeout`
 - 🧹 **Auto-limpieza**: archivado a 24h, borrado a 120h

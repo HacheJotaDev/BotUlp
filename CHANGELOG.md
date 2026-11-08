@@ -2,6 +2,49 @@
 
 Todos los cambios notables del bot se documentan aquí.
 
+## [4.3.1] — Limpieza inteligente de mensajes + notificaciones VIP para administradores
+
+Dos mejoras sobre el rediseño v4.3.0, sin tocar ninguna funcionalidad existente.
+
+### 🧹 Limpieza inteligente de mensajes (`auto_clean.py` · NUEVO)
+El bot mantiene las conversaciones limpias eliminando **solo** sus mensajes temporales que ya cumplieron su función:
+- **Opt-in explícito**: un mensaje solo se borra si el código lo registra en el momento exacto en que queda obsoleto. Resultados, archivos, enlaces, pagos, membresías, errores, menús con botones, mensajes del usuario y notificaciones a administradores **jamás** se tocan.
+- **Identidad exacta**: se conserva la referencia al propio objeto `Message` de Telethon y se borra con `msg.delete()` (actúa sobre el chat al que el mensaje pertenece). Nunca se llama a `delete_messages` con listas de IDs sueltas → **imposible borrar mensajes de otro chat** por un identificador equivocado. Doble verificación de (chat, id) antes de borrar.
+- **Nunca durante la operación**: el registro ocurre al completar, con el resultado definitivo ya entregado.
+- **No bloqueante**: cada limpieza es una tarea asyncio independiente; errores de Telegram → 1 reintento corto y registro en log (sin cadenas infinitas). `shutdown()` cancela lo pendiente al apagar.
+- **Editable por .env**: `AUTO_CLEAN_MESSAGES=1` (interruptor maestro), `AUTO_CLEAN_TEMP_SECONDS=10` (avisos de carga/cola, 5–15 s), `AUTO_CLEAN_INFO_SECONDS=90` (avisos informativos, 60–120 s).
+
+Mensajes que ahora se limpian:
+| Mensaje | Cuándo | Retardo |
+|---|---|---|
+| «⏳ Búsqueda en curso» (aviso de cola) | al encolar la búsqueda | 10 s |
+| «✅ Reporte enviado» (confirmación) | tras notificar a los admins | 30 s |
+| «✅ Listo» de /hotmailchk | tras entregar el ZIP con el resumen completo | 90 s |
+| «✅ DESCARGA COMPLETADA» (chat admin) | tras completar la descarga | 90 s |
+
+Mensajes que **se conservan** (verificado por pruebas): archivos de resultados, ZIPs, pay_success/pay_invoice, errores (`❌ DESCARGA FALLIDA`, `error_generic`, `imap_no_file`…), menús con botones, notificaciones admin de reportes y ventas, mensajes del usuario.
+
+Mejora de duplicados (estrategia «editar antes que enviar»):
+- La verificación manual «Ya pagué» y la promo 100 % **ya no generan una segunda tarjeta** `pay_success`: el mensaje que el usuario tiene delante se edita a éxito (las rutas background IPN/polling siguen avisando por mensaje nuevo, que no pueden editar).
+- Retirado el helper huérfano `_auto_delete_msg` (sus 3 call-sites migraron al sistema central).
+
+### 💎 Notificaciones de venta VIP a administradores (`vip_notifier.py` · NUEVO)
+Cuando un usuario **compra y paga** una membresía VIP y el sistema la activa efectivamente, cada admin de `ADMIN_IDS` recibe un MP elegante con datos 100 % reales: nombre, @username (o «Sin username»), ID, plan y días exactos, fechas reales de activación y vencimiento (leídas de la DB **después** de la activación), importe realmente cobrado (promo aplicada) en USD, monto cripto verificado por el IPN (si existe), método NOWPayments, estado ✅ Confirmado e invoice_id interno.
+- **Solo ventas cobradas**: promo 100 % (regalo), canje de keys, `/vip` manual y `/keygen` NO se notifican como ventas.
+- **Idempotencia real** (`database.claim_delivery`): NOWPayments confirma el mismo pago varias veces (waiting → confirming → confirmed → finished) y en paralelo corren el polling y el «Ya pagué». Un `UPDATE … RETURNING` atómico por `invoice_id` garantiza **una sola entrega, una sola notificación** — probado con IPN+polling+manual en carrera real.
+- **Venta a prueba de notificación**: si el MP al admin falla (p. ej. nunca inició chat con el bot), la venta queda entregada y registrada; se reintenta una vez y se loguea, sin duplicar ni re-extender.
+- **Sin limpieza automática** y sin datos sensibles (sin tokens, claves, tarjetas ni secretos de pasarela).
+
+### 🔐 Endurecimiento del flujo de pagos
+- `webhook_server.py` pasa al entregador los campos verificados del IPN (`actually_paid`, moneda, order) — nada se inventa.
+- El idioma de la notificación al usuario se resuelve del registro del pago (antes el IPN mandaba «es» fijo).
+- El registro de promo 100 % nace `pending` y se entrega por la misma ruta atómica que los pagos reales (antes nacía `delivered` sin pasar por la entrega).
+
+### ✅ Pruebas (`test_clean_vip.py` · NUEVO — 33 pruebas, 100 % locales con mocks)
+- Limpieza: borrado diferido, conservación, interruptor maestro, protección de identidad, mensajes editados, cancelación/reinicio, errores de Telegram, concurrencia multiusuario y conservación estática de resultados/pagos/notificaciones.
+- VIP: compra confirmada, evento duplicado, fuentes concurrentes, pendiente, fallido, renovación con vencimiento real, sin username, plan/promo, fallo de entrega al admin, venta procesada igualmente, promo no-notificada, formato premium sin banderas, persistencia admin, sin duplicados al usuario, IPN firmado punta a punta.
+- Regresión: `test_redesign.py` 84/84 · `test_premium_emojis.py` 68/68.
+
 ## [4.3.0] — Rediseño profesional UI/UX + auditoría de emojis premium
 
 ### 🎯 Resumen del rediseño

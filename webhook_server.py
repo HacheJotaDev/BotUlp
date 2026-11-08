@@ -80,7 +80,23 @@ async def handle_ipn(request: web.Request) -> web.Response:
             from nowpayments import _deliver_vip
 
             record_id = invoice_id or payment_id
-            await _deliver_vip(state, user_id, days, record_id, "es", "IPN")
+            # v4.3.1: datos verificados del pago para la notificación
+            # admin (monto cripto efectivamente pagado + order). Solo
+            # lo que el proveedor declaró — nada se inventa aquí.
+            ipn_data = {
+                "actually_paid": data.get("actually_paid"),
+                "actually_paid_currency": data.get("actually_paid_currency"),
+                "pay_amount": data.get("pay_amount"),
+                "pay_currency": data.get("pay_currency"),
+                "price_amount": data.get("price_amount"),
+                "price_currency": data.get("price_currency"),
+                "order_id": order_id,
+                "payment_id": payment_id,
+            }
+            # lang=None → _deliver_vip resuelve el idioma real del
+            # usuario desde el registro del pago en la DB.
+            await _deliver_vip(state, user_id, days, record_id, None,
+                               "IPN", ipn_data=ipn_data)
 
         # Pago fallido/expirado: actualizar estado
         elif payment_status in FAIL_STATUSES:

@@ -53,6 +53,7 @@ from download import (
     DownloadProgressTracker,
     process_pending_downloads, realtime_listener, mover_y_limpiar_archivos
 )
+from auto_clean import auto_clean
 
 import state
 
@@ -783,15 +784,6 @@ def _fmt_date_slash(iso_date: str) -> str:
         return f"{d}/{m}/{y}"
     except Exception:
         return iso_date
-
-
-async def _auto_delete_msg(msg, delay=4):
-    """Eliminar un mensaje despues de un delay."""
-    await asyncio.sleep(delay)
-    try:
-        await msg.delete()
-    except Exception:
-        pass
 
 
 async def _send_search_result(target_chat, result_file, caption, e=None, msg=None, reply_to=None, buttons=None):
@@ -1657,6 +1649,10 @@ async def _execute_hotmail_check(event, file_msg, proxies_raw, lang, uid,
                 parse_mode='md',
                 force_document=True
             )
+            # v4.3.1: el resultado definitivo (ZIP con caption completo)
+            # ya está entregado — el aviso breve «✅ Listo» cumplió su
+            # función → limpieza diferida (90 s, aviso informativo).
+            auto_clean.info(status_msg, "hotmailchk_done")
         else:
             # Sin hits — mostrar resumen (sin botones)
             display_text = UI.text(
@@ -2592,7 +2588,8 @@ def register_handlers(bot_client):
         if uid in state.active_searches:
             try:
                 wait_msg = await e.reply(UI.text("search_already_running", lang), parse_mode='md')
-                asyncio.create_task(_auto_delete_msg(wait_msg, 5))
+                # v4.3.1: aviso de cola obsoleto → limpieza central (10 s)
+                auto_clean.temp(wait_msg, "search_queue_notice")
             except Exception:
                 pass
             state.search_queue.setdefault(uid, []).append({
@@ -3430,7 +3427,8 @@ def register_handlers(bot_client):
         if uid in state.active_searches:
             try:
                 wait_msg = await e.reply(UI.text("search_already_running", lang), parse_mode='md')
-                asyncio.create_task(_auto_delete_msg(wait_msg, 5))
+                # v4.3.1: aviso de cola obsoleto → limpieza central (10 s)
+                auto_clean.temp(wait_msg, "search_queue_notice")
             except Exception:
                 pass
             state.search_queue.setdefault(uid, []).append({
@@ -3574,7 +3572,10 @@ def register_handlers(bot_client):
                 # (create_invoice NO llamó a NOWPayments: un invoice de $0
                 #  no existe; el plan se entrega directo y queda registrado)
                 if result.get("free"):
-                    await _deliver_vip(state, uid, days, result["invoice_id"], lang, "promo-100")
+                    # notify_user=False: el handler edita este mismo mensaje
+                    # a pay_promo_free justo después — sin tarjeta duplicada.
+                    await _deliver_vip(state, uid, days, result["invoice_id"], lang,
+                                       "promo-100", notify_user=False)
                     new_role = get_user_role(uid)
                     await e.edit(
                         UI.text("pay_promo_free", lang, plan["label"]),
@@ -3630,7 +3631,11 @@ def register_handlers(bot_client):
                 status = await get_payment_status(invoice_id)
 
                 if status in SUCCESS_STATUSES:
-                    await _deliver_vip(state, uid, days, invoice_id, lang, "manual-check")
+                    # notify_user=False: este handler edita su propio mensaje
+                    # a pay_success justo después — el usuario ya ve la
+                    # confirmación; sin mensaje nuevo duplicado (v4.3.1).
+                    await _deliver_vip(state, uid, days, invoice_id, lang,
+                                       "manual-check", notify_user=False)
                     new_role = get_user_role(uid)
                     await e.edit(
                         UI.text("pay_success", lang, days),
@@ -4058,10 +4063,11 @@ def register_handlers(bot_client):
                         )
                     except Exception:
                         pass
-                # v4.2.22: confirmación visible al usuario → se auto-elimina a los 6s
+                # v4.2.22: confirmación visible al usuario → limpieza central
+                # (v4.3.1: confirmación sencilla, 30 s — categoría 20-40 s)
                 try:
                     confirm = await e.respond(UI.text("report_sent", lang))
-                    asyncio.create_task(_auto_delete_msg(confirm, 6))
+                    auto_clean.after(confirm, 30, "report_sent_confirm")
                 except Exception:
                     pass
                 await e.answer()

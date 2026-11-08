@@ -742,6 +742,63 @@ class Database:
                 )
                 return cur.fetchall()
 
+    # ── v4.3.1: idempotencia de entrega VIP ────────────────
+
+    def get_payment(self, invoice_id: str) -> dict:
+        """Registro completo de UN pago por su invoice_id (o None).
+
+        Fuente de verdad para la notificación de venta admin: importe
+        real cobrado (promo aplicada), días comprados e idioma.
+        """
+        with self.pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT * FROM payments WHERE invoice_id = %s LIMIT 1",
+                    (invoice_id,)
+                )
+                return cur.fetchone()
+
+    def claim_delivery(self, invoice_id: str, stale_minutes: int = 10) -> bool:
+        """Reclamar la entrega de UN pago de forma ATÓMICA e idempotente.
+
+        NOWPayments puede confirmar el mismo pago varias veces
+        (waiting → confirming → confirmed → finished) por IPN, y además
+        corren en paralelo el polling y la verificación manual «Ya
+        pagué». Este claim garantiza que la entrega (set_role +
+        notificaciones) se ejecute UNA SOLA vez por transacción:
+
+          - status 'pending'  → se reclama (UPDATE → 'delivering') y
+                                retorna True solo al primer ganador
+          - status 'delivering' con updated_at hace >stale_minutes →
+                                se reclama (recuperación de un crash:
+                                el polling vuelve a tener oportunidad)
+          - status 'delivered' (o cualquier otro) → False, ya procesado
+
+        El UPDATE ... RETURNING es atómico en PostgreSQL: si dos IPN
+        llegan a la vez, exactamente uno ve la fila.
+        """
+        now = datetime.now(timezone.utc)
+        stale_limit = (now - timedelta(minutes=stale_minutes)).isoformat()
+        try:
+            with self.pool.connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE payments SET status = 'delivering', updated_at = %s "
+                        "WHERE invoice_id = %s AND ("
+                        "  status = 'pending' OR "
+                        "  (status = 'delivering' AND updated_at < %s)"
+                        ") RETURNING id",
+                        (now.isoformat(), invoice_id, stale_limit)
+                    )
+                    row = cur.fetchone()
+                conn.commit()
+                return row is not None
+        except Exception as e:
+            logger.error(f"DB_CLAIM_DELIVERY_ERROR ({invoice_id}): {e}")
+            # Fail-safe: si el claim no se puede evaluar, NO se entrega
+            # (evita dobles entregas ante fallos de infraestructura).
+            return False
+
     # ── Shutdown ───────────────────────────────────────────
 
     def close(self):

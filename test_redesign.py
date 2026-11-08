@@ -469,8 +469,10 @@ def test_welcome():
     check("T9·10 cmd_list sigue con la lista completa",
           "cmd_list" in HD_SRC and "_get_commands_by_role(role, lang, has_free)" in HD_SRC)
 
-    # Versión de config
-    check("T9·11 VERSION = 4.3.0", config.VERSION == "4.3.0",
+    # Versión de config (v4.3.1: limpieza inteligente + VIP admin, sobre
+    # el rediseño 4.3.0 — el header de bienvenida es dinámico, así que
+    # aquí solo se ancla que la versión siga la línea 4.3.x)
+    check("T9·11 VERSION = 4.3.x", config.VERSION.startswith("4.3."),
           f"es {config.VERSION}")
 
 

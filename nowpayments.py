@@ -18,6 +18,10 @@ from config import config
 from logger_setup import logger
 from database import db
 
+# v4.3.1: fuentes de entrega que representan una venta COBRADA real
+# (NOWPayments). «promo-100» es un regalo — nunca se notifica como venta.
+_PAID_SOURCES = ("IPN", "polling", "manual-check")
+
 # ── Precios VIP (USD) ──────────────────────────────────────
 # PRECIOS BASE — única fuente de verdad de los precios del bot.
 # El precio REAL cobrado/mostrado SIEMPRE pasa por effective_price(),
@@ -198,13 +202,16 @@ async def create_invoice(user_id: int, days: int, lang: str = 'es') -> Optional[
             f"record={free_id} (sin invoice NOWPayments)"
         )
         try:
+            # v4.3.1: nace 'pending' y se entrega por la MISMA ruta atómica
+            # que los pagos reales (claim_delivery) — la promoción queda
+            # 'delivered' solo cuando el VIP quedó efectivamente activo.
             db.create_payment(
                 user_id=user_id,
                 invoice_id=free_id,
                 order_id=order_id,
                 days=days,
                 amount_usd=0.0,
-                status="delivered",
+                status="pending",
                 lang=lang
             )
         except Exception as db_err:
@@ -470,17 +477,84 @@ async def _check_pending_payments():
 
 
 async def _deliver_vip(state_module, user_id: int, days: int, record_id: str,
-                     lang: str, source: str = "unknown"):
-    """Entregar VIP y notificar al usuario."""
+                     lang: str = None, source: str = "unknown",
+                     ipn_data: dict = None, notify_user: bool = True) -> bool:
+    """Entregar VIP de forma IDEMPOTENTE y notificar (usuario + admins).
+
+    v4.3.1 — flujo con claim atómico (db.claim_delivery):
+      1. NOWPayments puede confirmar el MISMO pago varias veces
+         (waiting → confirming → confirmed → finished) por IPN, y en
+         paralelo corren el polling y la verificación manual «Ya pagué».
+         El claim garantiza que la entrega + notificaciones ocurren
+         UNA sola vez por transacción (invoice_id único).
+      2. Si el claim falla porque otro proceso ya entregó → return
+         False sin tocar nada (ni rol, ni mensajes, ni notificaciones).
+      3. Si la entrega misma falla → el claim se revierte a 'pending'
+         para que el polling reintente más tarde (sin extender dos veces:
+         set_role reinicia vip_expiry = ahora + días, nunca acumula).
+
+    Parámetros nuevos:
+      • ipn_data: campos verificados del IPN (actually_paid, moneda
+        cripto, order_id) para la notificación admin. Opcional.
+      • notify_user: False cuando el propio llamador ya edita su
+        mensaje a pay_success (verificación manual y promo 100%) —
+        evita el mensaje duplicado al usuario.
+
+    Retorna True si ESTA llamada fue la que entregó el VIP.
+    """
+    # ── 1) IDEMPOTENCIA: reclamar la entrega una sola vez ──
+    if not db.claim_delivery(record_id):
+        logger.info(
+            f"VIP ya entregado/entregándose: record={record_id} "
+            f"(source={source}) — SKIP sin duplicar"
+        )
+        return False
+
+    # ── 2) Registro real del pago (fuente de verdad) ──
+    pay = None
     try:
+        pay = db.get_payment(record_id)
+    except Exception as e:
+        logger.warning(f"get_payment({record_id}) falló: {e}")
+    if pay:
+        if not lang:
+            lang = pay.get('lang') or 'es'
+        # Los días reales comprados son los del registro, no los del
+        # parseo del order_id (misma cifra en la práctica, pero la DB
+        # es la fuente de verdad para contabilidad).
+        if pay.get('days'):
+            days = int(pay['days'])
+    lang = lang or 'es'
+    amount_usd = float((pay or {}).get('amount_usd') or 0.0)
+
+    activation_iso = None
+    try:
+        # ── 3) Entregar: activar membresía + marcar entregado ──
         db.set_role(user_id, "VIP", days)
         db.update_payment_status(record_id, "delivered")
+        activation_iso = datetime.now(timezone.utc).isoformat()
 
         logger.info(
-            f"VIP ENTREGADO via {source}: user={user_id} | {days}d | record={record_id}"
+            f"VIP ENTREGADO via {source}: user={user_id} | {days}d | "
+            f"record={record_id} | ${amount_usd:.2f}"
         )
+    except Exception as e:
+        # Revertir el claim para que el polling reintente después —
+        # la membresía NO se activó, no hay notificación que dar.
+        try:
+            db.update_payment_status(record_id, "pending")
+        except Exception as rollback_err:
+            logger.error(
+                f"ROLLBACK del claim falló para {record_id}: {rollback_err} "
+                f"(quedará 'delivering' y se recupera por staleness)"
+            )
+        logger.error(
+            f"ERROR CRITICO entregando VIP user={user_id} record={record_id}: {e}"
+        )
+        return False
 
-        # Notificar al usuario
+    # ── 4) Notificar al usuario (solo si nadie edita ya su mensaje) ──
+    if notify_user:
         try:
             from ui import UI, Keyboards
             from roles import get_user_role
@@ -496,7 +570,37 @@ async def _deliver_vip(state_module, user_id: int, days: int, record_id: str,
         except Exception as e:
             logger.error(f"Error notificando pago a {user_id}: {e}")
 
-    except Exception as e:
-        logger.error(
-            f"ERROR CRITICO entregando VIP user={user_id} record={record_id}: {e}"
-        )
+    # ── 5) Notificar la venta a los administradores (v4.3.1) ──
+    # Solo ventas COBRADAS reales: fuente de pago verificada + importe
+    # > 0. Promos 100%, canjes y /vip manual nunca llegan aquí como
+    # ventas (fuente 'promo-100' o no pasan por _deliver_vip).
+    if source in _PAID_SOURCES and amount_usd > 0:
+        try:
+            from vip_notifier import spawn_vip_sale_notification
+
+            # Vencimiento REAL leído de la DB DESPUÉS de la activación
+            # (set_role invalida la caché → lectura fresca; refleja la
+            # renovación tal como quedó efectivamente).
+            expiry_iso = None
+            try:
+                u = db.get_user(user_id)
+                expiry_iso = (u or {}).get('vip_expiry')
+            except Exception as e:
+                logger.warning(f"Lectura de vip_expiry para {user_id} falló: {e}")
+
+            spawn_vip_sale_notification(
+                user_id=user_id,
+                days=days,
+                amount_usd=amount_usd,
+                record_id=record_id,
+                expiry_iso=expiry_iso,
+                activation_iso=activation_iso,
+                ipn_data=ipn_data,
+                order_id=(pay or {}).get('order_id'),
+            )
+        except Exception as e:
+            # La venta YA está procesada: una notificación fallida nunca
+            # revierte ni duplica la entrega — queda el registro del error.
+            logger.error(f"VIP_NOTIFIER: error lanzando notificación ({record_id}): {e}")
+
+    return True

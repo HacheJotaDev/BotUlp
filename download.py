@@ -28,6 +28,7 @@ from config import config
 from logger_setup import logger
 from utils import format_size, format_time, progress_bar
 from database import db
+from auto_clean import auto_clean
 
 # FIX: Usar `import state` en vez de `from state import X`
 import state
@@ -440,6 +441,15 @@ class DownloadProgressTracker:
                 )
 
             await self.message.edit(text, parse_mode='md')
+
+            # v4.3.1 — limpieza inteligente: la tarjeta «✅ DESCARGA
+            # COMPLETADA» es un aviso de operación terminada; una vez
+            # editada, ya cumplió su función → borrado diferido (90 s,
+            # categoría «aviso informativo»). La tarjeta de FALLO se
+            # CONSERVA: es un error que el admin puede necesitar
+            # consultar (espacio, reintento, diagnóstico).
+            if success:
+                auto_clean.info(self.message, f"download_done:{self.filename[:40]}")
         except Exception as e:
             logger.debug(f"Error en finish de progreso: {e}")
 

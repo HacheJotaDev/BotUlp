@@ -211,6 +211,14 @@ async def main():
         except Exception:
             pass
 
+    # v4.3.1: cancelar los borrados diferidos pendientes (apagado limpio;
+    # los mensajes temporales restantes se quedan — nunca bloquean)
+    try:
+        from auto_clean import auto_clean
+        auto_clean.shutdown()
+    except Exception:
+        pass
+
     try:
         await userbot_client.disconnect()
     except Exception:

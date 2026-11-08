@@ -151,7 +151,7 @@ class Config:
     BASE_DIR: Path = Path(__file__).resolve().parent
 
     # ── Version ──────────────────────────────────────────────
-    VERSION: str = "4.3.0"
+    VERSION: str = "4.3.1"
 
     # ── Emojis premium (v4.2.31 · ampliado en v4.2.32) ─────────
     # Custom emojis de Telegram en TODOS los mensajes del bot y
@@ -246,6 +246,16 @@ class Config:
     SEARCH_MAX_RESULTS: int = 500000
     SEARCH_RESULT_PREVIEW_LINES: int = 15
     SEARCH_ANIM_INTERVAL: float = 1.2         # Intervalo de la animación de búsqueda (suave, anti-FloodWait)
+
+    # ── Limpieza inteligente de mensajes (v4.3.1) ───────────
+    # El bot borra SOLO los mensajes temporales que él mismo registró
+    # como obsoletos (auto_clean.py). Interruptor global + retardos por
+    # categoría. AUTO_CLEAN_MESSAGES=0 lo desactiva por completo.
+    AUTO_CLEAN_MESSAGES: bool = os.getenv("AUTO_CLEAN_MESSAGES", "1") == "1"
+    # Avisos de carga/cola que quedaron obsoletos (rango orientativo 5-15s)
+    AUTO_CLEAN_TEMP_SECONDS: int = int(os.getenv("AUTO_CLEAN_TEMP_SECONDS", "10"))
+    # Confirmaciones/avisos informativos ya cumplidos (rango 60-120s)
+    AUTO_CLEAN_INFO_SECONDS: int = int(os.getenv("AUTO_CLEAN_INFO_SECONDS", "90"))
 
     # ── Auto-limpieza ────────────────────────────────────────
     ARCHIVE_AFTER_HOURS: int = 24
